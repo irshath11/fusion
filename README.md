@@ -16,7 +16,7 @@ Enterprise-grade, offline-first mobile application built using **Flutter**, **Su
 
 ### 3. Dual-Layer Authentication & Password Security
 - **Primary Firebase Auth + Local Hive Database Fallback**: Authenticates via Firebase Authentication; seamlessly falls back to local database profiles (`app_settings` Hive box) and demo admin credentials if Firebase is unreachable or throws credential exceptions (`invalid-credential`, `user-not-found`).
-- **Universal Password Visibility Toggles**: All password input fields across the application (Login, Setup Wizard, Force Password Change, Employee Password Update, User Creation, Ownership Transfer) feature interactive show/hide eye icon toggle buttons (`Icons.visibility_outlined` / `Icons.visibility_off_outlined`).
+- **Universal Password Visibility Toggles**: All password input fields across the application (Login, Setup Wizard, Employee Password Update, User Creation, Ownership Transfer) feature interactive show/hide eye icon toggle buttons (`Icons.visibility_outlined` / `Icons.visibility_off_outlined`).
 
 ### 4. Strict 6-Step Sequential Attendance Workflow Engine
 `Office Check-In` ➔ `Travel to Site` ➔ `Site Check-In` ➔ `Perform Work` ➔ `Site Check-Out` ➔ `Return to Office` ➔ `Office Check-Out`

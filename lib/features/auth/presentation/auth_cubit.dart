@@ -22,13 +22,6 @@ class Authenticated extends AuthState {
   Authenticated(this.user);
 
   @override
-  List<Object?> get props => [user];
-}
-
-class RequiresPasswordChangeState extends AuthState {
-  final UserEntity user;
-  RequiresPasswordChangeState(this.user);
-
   @override
   List<Object?> get props => [user];
 }
@@ -55,11 +48,7 @@ class AuthCubit extends Cubit<AuthState> {
     final currentUser = _db.currentUser;
 
     if (currentUser != null) {
-      if (currentUser.requiresPasswordChange) {
-        emit(RequiresPasswordChangeState(currentUser));
-      } else {
-        emit(Authenticated(currentUser));
-      }
+      emit(Authenticated(currentUser));
     } else if (firebaseUser != null) {
       final isSuperAdmin = firebaseUser.email?.contains('admin') == true ||
           firebaseUser.email?.toLowerCase() == 'sr.irshath@gmail.com';
@@ -91,11 +80,6 @@ class AuthCubit extends Cubit<AuthState> {
             return;
           }
 
-          if (remoteUser.requiresPasswordChange) {
-            emit(RequiresPasswordChangeState(remoteUser));
-            return;
-          }
-
           _db.setCurrentUser(remoteUser);
           emit(Authenticated(remoteUser));
         }
@@ -114,6 +98,8 @@ class AuthCubit extends Cubit<AuthState> {
       emit(AuthError('Please enter both email and password.'));
       return;
     }
+
+    fb.FirebaseAuthException? firebaseAuthError;
 
     try {
       // 1. Authenticate with Firebase Authentication
@@ -137,12 +123,6 @@ class AuthCubit extends Cubit<AuthState> {
           }
 
           _db.setCurrentUser(supabaseUser);
-
-          if (supabaseUser.requiresPasswordChange) {
-            emit(RequiresPasswordChangeState(supabaseUser));
-            return;
-          }
-
           emit(Authenticated(supabaseUser));
           return;
         }
@@ -251,29 +231,6 @@ class AuthCubit extends Cubit<AuthState> {
     }
 
     emit(AuthError('Invalid email or password. Account not found.'));
-  }
-
-  Future<void> completeFirstTimePasswordChange({
-    required UserEntity user,
-    required String newPassword,
-  }) async {
-    emit(AuthLoading());
-    try {
-      // 1. Update Firebase Auth Password
-      if (_fbAuth.currentUser != null) {
-        await _fbAuth.currentUser!.updatePassword(newPassword);
-      }
-
-      // 2. Clear requires_password_change flag in Supabase
-      await _supabase.updateUserPasswordChangeStatus(
-          user.id, false, user.firebaseUid);
-
-      final updatedUser = user.copyWith(requiresPasswordChange: false);
-      _db.setCurrentUser(updatedUser);
-      emit(Authenticated(updatedUser));
-    } catch (e) {
-      emit(AuthError('Failed to update password: ${e.toString()}'));
-    }
   }
 
   Future<bool> changePassword({

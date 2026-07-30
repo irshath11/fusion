@@ -301,24 +301,6 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                         ),
                                       ],
                                     ),
-                                    if (user.requiresPasswordChange)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 1),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.info
-                                              .withValues(alpha: 0.15),
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                        ),
-                                        child: const Text(
-                                          'Temp Password',
-                                          style: TextStyle(
-                                            fontSize: 9,
-                                            color: AppColors.info,
-                                          ),
-                                        ),
-                                      ),
                                   ],
                                 ),
                               ],

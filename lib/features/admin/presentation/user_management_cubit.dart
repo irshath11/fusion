@@ -187,7 +187,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         fullName: fullName.trim(),
         phoneNumber: phoneNumber?.trim(),
         role: role,
-        requiresPasswordChange: true,
+        requiresPasswordChange: false,
         employeeCode: empCode,
         designation: designation.trim(),
         department: department.trim(),

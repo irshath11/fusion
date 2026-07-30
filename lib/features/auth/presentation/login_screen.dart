@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'auth_cubit.dart';
-import 'force_password_change_screen.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/custom_text_field.dart';
@@ -94,13 +93,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   if (state is AuthError) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text(state.message), backgroundColor: AppColors.error),
-                    );
-                  } else if (state is RequiresPasswordChangeState) {
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(
-                        builder: (ctx) => ForcePasswordChangeScreen(user: state.user),
-                      ),
-                      (route) => false,
                     );
                   } else if (state is Authenticated) {
                     Navigator.of(context).pushAndRemoveUntil(

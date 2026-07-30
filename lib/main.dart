@@ -9,7 +9,6 @@ import 'core/constants/app_enums.dart';
 import 'features/splash/presentation/splash_screen.dart';
 import 'features/setup/presentation/setup_wizard_screen.dart';
 import 'features/auth/presentation/login_screen.dart';
-import 'features/auth/presentation/force_password_change_screen.dart';
 import 'features/auth/presentation/auth_cubit.dart';
 import 'features/attendance/presentation/attendance_cubit.dart';
 import 'features/admin/presentation/admin_dashboard_screen.dart';
@@ -84,10 +83,6 @@ class RootRoleRouter extends StatelessWidget {
               child: CircularProgressIndicator(),
             ),
           );
-        }
-
-        if (state is RequiresPasswordChangeState) {
-          return ForcePasswordChangeScreen(user: state.user);
         }
 
         if (state is Authenticated) {
