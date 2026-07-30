@@ -165,6 +165,7 @@ CREATE TABLE IF NOT EXISTS public.attendance_records (
     office_id UUID REFERENCES public.offices(id),
     work_site_id UUID REFERENCES public.work_sites(id),
     photo_url TEXT,
+    site_name TEXT,
     employee_name TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
