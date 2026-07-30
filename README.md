@@ -14,28 +14,32 @@ Enterprise-grade, offline-first mobile application built using **Flutter**, **Su
 - When opened for the very first time, prompts for **Organization Name**, **Address**, **Super Admin Credentials**, and automatically provisions the organization, default office, and Super Admin account.
 - Sets persistent setup flags so future app launches automatically route directly to the **Login Screen**.
 
-### 3. Strict 6-Step Sequential Attendance Workflow Engine
+### 3. Dual-Layer Authentication & Password Security
+- **Primary Firebase Auth + Local Hive Database Fallback**: Authenticates via Firebase Authentication; seamlessly falls back to local database profiles (`app_settings` Hive box) and demo admin credentials if Firebase is unreachable or throws credential exceptions (`invalid-credential`, `user-not-found`).
+- **Universal Password Visibility Toggles**: All password input fields across the application (Login, Setup Wizard, Force Password Change, Employee Password Update, User Creation, Ownership Transfer) feature interactive show/hide eye icon toggle buttons (`Icons.visibility_outlined` / `Icons.visibility_off_outlined`).
+
+### 4. Strict 6-Step Sequential Attendance Workflow Engine
 `Office Check-In` ➔ `Travel to Site` ➔ `Site Check-In` ➔ `Perform Work` ➔ `Site Check-Out` ➔ `Return to Office` ➔ `Office Check-Out`
 - State locks prevent skipping steps or altering step execution order.
 
-### 4. Real-time Camera Capture & Compression
+### 5. Real-time Camera Capture & Compression
 - Direct integration with camera stream.
 - **Gallery uploads & file pickers are strictly disabled**.
 - Images are automatically compressed to ~18KB JPEG payloads before storage/sync.
 
-### 5. Haversine Geofence Validation
+### 6. Haversine Geofence Validation
 - Validates real-time GPS location against assigned office or site coordinates.
 - Displays immediate warning modal: `"You are outside the permitted attendance area."` if user is outside allowed radius (default 200m).
 
-### 6. Employee Office Override Support
+### 7. Employee Office Override Support
 - Allows assigning custom client offices or construction sites to specific employees (`useDefaultOffice: false`).
 - Attendance geofence rules validate against the employee's specific assigned office location.
 
-### 7. Offline-First Operation & Background Sync Engine
+### 8. Offline-First Operation & Background Sync Engine
 - Local Hive key-value boxes store attendance logs, photos, and sync queues without internet.
 - Sync engine automatically flushes queue upon connectivity restoration while preserving original `event_timestamp`.
 
-### 8. Analytics & Multi-Format Report Export
+### 9. Analytics & Multi-Format Report Export
 - Generates downloadable compliance reports in **PDF**, **Excel**, and **CSV** formats.
 
 ---

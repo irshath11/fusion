@@ -9,7 +9,7 @@ Welcome to the comprehensive feature and architecture documentation for the **En
 | Module # | Document Title | Primary Coverage & Knowledge Area |
 | :---: | :--- | :--- |
 | **00** | [System Architecture & Engineering Blueprint](00_system_architecture.md) | High-level technology stack, Clean Architecture layers, data flow diagrams, security & project structure. |
-| **01** | [Authentication & Password Management Feature](01_auth_and_password_management.md) | Firebase Auth integration, Super Admin vs Employee roles, temporary password onboarding, forced password changes, and password management. |
+| **01** | [Authentication & Password Management Feature](01_auth_and_password_management.md) | Dual-layer authentication engine (Firebase Auth + local Hive database fallback), Super Admin vs Employee roles, temporary password onboarding, forced password changes, and universal show/hide password visibility toggles. |
 | **02** | [Organization Setup & Onboarding Feature](02_organization_setup.md) | Enterprise onboarding, root organization initialization, default geofence configuration, and GPS auto-detection during setup. |
 | **03** | [Employee Management & Role Assignment Feature](03_employee_management.md) | Provisioning employees, secondary Firebase auth instance creation, employee codes, designation/department management, and office station assignment. |
 | **04** | [Office Station & Geofence Management Feature](04_office_geofence_management.md) | Geofence office station setup, hardware GPS location auto-fetch, and Haversine spherical distance validation algorithms. |
