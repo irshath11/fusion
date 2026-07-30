@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import '../../../database/local_database_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../attendance/domain/attendance_record.dart';
@@ -6,11 +7,13 @@ import '../../attendance/domain/attendance_record.dart';
 class SyncEngineResult {
   final int syncedCount;
   final int failedCount;
+  final bool isNoInternet;
   final String message;
 
   SyncEngineResult({
     required this.syncedCount,
     required this.failedCount,
+    this.isNoInternet = false,
     required this.message,
   });
 }
@@ -19,14 +22,36 @@ class SyncEngine {
   final LocalDatabaseService _db = LocalDatabaseService();
   final SupabaseService _supabase = SupabaseService();
 
+  /// Check active internet connectivity via DNS lookup
+  Future<bool> hasInternetConnection() async {
+    try {
+      final result = await InternetAddress.lookup('google.com')
+          .timeout(const Duration(seconds: 4));
+      return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Trigger sync manually or via background network monitor
   Future<SyncEngineResult> performSync() async {
-    List<AttendanceRecord> pendingRecords = _db.getPendingSyncRecords();
+    final hasNet = await hasInternetConnection();
+    if (!hasNet) {
+      return SyncEngineResult(
+        syncedCount: 0,
+        failedCount: 0,
+        isNoInternet: true,
+        message: 'No internet connection. Please connect to Wi-Fi or mobile data.',
+      );
+    }
+
+    List<AttendanceRecord> pendingRecords = _db.getAllPendingSyncRecords();
 
     if (pendingRecords.isEmpty) {
       return SyncEngineResult(
         syncedCount: 0,
         failedCount: 0,
+        isNoInternet: false,
         message: 'No pending offline attendance records to sync.',
       );
     }
@@ -50,7 +75,7 @@ class SyncEngine {
         photoPublicUrl: publicPhotoUrl,
       );
 
-      if (success || !_supabase.isInitialized) {
+      if (success) {
         syncedIds.add(record.id);
         syncedCount++;
       } else {
@@ -65,6 +90,7 @@ class SyncEngine {
     return SyncEngineResult(
       syncedCount: syncedCount,
       failedCount: failedCount,
+      isNoInternet: false,
       message: 'Successfully synchronized $syncedCount attendance entries & photos to Supabase.',
     );
   }
