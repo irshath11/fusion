@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/services/pdf_export_service.dart';
+import '../../../database/local_database_service.dart';
+import '../../admin/domain/employee_entity.dart';
 import 'timesheet_cubit.dart';
 import '../domain/timesheet_entry.dart';
 
@@ -26,22 +29,46 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (context) => TimesheetCubit()..fetchEmployeeTimesheet(employeeId: widget.employeeId),
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(widget.employeeName != null ? '${widget.employeeName} - Timesheet' : 'My Work Timesheet'),
-        ),
-        body: BlocBuilder<TimesheetCubit, TimesheetState>(
-          builder: (context, state) {
-            if (state is TimesheetLoading) {
-              return const Center(child: CircularProgressIndicator());
-            } else if (state is TimesheetError) {
-              return Center(
-                child: Text(
-                  state.message,
-                  style: const TextStyle(color: AppColors.error, fontSize: 16),
-                ),
-              );
-            } else if (state is TimesheetLoaded) {
+      child: BlocBuilder<TimesheetCubit, TimesheetState>(
+        builder: (context, state) {
+          return Scaffold(
+            appBar: AppBar(
+              title: Text(widget.employeeName != null ? '${widget.employeeName} - Timesheet' : 'My Work Timesheet'),
+              actions: [
+                if (state is TimesheetLoaded)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12.0),
+                    child: ElevatedButton.icon(
+                      onPressed: () => _downloadPdf(context, state),
+                      icon: const Icon(Icons.picture_as_pdf_rounded, size: 14),
+                      label: const Text('Download PDF',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade700,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            body: Builder(
+              builder: (context) {
+                if (state is TimesheetLoading) {
+                  return const Center(child: CircularProgressIndicator());
+                } else if (state is TimesheetError) {
+                  return Center(
+                    child: Text(
+                      state.message,
+                      style: const TextStyle(color: AppColors.error, fontSize: 16),
+                    ),
+                  );
+                } else if (state is TimesheetLoaded) {
               final filteredEntries = state.entries.where((e) {
                 if (_activeFilter == 'overtime') return e.overtimeHours > 0;
                 if (_activeFilter == 'regular') return e.regularHours > 0;
@@ -186,8 +213,59 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
             return const SizedBox.shrink();
           },
         ),
-      ),
-    );
+      );
+    },
+  ),
+);
+}
+
+  Future<void> _downloadPdf(BuildContext context, TimesheetLoaded state) async {
+    final db = LocalDatabaseService();
+    final currentUser = db.currentUser;
+
+    final emp = db.getEmployees().firstWhere(
+          (e) => e.id == widget.employeeId || e.name == widget.employeeName,
+          orElse: () => EmployeeEntity(
+            id: widget.employeeId ?? currentUser?.id ?? 'EMP',
+            employeeCode: 'EMP',
+            name: widget.employeeName ?? currentUser?.fullName ?? 'Employee',
+            mobileNumber: '',
+            email: currentUser?.email ?? '',
+            designation: 'Field Staff',
+            department: 'Operations',
+          ),
+        );
+
+    final records = db.getAttendanceRecords().where((r) {
+      return r.employeeId == emp.id ||
+          r.employeeName.toLowerCase() == emp.name.toLowerCase();
+    }).toList();
+
+    try {
+      await PdfExportService.downloadEmployeeAttendancePdfFile(
+        organizationName: db.organization?.name ?? 'Fusion Enterprise',
+        employee: emp,
+        records: records,
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Timesheet PDF report ready for download/saving!'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error downloading timesheet PDF: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not generate PDF: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildSummaryCard({
