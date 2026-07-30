@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../database/local_database_service.dart';
 
 class LiveTrackingMapScreen extends StatelessWidget {
   const LiveTrackingMapScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final db = LocalDatabaseService();
+    final activeCount = db.getEmployees().where((e) => e.isActive).length;
+    final officeCount = db.getOffices().length;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Live Field Workforce Map'),
@@ -26,7 +31,7 @@ class LiveTrackingMapScreen extends StatelessWidget {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
+                          color: Colors.black.withValues(alpha: 0.1),
                           blurRadius: 20,
                         )
                       ],
@@ -39,9 +44,9 @@ class LiveTrackingMapScreen extends StatelessWidget {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Tracking 12 Active Employees across 2 Offices & 3 Client Sites',
-                    style: TextStyle(color: AppColors.textSecondaryLight),
+                  Text(
+                    'Tracking $activeCount Active Employees across $officeCount Offices',
+                    style: const TextStyle(color: AppColors.textSecondaryLight),
                   ),
                 ],
               ),
@@ -58,7 +63,6 @@ class LiveTrackingMapScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     _buildLegendItem(Colors.blue, 'Main Office (200m)'),
-                    _buildLegendItem(Colors.teal, 'Client Site (300m)'),
                     _buildLegendItem(Colors.green, 'Employee Pin'),
                   ],
                 ),

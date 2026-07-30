@@ -118,7 +118,8 @@ class _OwnershipTransferDialogState extends State<OwnershipTransferDialog> {
                             ),
                           )
                         : DropdownButtonFormField<UserEntity>(
-                            value: _selectedAdmin,
+                            initialValue: _selectedAdmin,
+                            isExpanded: true,
                             decoration: const InputDecoration(
                               border: OutlineInputBorder(),
                               contentPadding: EdgeInsets.symmetric(
@@ -127,7 +128,10 @@ class _OwnershipTransferDialogState extends State<OwnershipTransferDialog> {
                             items: widget.candidateAdmins.map((admin) {
                               return DropdownMenuItem(
                                 value: admin,
-                                child: Text('${admin.fullName} (${admin.email})'),
+                                child: Text(
+                                  '${admin.fullName} (${admin.email})',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               );
                             }).toList(),
                             onChanged: (val) {

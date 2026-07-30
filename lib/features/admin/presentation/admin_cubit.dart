@@ -60,6 +60,24 @@ class AdminCubit extends Cubit<AdminState> {
 
     final combinedOffices = officeMap.values.toList();
 
+    final orgId = _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
+    try {
+      final cloudUsers = await _supabase.fetchOrganizationUsers(orgId);
+      for (final u in cloudUsers) {
+        final emp = EmployeeEntity(
+          id: u.id,
+          employeeCode: 'EMP-${u.id.length >= 4 ? u.id.substring(0, 4).toUpperCase() : u.id.toUpperCase()}',
+          name: u.fullName,
+          mobileNumber: u.phoneNumber ?? '',
+          email: u.email,
+          designation: 'Staff',
+          department: 'Operations',
+          isActive: u.isActive,
+        );
+        _db.saveEmployee(emp);
+      }
+    } catch (_) {}
+
     emit(AdminDataLoaded(
       employees: _db.getEmployees(),
       offices: combinedOffices.isNotEmpty ? combinedOffices : localOffices,

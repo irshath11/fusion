@@ -7,8 +7,9 @@ import 'work_site_management_screen.dart';
 import 'live_tracking_map_screen.dart';
 import 'reports_analytics_screen.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_enums.dart';
+import '../../../database/local_database_service.dart';
 import '../../auth/presentation/auth_cubit.dart';
-
 import '../../auth/presentation/login_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -97,11 +98,37 @@ class AdminOverviewTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final db = LocalDatabaseService();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: BlocBuilder<AdminCubit, AdminState>(
         builder: (context, state) {
           if (state is AdminDataLoaded) {
+            final employees = state.employees.isNotEmpty ? state.employees : db.getEmployees();
+            final offices = db.getOffices();
+            final allRecords = db.getAttendanceRecords();
+            final pendingSyncCount = db.getPendingSyncRecords().length;
+
+            final now = DateTime.now();
+            final today = DateTime(now.year, now.month, now.day);
+
+            final todayRecords = allRecords.where((r) {
+              final rDate = DateTime(r.eventTimestamp.year, r.eventTimestamp.month, r.eventTimestamp.day);
+              return rDate.isAtSameMomentAs(today);
+            }).toList();
+
+            final checkedInEmpIds = todayRecords.map((r) => r.employeeId).toSet();
+            final totalCheckedInToday = checkedInEmpIds.length;
+
+            final completedEmpIds = todayRecords
+                .where((r) => r.workflowStep == WorkflowStep.officeCheckOut || r.workflowStep == WorkflowStep.completed)
+                .map((r) => r.employeeId)
+                .toSet();
+            final totalCompletedToday = completedEmpIds.length;
+
+            final onDutyCount = (totalCheckedInToday - totalCompletedToday).clamp(0, totalCheckedInToday);
+
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -118,12 +145,12 @@ class AdminOverviewTab extends StatelessWidget {
                   mainAxisSpacing: 12,
                   childAspectRatio: 1.4,
                   children: [
-                    _buildStatCard(context, 'Total Employees', '${state.employees.length}', Icons.badge_rounded, AppColors.primary),
-                    _buildStatCard(context, 'In Office Currently', '8', Icons.business_center_rounded, AppColors.success),
-                    _buildStatCard(context, 'At Client Sites', '5', Icons.location_on_rounded, AppColors.secondary),
-                    _buildStatCard(context, 'Travelling In Transit', '3', Icons.directions_car_rounded, AppColors.warning),
-                    _buildStatCard(context, 'Offices Geofenced', '${state.offices.length}', Icons.shield_rounded, AppColors.info),
-                    _buildStatCard(context, 'Pending Offline Sync', '2', Icons.wifi_off_rounded, Colors.orange),
+                    _buildStatCard(context, 'Total Employees', '${employees.length}', Icons.badge_rounded, AppColors.primary),
+                    _buildStatCard(context, 'On Duty Currently', '$onDutyCount', Icons.access_time_filled_rounded, AppColors.success),
+                    _buildStatCard(context, 'Checked In Today', '$totalCheckedInToday', Icons.how_to_reg_rounded, AppColors.secondary),
+                    _buildStatCard(context, 'Shift Completed Today', '$totalCompletedToday', Icons.task_alt_rounded, AppColors.info),
+                    _buildStatCard(context, 'Offices Geofenced', '${offices.length}', Icons.business_rounded, AppColors.primary),
+                    _buildStatCard(context, 'Pending Offline Sync', '$pendingSyncCount', Icons.wifi_off_rounded, Colors.orange),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -159,7 +186,7 @@ class AdminOverviewTab extends StatelessWidget {
 
   Widget _buildStatCard(BuildContext context, String title, String value, IconData icon, Color color) {
     return Card(
-      color: color.withOpacity(0.08),
+      color: color.withValues(alpha: 0.08),
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Column(
@@ -170,11 +197,17 @@ class AdminOverviewTab extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Icon(icon, color: color, size: 24),
-                Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
+                ),
               ],
             ),
             const SizedBox(height: 8),
-            Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondaryLight)),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondaryLight)),
+            ),
           ],
         ),
       ),

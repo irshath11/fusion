@@ -75,15 +75,25 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     // Synthesize employee list from both DB & Attendance Records
     final Map<String, EmployeeEntity> employeeMap = {};
     for (final e in dbEmployees) {
-      employeeMap[e.id] = e;
+      final key = e.email.trim().isNotEmpty
+          ? e.email.trim().toLowerCase()
+          : e.name.trim().toLowerCase();
+      employeeMap[key] = e;
     }
 
     for (final r in allRecords) {
-      if (!employeeMap.containsKey(r.employeeId)) {
+      final nameKey = r.employeeName.trim().toLowerCase();
+      final idKey = r.employeeId;
+
+      bool alreadyExists = employeeMap.values.any((e) =>
+          e.id == idKey ||
+          (e.name.trim().toLowerCase() == nameKey && nameKey.isNotEmpty));
+
+      if (!alreadyExists) {
         final shortId = r.employeeId.length >= 4
             ? r.employeeId.substring(0, 4).toUpperCase()
             : r.employeeId.toUpperCase();
-        employeeMap[r.employeeId] = EmployeeEntity(
+        employeeMap[nameKey.isNotEmpty ? nameKey : idKey] = EmployeeEntity(
           id: r.employeeId,
           employeeCode: 'EMP-$shortId',
           name: r.employeeName,
@@ -112,26 +122,33 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Employee Attendance Reports',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 2),
-                  const Text(
-                    'Select an employee to view date-wise logs & photos',
-                    style: TextStyle(
-                        fontSize: 12, color: AppColors.textSecondaryLight),
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Employee Attendance Reports',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Select an employee to view date-wise logs & photos',
+                      style: TextStyle(
+                          fontSize: 12, color: AppColors.textSecondaryLight),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
                     icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
@@ -157,17 +174,33 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           // Search Bar
           TextField(
             onChanged: (val) => setState(() => _searchQuery = val),
+            style: const TextStyle(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w500),
             decoration: InputDecoration(
-              hintText: 'Search employee name, code, or department...',
-              prefixIcon: const Icon(Icons.search_rounded),
+              hintText: 'Search employee name, code, department...',
+              hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+              prefixIcon: const Icon(Icons.search_rounded, color: AppColors.primary),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear_rounded, size: 18),
+                      onPressed: () => setState(() => _searchQuery = ''),
+                    )
+                  : null,
               contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(color: Colors.grey.shade300),
               ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+              ),
               filled: true,
-              fillColor: Colors.grey.shade50,
+              fillColor: Colors.white,
             ),
           ),
           const SizedBox(height: 20),
@@ -221,10 +254,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     ),
                     title: Row(
                       children: [
-                        Text(
-                          emp.name,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 16),
+                        Expanded(
+                          child: Text(
+                            emp.name,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         const SizedBox(width: 8),
                         Container(
@@ -785,11 +821,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              'Device ID: ${r.deviceId}',
-                              style: TextStyle(
-                                  fontSize: 10, color: Colors.grey.shade600),
+                            Expanded(
+                              child: Text(
+                                'Device ID: ${r.deviceId}',
+                                style: TextStyle(
+                                    fontSize: 10, color: Colors.grey.shade600),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
+                            const SizedBox(width: 8),
                             Row(
                               children: [
                                 const Icon(Icons.cloud_done_rounded,
