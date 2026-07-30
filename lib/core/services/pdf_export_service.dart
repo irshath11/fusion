@@ -279,7 +279,7 @@ class PdfExportService {
 
             // Daily Timesheet Logs Table
             pw.TableHelper.fromTextArray(
-              headers: ['Date', 'In Time', 'Out Time', 'Regular', 'OT', 'Status'],
+              headers: ['Date', 'In Time', 'Out Time', 'Regular', 'OT', 'Site / Job Visits', 'Status'],
               data: timesheets.map((entry) {
                 final dateStr = DateFormat('yyyy-MM-dd').format(entry.date);
                 final inTime = entry.checkInTime != null
@@ -290,13 +290,16 @@ class PdfExportService {
                     : '--:--';
                 final reg = '${entry.regularHours.toStringAsFixed(1)} h';
                 final ot = '+${entry.overtimeHours.toStringAsFixed(1)} h';
+                final sitesStr = entry.siteVisits.isNotEmpty
+                    ? entry.siteVisits.map((sv) => sv.siteName).join(', ')
+                    : 'Main Location';
                 final status = entry.isCompleted ? 'Complete' : 'In Progress';
-                return [dateStr, inTime, outTime, reg, ot, status];
+                return [dateStr, inTime, outTime, reg, ot, sitesStr, status];
               }).toList(),
               headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 9),
               headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo900),
-              cellStyle: const pw.TextStyle(fontSize: 9),
-              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+              cellStyle: const pw.TextStyle(fontSize: 8.5),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 5),
               cellAlignment: pw.Alignment.centerLeft,
             ),
           ];
