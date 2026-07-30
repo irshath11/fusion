@@ -135,7 +135,7 @@ class _CameraCaptureModalState extends State<CameraCaptureModal> {
   Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -187,8 +187,13 @@ class _CameraCaptureModalState extends State<CameraCaptureModal> {
                     icon: Icon(_capturedResult == null
                         ? Icons.camera
                         : Icons.refresh_rounded),
-                    label: Text(
-                        _capturedResult == null ? 'Capture Photo' : 'Retake'),
+                    label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        _capturedResult == null ? 'Capture Photo' : 'Retake',
+                        maxLines: 1,
+                      ),
+                    ),
                   ),
                 ),
                 if (_capturedResult != null) ...[
@@ -207,7 +212,13 @@ class _CameraCaptureModalState extends State<CameraCaptureModal> {
                         Navigator.pop(context);
                       },
                       icon: const Icon(Icons.check_circle_rounded),
-                      label: const Text('Confirm'),
+                      label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'Confirm',
+                          maxLines: 1,
+                        ),
+                      ),
                     ),
                   ),
                 ]

@@ -10,13 +10,14 @@ class OfficeManagementScreen extends StatelessWidget {
 
   void _showOfficeForm(BuildContext context, [OfficeEntity? office]) {
     final nameController =
-        TextEditingController(text: office?.name ?? '');
-    final addressController =
-        TextEditingController(text: office?.address ?? '');
+        TextEditingController(text: office?.name ?? 'Store - 12');
+    final addressController = TextEditingController(
+        text: office?.address ??
+            'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi');
     final latController =
-        TextEditingController(text: office != null ? office.latitude.toString() : '');
+        TextEditingController(text: (office?.latitude ?? 24.3644).toString());
     final lngController =
-        TextEditingController(text: office != null ? office.longitude.toString() : '');
+        TextEditingController(text: (office?.longitude ?? 54.5029).toString());
     final radiusController = TextEditingController(
         text: (office?.geofenceRadiusMeters ?? 200.0).toString());
 
