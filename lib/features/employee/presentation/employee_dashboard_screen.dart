@@ -11,6 +11,7 @@ import '../../attendance/presentation/camera_capture_modal.dart';
 import '../../sync/data/sync_engine.dart';
 import '../../auth/presentation/auth_cubit.dart';
 import '../../auth/presentation/login_screen.dart';
+import '../../timesheet/presentation/employee_timesheet_screen.dart';
 import 'package:intl/intl.dart';
 import '../../attendance/domain/attendance_record.dart';
 
@@ -286,11 +287,17 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
         .where((r) => r.workflowStep == WorkflowStep.officeCheckIn);
     if (checkInMatches.isNotEmpty) {
       final checkInTime = checkInMatches.first.eventTimestamp;
-      final checkOutMatches = userTodayRecords
+      final siteOutMatches = userTodayRecords
+          .where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
+      final officeOutMatches = userTodayRecords
           .where((r) => r.workflowStep == WorkflowStep.officeCheckOut);
-      final endTime = checkOutMatches.isNotEmpty
-          ? checkOutMatches.first.eventTimestamp
-          : now;
+
+      final endTime = siteOutMatches.isNotEmpty
+          ? siteOutMatches.first.eventTimestamp
+          : (officeOutMatches.isNotEmpty
+              ? officeOutMatches.first.eventTimestamp
+              : now);
+
       final diff = endTime.difference(checkInTime);
       final hrs = diff.inHours.toString().padLeft(2, '0');
       final mins = (diff.inMinutes % 60).toString().padLeft(2, '0');
@@ -315,6 +322,21 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.date_range_rounded),
+            tooltip: 'My Timesheet',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EmployeeTimesheetScreen(
+                    employeeId: user?.id ?? user?.firebaseUid,
+                    employeeName: user?.fullName,
+                  ),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.lock_reset_rounded),
             tooltip: 'Change Password',
