@@ -1,0 +1,191 @@
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:equatable/equatable.dart';
+import 'package:uuid/uuid.dart';
+import '../../../database/local_database_service.dart';
+import '../../../core/constants/app_enums.dart';
+import '../../../core/services/location_service.dart';
+import '../../../core/services/camera_service.dart';
+import '../../../core/utils/geofence_calculator.dart';
+import '../domain/attendance_record.dart';
+import '../../admin/domain/employee_entity.dart';
+
+abstract class AttendanceState extends Equatable {
+  @override
+  List<Object?> get props => [];
+}
+
+class AttendanceInitial extends AttendanceState {
+  final WorkflowStep currentStep;
+  AttendanceInitial(this.currentStep);
+
+  @override
+  List<Object?> get props => [currentStep];
+}
+
+class AttendanceProcessing extends AttendanceState {}
+
+class AttendanceStepSuccess extends AttendanceState {
+  final AttendanceRecord record;
+  final WorkflowStep nextStep;
+  AttendanceStepSuccess(this.record, this.nextStep);
+
+  @override
+  List<Object?> get props => [record, nextStep];
+}
+
+class GeofenceViolationError extends AttendanceState {
+  final String message;
+  final double distanceMeters;
+  final double allowedRadiusMeters;
+
+  GeofenceViolationError({
+    required this.message,
+    required this.distanceMeters,
+    required this.allowedRadiusMeters,
+  });
+
+  @override
+  List<Object?> get props => [message, distanceMeters, allowedRadiusMeters];
+}
+
+class AttendanceFailure extends AttendanceState {
+  final String errorMessage;
+  AttendanceFailure(this.errorMessage);
+
+  @override
+  List<Object?> get props => [errorMessage];
+}
+
+class AttendanceCubit extends Cubit<AttendanceState> {
+  final LocalDatabaseService _db = LocalDatabaseService();
+  final Uuid _uuid = const Uuid();
+
+  AttendanceCubit() : super(AttendanceInitial(LocalDatabaseService().currentWorkflowStep));
+
+  /// Executes attendance action for current workflow step with camera & geofence validation
+  Future<void> executeAttendanceStep({
+    required WorkflowStep step,
+    required CameraCaptureResult cameraResult,
+  }) async {
+    emit(AttendanceProcessing());
+    try {
+      final user = _db.currentUser;
+      if (user == null) {
+        emit(AttendanceFailure('User session not found. Please log in again.'));
+        return;
+      }
+
+      // 1. Get Live GPS Location
+      LocationDataResult location = await LocationService.getCurrentLocation();
+
+      // 2. Resolve target geofence bounds based on employee's assigned office / site
+      final employees = _db.getEmployees();
+      final emp = employees.firstWhere(
+        (e) => e.id == user.id || e.email == user.email,
+        orElse: () => employees.isNotEmpty ? employees.first : EmployeeEntity(
+          id: user.id,
+          employeeCode: 'EMP-DEFAULT',
+          name: user.fullName,
+          mobileNumber: '',
+          email: user.email,
+          designation: 'Staff',
+          department: 'General',
+        ),
+      );
+
+      double targetLat = 0.0;
+      double targetLng = 0.0;
+      double allowedRadius = 200.0;
+
+      final offices = _db.getOffices();
+      final defaultOffice = offices.firstWhere((o) => o.isDefault, orElse: () => offices.first);
+      final workSites = _db.getWorkSites();
+
+      if (step == WorkflowStep.officeCheckIn || step == WorkflowStep.officeCheckOut) {
+        if (!emp.useDefaultOffice && emp.assignedOfficeId != null) {
+          final customOfficeMatches = offices.where((o) => o.id == emp.assignedOfficeId);
+          if (customOfficeMatches.isNotEmpty) {
+            targetLat = customOfficeMatches.first.latitude;
+            targetLng = customOfficeMatches.first.longitude;
+            allowedRadius = customOfficeMatches.first.geofenceRadiusMeters;
+          } else {
+            final siteMatches = workSites.where((s) => s.id == emp.assignedOfficeId);
+            if (siteMatches.isNotEmpty) {
+              targetLat = siteMatches.first.latitude;
+              targetLng = siteMatches.first.longitude;
+              allowedRadius = siteMatches.first.radiusMeters;
+            } else {
+              targetLat = defaultOffice.latitude;
+              targetLng = defaultOffice.longitude;
+              allowedRadius = defaultOffice.geofenceRadiusMeters;
+            }
+          }
+        } else {
+          targetLat = defaultOffice.latitude;
+          targetLng = defaultOffice.longitude;
+          allowedRadius = defaultOffice.geofenceRadiusMeters;
+        }
+      } else {
+        final targetSite = workSites.isNotEmpty ? workSites.first : null;
+        if (targetSite != null) {
+          targetLat = targetSite.latitude;
+          targetLng = targetSite.longitude;
+          allowedRadius = targetSite.radiusMeters;
+        } else {
+          targetLat = defaultOffice.latitude;
+          targetLng = defaultOffice.longitude;
+          allowedRadius = defaultOffice.geofenceRadiusMeters;
+        }
+      }
+
+      // 3. Perform Geofence Validation
+      double distance = GeofenceCalculator.calculateDistanceInMeters(
+        location.latitude,
+        location.longitude,
+        targetLat,
+        targetLng,
+      );
+
+      bool isGeofenceValid = distance <= allowedRadius;
+
+      if (!isGeofenceValid) {
+        emit(GeofenceViolationError(
+          message: 'You are outside the permitted attendance area.',
+          distanceMeters: distance,
+          allowedRadiusMeters: allowedRadius,
+        ));
+        return;
+      }
+
+      // 4. Create & Persist Attendance Record
+      final record = AttendanceRecord(
+        id: _uuid.v4(),
+        employeeId: emp.id,
+        employeeName: emp.name,
+        workflowStep: step,
+        eventTimestamp: DateTime.now(),
+        latitude: location.latitude,
+        longitude: location.longitude,
+        gpsAccuracy: location.accuracy,
+        address: location.address,
+        deviceId: 'device-hw-${user.id}',
+        photoBase64: cameraResult.base64Image,
+        isGeofenceValid: isGeofenceValid,
+        officeId: (step == WorkflowStep.officeCheckIn || step == WorkflowStep.officeCheckOut) ? (emp.assignedOfficeId ?? defaultOffice.id) : null,
+        workSiteId: (step == WorkflowStep.siteCheckIn || step == WorkflowStep.siteCheckOut) ? (workSites.isNotEmpty ? workSites.first.id : null) : null,
+        syncStatus: SyncStatus.pending,
+      );
+
+      _db.addAttendanceRecord(record);
+
+      WorkflowStep next = step.nextStep ?? WorkflowStep.completed;
+      emit(AttendanceStepSuccess(record, next));
+    } catch (e) {
+      emit(AttendanceFailure('Attendance capture failed: ${e.toString()}'));
+    }
+  }
+
+  void resetState() {
+    emit(AttendanceInitial(_db.currentWorkflowStep));
+  }
+}

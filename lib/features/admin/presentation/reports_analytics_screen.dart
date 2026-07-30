@@ -1,0 +1,986 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../../../database/local_database_service.dart';
+import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_enums.dart';
+import '../../../core/services/pdf_export_service.dart';
+import '../../../core/services/supabase_service.dart';
+import '../../admin/domain/employee_entity.dart';
+import '../../attendance/domain/attendance_record.dart';
+
+class ReportsAnalyticsScreen extends StatefulWidget {
+  const ReportsAnalyticsScreen({super.key});
+
+  @override
+  State<ReportsAnalyticsScreen> createState() => _ReportsAnalyticsScreenState();
+}
+
+class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
+  final LocalDatabaseService _db = LocalDatabaseService();
+
+  String? _selectedEmployeeId;
+  DateTime? _selectedDate;
+  String _searchQuery = '';
+  bool _isLoadingCloud = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCloudAttendanceRecords();
+  }
+
+  Future<void> _loadCloudAttendanceRecords() async {
+    setState(() => _isLoadingCloud = true);
+    try {
+      final cloudRecords =
+          await SupabaseService().fetchAttendanceRecordsFromSupabase();
+      if (cloudRecords.isNotEmpty) {
+        final existingRecords = _db.getAttendanceRecords();
+        final existingIds = existingRecords.map((r) => r.id).toSet();
+        for (final record in cloudRecords) {
+          if (!existingIds.contains(record.id)) {
+            _db.addAttendanceRecord(record);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Cloud attendance fetch error: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingCloud = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_selectedEmployeeId != null && _selectedDate != null) {
+      return _buildLevel3DateDetailView();
+    } else if (_selectedEmployeeId != null) {
+      return _buildLevel2DateListView();
+    } else {
+      return _buildLevel1EmployeeListView();
+    }
+  }
+
+  // ==========================================
+  // LEVEL 1: EMPLOYEE LIST VIEW
+  // ==========================================
+  Widget _buildLevel1EmployeeListView() {
+    final dbEmployees = _db.getEmployees();
+    final allRecords = _db.getAttendanceRecords();
+
+    // Synthesize employee list from both DB & Attendance Records
+    final Map<String, EmployeeEntity> employeeMap = {};
+    for (final e in dbEmployees) {
+      employeeMap[e.id] = e;
+    }
+
+    for (final r in allRecords) {
+      if (!employeeMap.containsKey(r.employeeId)) {
+        final shortId = r.employeeId.length >= 4
+            ? r.employeeId.substring(0, 4).toUpperCase()
+            : r.employeeId.toUpperCase();
+        employeeMap[r.employeeId] = EmployeeEntity(
+          id: r.employeeId,
+          employeeCode: 'EMP-$shortId',
+          name: r.employeeName,
+          mobileNumber: '',
+          email: '',
+          designation: 'Field Staff',
+          department: 'Operations',
+        );
+      }
+    }
+
+    final allEmployees = employeeMap.values.toList();
+
+    final filteredEmployees = allEmployees.where((e) {
+      final q = _searchQuery.trim().toLowerCase();
+      if (q.isEmpty) return true;
+      return e.name.toLowerCase().contains(q) ||
+          e.employeeCode.toLowerCase().contains(q) ||
+          e.department.toLowerCase().contains(q);
+    }).toList();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Employee Attendance Reports',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Select an employee to view date-wise logs & photos',
+                    style: TextStyle(
+                        fontSize: 12, color: AppColors.textSecondaryLight),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
+                    tooltip: 'Refresh Cloud Logs',
+                    onPressed: _loadCloudAttendanceRecords,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.picture_as_pdf_rounded, color: Colors.red),
+                    tooltip: 'Export Full Summary PDF',
+                    onPressed: _exportAllPdf,
+                  ),
+                ],
+              )
+            ],
+          ),
+          if (_isLoadingCloud)
+            const Padding(
+              padding: EdgeInsets.only(top: 8.0),
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
+          const SizedBox(height: 16),
+
+          // Search Bar
+          TextField(
+            onChanged: (val) => setState(() => _searchQuery = val),
+            decoration: InputDecoration(
+              hintText: 'Search employee name, code, or department...',
+              prefixIcon: const Icon(Icons.search_rounded),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              filled: true,
+              fillColor: Colors.grey.shade50,
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          if (filteredEmployees.isEmpty)
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(30.0),
+                child: Center(
+                  child: Text('No employees found.'),
+                ),
+              ),
+            )
+          else
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: filteredEmployees.length,
+              itemBuilder: (context, index) {
+                final emp = filteredEmployees[index];
+                final empRecords = allRecords
+                    .where((r) =>
+                        r.employeeId == emp.id ||
+                        r.employeeName.toLowerCase() == emp.name.toLowerCase())
+                    .toList();
+
+                // Distinct dates count
+                final datesCount = empRecords
+                    .map((r) => DateFormat('yyyy-MM-dd').format(r.eventTimestamp))
+                    .toSet()
+                    .length;
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                  elevation: 1.5,
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
+                    leading: CircleAvatar(
+                      radius: 24,
+                      backgroundColor: AppColors.primary,
+                      child: Text(
+                        emp.name.isNotEmpty
+                            ? emp.name.substring(0, 1).toUpperCase()
+                            : 'E',
+                        style: const TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    title: Row(
+                      children: [
+                        Text(
+                          emp.name,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            emp.employeeCode,
+                            style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primary),
+                          ),
+                        ),
+                      ],
+                    ),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Text(
+                        'Department: ${emp.department.isNotEmpty ? emp.department : 'General'}\n'
+                        '${datesCount > 0 ? "$datesCount Attendance Date(s) Logged" : "No records recorded yet"}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    trailing: const Icon(Icons.arrow_forward_ios_rounded,
+                        size: 16, color: AppColors.textSecondaryLight),
+                    onTap: () {
+                      setState(() {
+                        _selectedEmployeeId = emp.id;
+                        _selectedDate = null;
+                      });
+                    },
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // LEVEL 2: DATE LIST VIEW FOR SELECTED EMPLOYEE
+  // ==========================================
+  Widget _buildLevel2DateListView() {
+    final emp = _db.getEmployees().firstWhere(
+          (e) => e.id == _selectedEmployeeId,
+          orElse: () => EmployeeEntity(
+            id: _selectedEmployeeId!,
+            employeeCode: 'EMP',
+            name: 'Employee',
+            mobileNumber: '',
+            email: '',
+            designation: 'Staff',
+            department: 'General',
+          ),
+        );
+
+    final empRecords = _db.getAttendanceRecords().where((r) {
+      return r.employeeId == emp.id ||
+          r.employeeName.toLowerCase() == emp.name.toLowerCase();
+    }).toList();
+
+    // Group records by date (yyyy-MM-dd)
+    final Map<String, List<AttendanceRecord>> groupedByDate = {};
+    for (final r in empRecords) {
+      final dateKey = DateFormat('yyyy-MM-dd').format(r.eventTimestamp);
+      groupedByDate.putIfAbsent(dateKey, () => []).add(r);
+    }
+
+    final sortedDateKeys = groupedByDate.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () {
+                  setState(() {
+                    _selectedEmployeeId = null;
+                    _selectedDate = null;
+                  });
+                },
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      emp.name,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      '${emp.employeeCode} • ${emp.department} • Select Date',
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textSecondaryLight),
+                    ),
+                  ],
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _exportPdfForEmployee(emp, empRecords),
+                icon: const Icon(Icons.picture_as_pdf_rounded,
+                    size: 16, color: Colors.red),
+                label: const Text('Export', style: TextStyle(fontSize: 12)),
+              )
+            ],
+          ),
+          const Divider(height: 24),
+
+          if (sortedDateKeys.isEmpty)
+            Card(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+              child: Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: Center(
+                  child: Column(
+                    children: [
+                      const Icon(Icons.event_busy_rounded,
+                          size: 48, color: Colors.grey),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No attendance logs recorded for ${emp.name} yet.',
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          else
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: sortedDateKeys.length,
+              itemBuilder: (context, index) {
+                final dateKey = sortedDateKeys[index];
+                final dateRecords = groupedByDate[dateKey]!;
+                dateRecords.sort((a, b) =>
+                    a.eventTimestamp.compareTo(b.eventTimestamp));
+
+                final parsedDate = DateTime.parse(dateKey);
+                final formattedDateStr =
+                    DateFormat('EEEE, dd MMMM yyyy').format(parsedDate);
+
+                final allValidGeofence =
+                    dateRecords.every((r) => r.isGeofenceValid);
+                final firstTime = DateFormat('hh:mm a')
+                    .format(dateRecords.first.eventTimestamp);
+                final lastTime = DateFormat('hh:mm a')
+                    .format(dateRecords.last.eventTimestamp);
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                  elevation: 1.5,
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    leading: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.calendar_month_rounded,
+                          color: AppColors.primary),
+                    ),
+                    title: Text(
+                      formattedDateStr,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 6.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.schedule_rounded,
+                                  size: 14, color: Colors.grey.shade600),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$firstTime - $lastTime (${dateRecords.length} Step Logs)',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: (allValidGeofence
+                                          ? AppColors.success
+                                          : AppColors.error)
+                                      .withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  allValidGeofence
+                                      ? 'VALID GEOFENCE'
+                                      : 'GEOFENCE VIOLATION',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: allValidGeofence
+                                        ? AppColors.success
+                                        : AppColors.error,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${dateRecords.where((r) => r.photoBase64.isNotEmpty).length} Photo(s)',
+                                style: const TextStyle(
+                                    fontSize: 11, color: Colors.grey),
+                              )
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    trailing: const Icon(Icons.arrow_forward_ios_rounded,
+                        size: 16, color: AppColors.textSecondaryLight),
+                    onTap: () {
+                      setState(() {
+                        _selectedDate = parsedDate;
+                      });
+                    },
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // LEVEL 3: DETAILED RECORD & PHOTO VIEW FOR SELECTED DATE
+  // ==========================================
+  Widget _buildLevel3DateDetailView() {
+    final emp = _db.getEmployees().firstWhere(
+          (e) => e.id == _selectedEmployeeId,
+          orElse: () => EmployeeEntity(
+            id: _selectedEmployeeId!,
+            employeeCode: 'EMP',
+            name: 'Employee',
+            mobileNumber: '',
+            email: '',
+            designation: 'Staff',
+            department: 'General',
+          ),
+        );
+
+    final selectedDateStr = DateFormat('yyyy-MM-dd').format(_selectedDate!);
+
+    final dateRecords = _db.getAttendanceRecords().where((r) {
+      final matchesUser = r.employeeId == emp.id ||
+          r.employeeName.toLowerCase() == emp.name.toLowerCase();
+      final matchesDate =
+          DateFormat('yyyy-MM-dd').format(r.eventTimestamp) == selectedDateStr;
+      return matchesUser && matchesDate;
+    }).toList();
+
+    dateRecords.sort((a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
+
+    final formattedDateTitle =
+        DateFormat('EEEE, dd MMMM yyyy').format(_selectedDate!);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () {
+                  setState(() {
+                    _selectedDate = null;
+                  });
+                },
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      emp.name,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      formattedDateTitle,
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textSecondaryLight),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 20),
+
+          // Date Summary Banner
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(14),
+              border:
+                  Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.verified_user_rounded,
+                    color: AppColors.primary, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Total Workflow Steps Logged: ${dateRecords.length}',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'All steps verified via live front camera & GPS geofencing',
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey.shade700),
+                      ),
+                    ],
+                  ),
+                )
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          Text(
+            'Timeline & Live Verification Photos',
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+
+          if (dateRecords.isEmpty)
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(
+                    child: Text('No log details recorded for this date.')),
+              ),
+            )
+          else
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: dateRecords.length,
+              itemBuilder: (context, index) {
+                final r = dateRecords[index];
+                final timeStr = DateFormat('hh:mm:ss a').format(r.eventTimestamp);
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
+                  elevation: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Card Header
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: _getStepColor(r.workflowStep)
+                                        .withValues(alpha: 0.15),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    _getStepIcon(r.workflowStep),
+                                    color: _getStepColor(r.workflowStep),
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      r.workflowStep.displayName,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14),
+                                    ),
+                                    Text(
+                                      timeStr,
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.textSecondaryLight),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: (r.isGeofenceValid
+                                        ? AppColors.success
+                                        : AppColors.error)
+                                    .withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                r.isGeofenceValid ? 'VALID' : 'VIOLATION',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: r.isGeofenceValid
+                                      ? AppColors.success
+                                      : AppColors.error,
+                                ),
+                              ),
+                            )
+                          ],
+                        ),
+                        const Divider(height: 20),
+
+                        // Location Details
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.location_on_rounded,
+                                size: 18, color: AppColors.secondary),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    r.address,
+                                    style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'GPS: ${r.latitude.toStringAsFixed(6)}, ${r.longitude.toStringAsFixed(6)} (Accuracy: ${r.gpsAccuracy.toStringAsFixed(1)}m)',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Live Captured Selfie Photo Section
+                        Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(Icons.camera_alt_rounded,
+                                      size: 16, color: AppColors.primary),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Verified Live Camera Snapshot',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primary),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Center(
+                                child: GestureDetector(
+                                  onTap: () => _showFullImageDialog(r),
+                                  child: Container(
+                                    height: 140,
+                                    width: 140,
+                                    clipBehavior: Clip.antiAlias,
+                                    decoration: BoxDecoration(
+                                      color: Colors.black12,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                          color: AppColors.primaryLight),
+                                    ),
+                                    child: _buildPhotoWidget(r.photoBase64),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Center(
+                                child: TextButton.icon(
+                                  onPressed: () => _showFullImageDialog(r),
+                                  icon: const Icon(Icons.fullscreen_rounded,
+                                      size: 16),
+                                  label: const Text(
+                                    'Tap to Enlarge Verified Photo',
+                                    style: TextStyle(fontSize: 11),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+
+                        // Sync Status
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Device ID: ${r.deviceId}',
+                              style: TextStyle(
+                                  fontSize: 10, color: Colors.grey.shade600),
+                            ),
+                            Row(
+                              children: [
+                                const Icon(Icons.cloud_done_rounded,
+                                    size: 14, color: AppColors.success),
+                                const SizedBox(width: 4),
+                                Text(
+                                  r.syncStatus.name.toUpperCase(),
+                                  style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.success),
+                                ),
+                              ],
+                            )
+                          ],
+                        )
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // HELPER WIDGETS & METHODS
+  // ==========================================
+  Widget _buildPhotoWidget(String photoBase64) {
+    if (photoBase64.isEmpty) {
+      return const Center(
+          child: Icon(Icons.person_pin, size: 60, color: Colors.white70));
+    }
+
+    try {
+      if (File(photoBase64).existsSync()) {
+        return Image.file(File(photoBase64), fit: BoxFit.cover);
+      }
+      final decodedBytes = base64Decode(photoBase64);
+      return Image.memory(decodedBytes, fit: BoxFit.cover);
+    } catch (_) {
+      return Container(
+        color: Colors.blueGrey.shade800,
+        child: const Center(
+          child: Icon(Icons.person_pin, size: 65, color: Colors.white70),
+        ),
+      );
+    }
+  }
+
+  void _showFullImageDialog(AttendanceRecord record) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${record.employeeName} • ${record.workflowStep.displayName}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  )
+                ],
+              ),
+              const Divider(),
+              Container(
+                height: 280,
+                width: double.infinity,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: _buildPhotoWidget(record.photoBase64),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Timestamp: ${DateFormat('dd MMM yyyy hh:mm:ss a').format(record.eventTimestamp)}',
+                style:
+                    const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Location: ${record.address}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 11, color: AppColors.textSecondaryLight),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  IconData _getStepIcon(WorkflowStep step) {
+    switch (step) {
+      case WorkflowStep.officeCheckIn:
+        return Icons.login_rounded;
+      case WorkflowStep.siteCheckIn:
+        return Icons.location_on_rounded;
+      case WorkflowStep.siteCheckOut:
+        return Icons.directions_run_rounded;
+      case WorkflowStep.officeCheckOut:
+        return Icons.logout_rounded;
+      case WorkflowStep.completed:
+        return Icons.check_circle_rounded;
+    }
+  }
+
+  Color _getStepColor(WorkflowStep step) {
+    switch (step) {
+      case WorkflowStep.officeCheckIn:
+        return AppColors.success;
+      case WorkflowStep.siteCheckIn:
+        return AppColors.primary;
+      case WorkflowStep.siteCheckOut:
+        return AppColors.warning;
+      case WorkflowStep.officeCheckOut:
+        return Colors.purple;
+      case WorkflowStep.completed:
+        return AppColors.success;
+    }
+  }
+
+  Future<void> _exportAllPdf() async {
+    final records = _db.getAttendanceRecords();
+    final pdfContent = await PdfExportService.generateAttendancePdfReport(
+      organizationName: _db.organization?.name ?? 'Fusion Electro Mechanical',
+      records: records,
+    );
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('PDF Report Generated'),
+          content: SingleChildScrollView(
+              child: Text(pdfContent,
+                  style: const TextStyle(
+                      fontFamily: 'monospace', fontSize: 11))),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            )
+          ],
+        ),
+      );
+    }
+  }
+
+  Future<void> _exportPdfForEmployee(
+      EmployeeEntity emp, List<AttendanceRecord> records) async {
+    final pdfContent = await PdfExportService.generateAttendancePdfReport(
+      organizationName:
+          '${_db.organization?.name ?? 'Fusion Enterprise'} - ${emp.name}',
+      records: records,
+    );
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('${emp.name} PDF Report'),
+          content: SingleChildScrollView(
+              child: Text(pdfContent,
+                  style: const TextStyle(
+                      fontFamily: 'monospace', fontSize: 11))),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            )
+          ],
+        ),
+      );
+    }
+  }
+}

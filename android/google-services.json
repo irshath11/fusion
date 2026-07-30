@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "318619919615",
+    "firebase_url": "https://fusion-attendance-default-rtdb.firebaseio.com",
+    "project_id": "fusion-attendance",
+    "storage_bucket": "fusion-attendance.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:318619919615:android:9d05504d5977a3598b98ca",
+        "android_client_info": {
+          "package_name": "com.example.fusion_attendance"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBx6RvC40VTfYiiTN3CfKBWqU9q18pKQiY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
