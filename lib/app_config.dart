@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 class AppConfig {
   static const String appName = 'Workforce Tracker';
   static const String appVersion = '1.0.0';

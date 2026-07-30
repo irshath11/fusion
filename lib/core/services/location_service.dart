@@ -92,7 +92,8 @@ class LocationService {
         latitude: 24.3644,
         longitude: 54.5029,
         accuracy: 25.0,
-        address: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi ($e)',
+        address:
+            'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi ($e)',
       );
     }
   }

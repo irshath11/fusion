@@ -78,6 +78,14 @@ class RootRoleRouter extends StatelessWidget {
         }
       },
       builder: (context, state) {
+        if (state is AuthInitial || state is AuthLoading) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
         if (state is RequiresPasswordChangeState) {
           return ForcePasswordChangeScreen(user: state.user);
         }

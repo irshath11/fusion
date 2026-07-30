@@ -14,15 +14,12 @@ class SetupWizardScreen extends StatefulWidget {
 }
 
 class _SetupWizardScreenState extends State<SetupWizardScreen> {
-  final _orgNameController = TextEditingController(
-      text: 'Fusion Electro Mechanical Maintenance L.L.C');
-  final _orgAddressController = TextEditingController(
-      text: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi');
-  final _adminNameController = TextEditingController(text: 'Irshath Ahamed');
-  final _adminEmailController =
-      TextEditingController(text: 'sr.irshath@gmail.com');
-  final _adminMobileController = TextEditingController(text: '+971521354859');
-  final _adminPasswordController = TextEditingController(text: 'aa123456');
+  final _orgNameController = TextEditingController();
+  final _orgAddressController = TextEditingController();
+  final _adminNameController = TextEditingController();
+  final _adminEmailController = TextEditingController();
+  final _adminMobileController = TextEditingController();
+  final _adminPasswordController = TextEditingController();
 
   int _currentStep = 0;
 
@@ -89,83 +86,87 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                   Step(
                     title: const Text('Organization'),
                     isActive: _currentStep >= 0,
-                    content: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Organization Details',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Enter your enterprise organization name and primary address to initialize workspace.',
-                          style: TextStyle(color: AppColors.textSecondaryLight),
-                        ),
-                        const SizedBox(height: 20),
-                        CustomTextField(
-                          controller: _orgNameController,
-                          label: 'Organization Name',
-                          hint: 'e.g. Apex Global Logistics',
-                          prefixIcon: Icons.business_rounded,
-                        ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _orgAddressController,
-                          label: 'Headquarters Address',
-                          hint: 'e.g. Business Bay, Dubai',
-                          prefixIcon: Icons.location_city_rounded,
-                        ),
-                      ],
+                    content: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Organization Details',
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Enter your enterprise organization name and primary address to initialize workspace.',
+                            style: TextStyle(color: AppColors.textSecondaryLight),
+                          ),
+                          const SizedBox(height: 20),
+                          CustomTextField(
+                            controller: _orgNameController,
+                            label: 'Organization Name',
+                            hint: 'e.g. Apex Global Logistics',
+                            prefixIcon: Icons.business_rounded,
+                          ),
+                          const SizedBox(height: 16),
+                          CustomTextField(
+                            controller: _orgAddressController,
+                            label: 'Headquarters Address',
+                            hint: 'e.g. Business Bay, Dubai',
+                            prefixIcon: Icons.location_city_rounded,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   Step(
                     title: const Text('Super Admin'),
                     isActive: _currentStep >= 1,
-                    content: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Super Admin Credentials',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'This account will be registered with Firebase Auth as master SUPER_ADMIN.',
-                          style: TextStyle(color: AppColors.textSecondaryLight),
-                        ),
-                        const SizedBox(height: 20),
-                        CustomTextField(
-                          controller: _adminNameController,
-                          label: 'Super Admin Full Name',
-                          prefixIcon: Icons.person_rounded,
-                        ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _adminEmailController,
-                          label: 'Email Address',
-                          keyboardType: TextInputType.emailAddress,
-                          prefixIcon: Icons.email_rounded,
-                        ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _adminMobileController,
-                          label: 'Mobile Number',
-                          keyboardType: TextInputType.phone,
-                          prefixIcon: Icons.phone_rounded,
-                        ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _adminPasswordController,
-                          label: 'Master Password',
-                          isPassword: true,
-                          prefixIcon: Icons.lock_rounded,
-                        ),
-                        const SizedBox(height: 20),
-                        if (state is SetupLoading)
-                          const Center(child: CircularProgressIndicator())
-                      ],
+                    content: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Super Admin Credentials',
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'This account will be registered with Firebase Auth as master SUPER_ADMIN.',
+                            style: TextStyle(color: AppColors.textSecondaryLight),
+                          ),
+                          const SizedBox(height: 20),
+                          CustomTextField(
+                            controller: _adminNameController,
+                            label: 'Super Admin Full Name',
+                            prefixIcon: Icons.person_rounded,
+                          ),
+                          const SizedBox(height: 16),
+                          CustomTextField(
+                            controller: _adminEmailController,
+                            label: 'Email Address',
+                            keyboardType: TextInputType.emailAddress,
+                            prefixIcon: Icons.email_rounded,
+                          ),
+                          const SizedBox(height: 16),
+                          CustomTextField(
+                            controller: _adminMobileController,
+                            label: 'Mobile Number',
+                            keyboardType: TextInputType.phone,
+                            prefixIcon: Icons.phone_rounded,
+                          ),
+                          const SizedBox(height: 16),
+                          CustomTextField(
+                            controller: _adminPasswordController,
+                            label: 'Master Password',
+                            isPassword: true,
+                            prefixIcon: Icons.lock_rounded,
+                          ),
+                          const SizedBox(height: 20),
+                          if (state is SetupLoading)
+                            const Center(child: CircularProgressIndicator())
+                        ],
+                      ),
                     ),
                   ),
                 ],

@@ -212,7 +212,6 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                             roleBadgeColor = AppColors.primary;
                             break;
                           case UserRole.employee:
-                          default:
                             roleBadgeColor = AppColors.success;
                             break;
                         }
@@ -272,30 +271,37 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                   Text('Mobile: ${user.phoneNumber}',
                                       style: const TextStyle(fontSize: 11)),
                                 const SizedBox(height: 4),
-                                Row(
+                                Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 8,
+                                  runSpacing: 4,
                                   children: [
-                                    Icon(
-                                      user.isActive
-                                          ? Icons.check_circle_outline
-                                          : Icons.block_outlined,
-                                      size: 14,
-                                      color: user.isActive
-                                          ? AppColors.success
-                                          : AppColors.error,
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          user.isActive
+                                              ? Icons.check_circle_outline
+                                              : Icons.block_outlined,
+                                          size: 14,
+                                          color: user.isActive
+                                              ? AppColors.success
+                                              : AppColors.error,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          user.isActive ? 'Active' : 'Disabled',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: user.isActive
+                                                ? AppColors.success
+                                                : AppColors.error,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      user.isActive ? 'Active' : 'Disabled',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: user.isActive
-                                            ? AppColors.success
-                                            : AppColors.error,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    if (user.requiresPasswordChange) ...[
-                                      const SizedBox(width: 10),
+                                    if (user.requiresPasswordChange)
                                       Container(
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 6, vertical: 1),
@@ -313,7 +319,6 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                           ),
                                         ),
                                       ),
-                                    ]
                                   ],
                                 ),
                               ],
