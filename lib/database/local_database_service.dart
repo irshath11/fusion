@@ -306,36 +306,57 @@ class LocalDatabaseService {
     _persistAttendanceRecords();
   }
 
-  /// Dynamically computes current workflow step for a specific employee for today
-  WorkflowStep getWorkflowStepForEmployee([String? employeeId]) {
+  /// Fetches today's attendance records for a specific employee
+  List<AttendanceRecord> getTodayAttendanceRecords([String? employeeId]) {
     final targetId = employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
-    if (targetId == null || targetId.isEmpty) {
-      return WorkflowStep.officeCheckIn;
-    }
+    if (targetId == null || targetId.isEmpty) return [];
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
-    final todayUserRecords = _attendanceRecords.where((r) {
+    return _attendanceRecords.where((r) {
       final matchesUser = (r.employeeId == targetId ||
           (_currentUser != null &&
               (r.employeeId == _currentUser!.id ||
                r.employeeId == _currentUser!.firebaseUid ||
-               r.employeeName == _currentUser!.fullName)));
+               r.employeeName.trim().toLowerCase() == _currentUser!.fullName.trim().toLowerCase())));
       final rDate = DateTime(r.eventTimestamp.year, r.eventTimestamp.month, r.eventTimestamp.day);
       return matchesUser && rDate.isAtSameMomentAs(today);
     }).toList();
+  }
+
+  /// Dynamically computes current workflow step for a specific employee for today
+  WorkflowStep getWorkflowStepForEmployee([String? employeeId]) {
+    final todayUserRecords = getTodayAttendanceRecords(employeeId);
 
     if (todayUserRecords.isEmpty) {
       return WorkflowStep.officeCheckIn;
     }
 
     final lastRecord = todayUserRecords.last;
-    if (lastRecord.workflowStep.nextStep != null) {
-      return lastRecord.workflowStep.nextStep!;
-    } else {
+    if (lastRecord.workflowStep == WorkflowStep.officeCheckOut) {
       return WorkflowStep.completed;
+    } else if (lastRecord.workflowStep == WorkflowStep.siteCheckIn) {
+      return WorkflowStep.siteCheckOut;
+    } else {
+      // Last record was officeCheckIn or siteCheckOut: user can do siteCheckIn or officeCheckOut
+      return WorkflowStep.siteCheckIn;
     }
+  }
+
+  /// Checks if the employee has already completed at least one site check-in today
+  bool isFirstSiteCheckInToday([String? employeeId]) {
+    final todayRecords = getTodayAttendanceRecords(employeeId);
+    return !todayRecords.any((r) => r.workflowStep == WorkflowStep.siteCheckIn);
+  }
+
+  /// Gets the site name of the currently active site check-in (if checked in)
+  String? getActiveSiteNameToday([String? employeeId]) {
+    final todayRecords = getTodayAttendanceRecords(employeeId);
+    if (todayRecords.isNotEmpty && todayRecords.last.workflowStep == WorkflowStep.siteCheckIn) {
+      return todayRecords.last.siteName ?? 'Current Site';
+    }
+    return null;
   }
 
   WorkflowStep get currentWorkflowStep => getWorkflowStepForEmployee();

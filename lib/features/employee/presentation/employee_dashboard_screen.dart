@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../database/local_database_service.dart';
@@ -8,12 +9,12 @@ import '../../../core/widgets/status_badge.dart';
 import '../../../core/widgets/offline_banner.dart';
 import '../../attendance/presentation/attendance_cubit.dart';
 import '../../attendance/presentation/camera_capture_modal.dart';
+import '../../attendance/presentation/site_name_dialog.dart';
 import '../../sync/data/sync_engine.dart';
 import '../../auth/presentation/auth_cubit.dart';
 import '../../auth/presentation/login_screen.dart';
 import '../../timesheet/presentation/employee_timesheet_screen.dart';
 import 'package:intl/intl.dart';
-import '../../attendance/domain/attendance_record.dart';
 
 class EmployeeDashboardScreen extends StatefulWidget {
   const EmployeeDashboardScreen({super.key});
@@ -28,11 +29,29 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
   final SyncEngine _syncEngine = SyncEngine();
 
   int _pendingSyncCount = 0;
+  bool _isSyncing = false;
+  Timer? _workingTimeTimer;
 
   @override
   void initState() {
     super.initState();
     _refreshSyncCount();
+    _startWorkingTimeTimer();
+  }
+
+  void _startWorkingTimeTimer() {
+    _workingTimeTimer?.cancel();
+    _workingTimeTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _workingTimeTimer?.cancel();
+    super.dispose();
   }
 
   void _refreshSyncCount() {
@@ -44,70 +63,117 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
   }
 
   Future<void> _manualSync() async {
-    final result = await _syncEngine.performSync();
-    _refreshSyncCount();
+    if (_isSyncing) return;
 
-    if (!mounted) return;
+    setState(() {
+      _isSyncing = true;
+    });
 
-    if (result.isNoInternet) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.wifi_off_rounded, color: AppColors.warning),
-              SizedBox(width: 10),
-              Text('No Internet Connection'),
+    try {
+      final result = await _syncEngine.performSync();
+      _refreshSyncCount();
+
+      if (!mounted) return;
+
+      if (result.isNoInternet) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.wifi_off_rounded, color: AppColors.warning),
+                SizedBox(width: 10),
+                Text('No Internet Connection'),
+              ],
+            ),
+            content: const Text(
+              'Unable to synchronize attendance records. Please connect to a Wi-Fi or mobile data network and try again.',
+              style: TextStyle(fontSize: 14),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Close'),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _manualSync();
+                },
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Retry Sync'),
+              ),
             ],
           ),
-          content: const Text(
-            'Unable to synchronize attendance records. Please connect to a Wi-Fi or mobile data network and try again.',
-            style: TextStyle(fontSize: 14),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Close'),
-            ),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () {
-                Navigator.pop(ctx);
-                _manualSync();
-              },
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Retry Sync'),
-            ),
-          ],
+        );
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message),
+          backgroundColor:
+              result.syncedCount > 0 ? AppColors.success : AppColors.info,
         ),
       );
-      return;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSyncing = false;
+        });
+      }
     }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(result.message),
-        backgroundColor:
-            result.syncedCount > 0 ? AppColors.success : AppColors.info,
-      ),
-    );
   }
 
-  void _openCameraModal(WorkflowStep step) {
+  void _handleAttendanceStep(WorkflowStep step, {String? activeSiteName}) async {
+    final user = _db.currentUser;
+    final empId = user?.id ?? user?.firebaseUid;
+
+    if (step == WorkflowStep.officeCheckIn) {
+      _openCameraModal(step);
+    } else if (step == WorkflowStep.siteCheckIn) {
+      final siteName = await SiteNameDialog.show(context);
+      if (siteName == null || siteName.isEmpty) return;
+
+      final isFirstSite = _db.isFirstSiteCheckInToday(empId);
+      if (isFirstSite) {
+        _openCameraModal(step, siteName: siteName);
+      } else {
+        context.read<AttendanceCubit>().executeAttendanceStep(
+              step: step,
+              siteName: siteName,
+            );
+      }
+    } else if (step == WorkflowStep.siteCheckOut) {
+      final sName = activeSiteName ?? _db.getActiveSiteNameToday(empId) ?? 'Site';
+      context.read<AttendanceCubit>().executeAttendanceStep(
+            step: step,
+            siteName: sName,
+          );
+    } else if (step == WorkflowStep.officeCheckOut) {
+      _openCameraModal(step);
+    }
+  }
+
+  void _openCameraModal(WorkflowStep step, {String? siteName}) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => CameraCaptureModal(
-        stepName: step.displayName,
+        stepName: step == WorkflowStep.siteCheckIn && siteName != null
+            ? 'First Site Check-In ($siteName)'
+            : step.displayName,
         onPhotoCaptured: (cameraResult) {
           context.read<AttendanceCubit>().executeAttendanceStep(
                 step: step,
                 cameraResult: cameraResult,
+                siteName: siteName,
               );
         },
       ),
@@ -121,6 +187,9 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     final formKey = GlobalKey<FormState>();
     bool isLoading = false;
     String? errorMessage;
+    bool obscureCurrentPass = true;
+    bool obscureNewPass = true;
+    bool obscureConfirmPass = true;
 
     showDialog(
       context: context,
@@ -160,10 +229,23 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                     ],
                     TextFormField(
                       controller: currentPassController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
+                      obscureText: obscureCurrentPass,
+                      decoration: InputDecoration(
                         labelText: 'Current / Temporary Password',
-                        prefixIcon: Icon(Icons.lock_outline_rounded),
+                        prefixIcon: const Icon(Icons.lock_outline_rounded),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscureCurrentPass
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                            size: 20,
+                          ),
+                          onPressed: () {
+                            setDialogState(() {
+                              obscureCurrentPass = !obscureCurrentPass;
+                            });
+                          },
+                        ),
                       ),
                       validator: (val) => val == null || val.isEmpty
                           ? 'Please enter current password'
@@ -172,10 +254,23 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: newPassController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
+                      obscureText: obscureNewPass,
+                      decoration: InputDecoration(
                         labelText: 'New Password',
-                        prefixIcon: Icon(Icons.lock_rounded),
+                        prefixIcon: const Icon(Icons.lock_rounded),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscureNewPass
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                            size: 20,
+                          ),
+                          onPressed: () {
+                            setDialogState(() {
+                              obscureNewPass = !obscureNewPass;
+                            });
+                          },
+                        ),
                       ),
                       validator: (val) {
                         if (val == null || val.isEmpty)
@@ -188,10 +283,23 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: confirmPassController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
+                      obscureText: obscureConfirmPass,
+                      decoration: InputDecoration(
                         labelText: 'Confirm New Password',
-                        prefixIcon: Icon(Icons.check_circle_outline_rounded),
+                        prefixIcon: const Icon(Icons.check_circle_outline_rounded),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscureConfirmPass
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                            size: 20,
+                          ),
+                          onPressed: () {
+                            setDialogState(() {
+                              obscureConfirmPass = !obscureConfirmPass;
+                            });
+                          },
+                        ),
                       ),
                       validator: (val) {
                         if (val != newPassController.text)
@@ -267,41 +375,36 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     final user = _db.currentUser;
     final currentStep =
         _db.getWorkflowStepForEmployee(user?.id ?? user?.firebaseUid);
-    final allRecords = _db.getAttendanceRecords();
-
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
 
-    final userTodayRecords = allRecords.where((r) {
-      final isUserMatch = (user != null &&
-          (r.employeeId == user.id ||
-              r.employeeId == user.firebaseUid ||
-              r.employeeName == user.fullName));
-      final rDate = DateTime(
-          r.eventTimestamp.year, r.eventTimestamp.month, r.eventTimestamp.day);
-      return isUserMatch && rDate.isAtSameMomentAs(today);
-    }).toList();
+    final empId = user?.id ?? user?.firebaseUid;
+    final userTodayRecords = _db.getTodayAttendanceRecords(empId);
 
     String workingTime = '00h 00m';
-    final checkInMatches = userTodayRecords
-        .where((r) => r.workflowStep == WorkflowStep.officeCheckIn);
-    if (checkInMatches.isNotEmpty) {
-      final checkInTime = checkInMatches.first.eventTimestamp;
-      final siteOutMatches = userTodayRecords
-          .where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
-      final officeOutMatches = userTodayRecords
-          .where((r) => r.workflowStep == WorkflowStep.officeCheckOut);
+    if (userTodayRecords.isNotEmpty) {
+      final checkInMatches = userTodayRecords
+          .where((r) => r.workflowStep == WorkflowStep.officeCheckIn);
+      if (checkInMatches.isNotEmpty) {
+        final checkInTime = checkInMatches.first.eventTimestamp;
+        final lastRecord = userTodayRecords.last;
 
-      final endTime = siteOutMatches.isNotEmpty
-          ? siteOutMatches.first.eventTimestamp
-          : (officeOutMatches.isNotEmpty
-              ? officeOutMatches.first.eventTimestamp
-              : now);
+        DateTime endTime;
+        if (lastRecord.workflowStep == WorkflowStep.officeCheckOut) {
+          endTime = lastRecord.eventTimestamp;
+        } else if (lastRecord.workflowStep == WorkflowStep.siteCheckOut) {
+          endTime = lastRecord.eventTimestamp;
+        } else {
+          // officeCheckIn or siteCheckIn: Duty is currently active!
+          endTime = now;
+        }
 
-      final diff = endTime.difference(checkInTime);
-      final hrs = diff.inHours.toString().padLeft(2, '0');
-      final mins = (diff.inMinutes % 60).toString().padLeft(2, '0');
-      workingTime = '${hrs}h ${mins}m';
+        final diff = endTime.isAfter(checkInTime)
+            ? endTime.difference(checkInTime)
+            : Duration.zero;
+        final hrs = diff.inHours.toString().padLeft(2, '0');
+        final mins = (diff.inMinutes % 60).toString().padLeft(2, '0');
+        workingTime = '${hrs}h ${mins}m';
+      }
     }
 
     final offices = _db.getOffices();
@@ -343,9 +446,18 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
             onPressed: _showChangePasswordDialog,
           ),
           IconButton(
-            icon: const Icon(Icons.sync_rounded),
-            tooltip: 'Sync Offline Queue',
-            onPressed: _manualSync,
+            icon: _isSyncing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.sync_rounded),
+            tooltip: _isSyncing ? 'Syncing...' : 'Sync Offline Queue',
+            onPressed: _isSyncing ? null : _manualSync,
           ),
           IconButton(
             icon: const Icon(Icons.logout_rounded),
@@ -365,6 +477,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
           children: [
             OfflineBanner(
               pendingCount: _pendingSyncCount,
+              isSyncing: _isSyncing,
               onSyncPressed: _manualSync,
             ),
             Expanded(
@@ -504,14 +617,14 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
 
                         // Action Banner / Button for Current Step
                         Text(
-                          'Required Workflow Step',
+                          'Required Workflow Action',
                           style: Theme.of(context)
                               .textTheme
                               .titleMedium
                               ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 10),
-                        if (currentStep != WorkflowStep.completed) ...[
+                        if (currentStep == WorkflowStep.officeCheckIn) ...[
                           Card(
                             color: AppColors.primary.withOpacity(0.05),
                             child: Padding(
@@ -519,37 +632,164 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
+                                  const Row(
                                     children: [
-                                      const Icon(Icons.touch_app_rounded,
-                                          color: AppColors.primary),
-                                      const SizedBox(width: 10),
+                                      Icon(Icons.business_rounded, color: AppColors.primary),
+                                      SizedBox(width: 10),
                                       Expanded(
                                         child: Text(
-                                          currentStep.displayName,
-                                          style: const TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
+                                          'Start Work Day - Office Check-In',
+                                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                                         ),
                                       ),
                                     ],
                                   ),
                                   const SizedBox(height: 8),
                                   const Text(
-                                    'Live camera frame & GPS location will be captured & validated against assigned geofence radius.',
-                                    style: TextStyle(
-                                        fontSize: 13,
-                                        color: AppColors.textSecondaryLight),
+                                    'Check in to start your workday. Live selfie photo & GPS location required.',
+                                    style: TextStyle(fontSize: 13, color: AppColors.textSecondaryLight),
                                   ),
                                   const SizedBox(height: 16),
                                   AppButton(
-                                    text: 'Execute ${currentStep.displayName}',
+                                    text: state is AttendanceProcessing
+                                        ? 'Acquiring GPS & Logging...'
+                                        : 'Execute Office Check-In',
                                     isLoading: state is AttendanceProcessing,
                                     icon: Icons.camera_alt_rounded,
-                                    onPressed: () =>
-                                        _openCameraModal(currentStep),
+                                    onPressed: () => _handleAttendanceStep(WorkflowStep.officeCheckIn),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ] else if (currentStep == WorkflowStep.siteCheckOut) ...[
+                          Card(
+                            color: Colors.orange.shade50,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(color: Colors.orange.shade200),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.location_on_rounded, color: Colors.orange),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          'Currently at: ${_db.getActiveSiteNameToday(user?.id ?? user?.firebaseUid) ?? "Work Site"}',
+                                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Complete current site work session to log site check-out time.',
+                                    style: TextStyle(fontSize: 13, color: AppColors.textSecondaryLight),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  AppButton(
+                                    text: state is AttendanceProcessing
+                                        ? 'Acquiring GPS & Logging...'
+                                        : 'Check-Out from Site',
+                                    isLoading: state is AttendanceProcessing,
+                                    icon: Icons.logout_rounded,
+                                    onPressed: () => _handleAttendanceStep(WorkflowStep.siteCheckOut),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ] else if (currentStep == WorkflowStep.siteCheckIn) ...[
+                          Card(
+                            color: AppColors.primary.withOpacity(0.05),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Work Day in Progress',
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  const Text(
+                                    'Check in to your next job site or perform Final Office Check-Out to end your workday.',
+                                    style: TextStyle(fontSize: 13, color: AppColors.textSecondaryLight),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: ElevatedButton.icon(
+                                          onPressed: state is AttendanceProcessing
+                                              ? null
+                                              : () => _handleAttendanceStep(WorkflowStep.siteCheckIn),
+                                          icon: state is AttendanceProcessing
+                                              ? const SizedBox(
+                                                  width: 16,
+                                                  height: 16,
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    color: Colors.white,
+                                                  ),
+                                                )
+                                              : const Icon(Icons.add_location_alt_rounded, size: 18),
+                                          label: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            child: Text(
+                                              state is AttendanceProcessing
+                                                  ? 'Fetching GPS...'
+                                                  : 'Check-In Site',
+                                              style: const TextStyle(fontWeight: FontWeight.bold),
+                                            ),
+                                          ),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppColors.primary,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(vertical: 14),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: OutlinedButton.icon(
+                                          onPressed: state is AttendanceProcessing
+                                              ? null
+                                              : () => _handleAttendanceStep(WorkflowStep.officeCheckOut),
+                                          icon: state is AttendanceProcessing
+                                              ? SizedBox(
+                                                  width: 16,
+                                                  height: 16,
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    color: Colors.red.shade700,
+                                                  ),
+                                                )
+                                              : const Icon(Icons.no_meeting_room_rounded, size: 18),
+                                          label: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            child: Text(
+                                              state is AttendanceProcessing
+                                                  ? 'Processing...'
+                                                  : 'Final Day End',
+                                              style: const TextStyle(fontWeight: FontWeight.bold),
+                                            ),
+                                          ),
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: Colors.red.shade700,
+                                            side: BorderSide(color: Colors.red.shade400),
+                                            padding: const EdgeInsets.symmetric(vertical: 14),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
@@ -564,15 +804,12 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                             ),
                             child: const Row(
                               children: [
-                                Icon(Icons.check_circle_rounded,
-                                    color: AppColors.success, size: 28),
+                                Icon(Icons.check_circle_rounded, color: AppColors.success, size: 28),
                                 SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
                                     'Daily attendance workflow fully completed. Thank you!',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.success),
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.success),
                                   ),
                                 ),
                               ],
@@ -581,7 +818,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                         ],
 
                         const SizedBox(height: 24),
-                        // 6-Step Workflow Stepper Log
+                        // Dynamic Workday Stepper Timeline Log
                         Text(
                           'Today\'s Attendance Timeline',
                           style: Theme.of(context)
@@ -590,102 +827,64 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                               ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 10),
-                        ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: WorkflowStep.values.length -
-                              1, // Exclude completed tag
-                          itemBuilder: (context, index) {
-                            final step = WorkflowStep.values[index];
-                            final record = userTodayRecords.firstWhere(
-                              (r) => r.workflowStep == step,
-                              orElse: () => AttendanceRecord(
-                                id: '',
-                                employeeId: '',
-                                employeeName: '',
-                                workflowStep: step,
-                                eventTimestamp: DateTime.now(),
-                                latitude: 0,
-                                longitude: 0,
-                                gpsAccuracy: 0,
-                                address: '',
-                                deviceId: '',
-                                photoBase64: '',
-                                isGeofenceValid: false,
+                        if (userTodayRecords.isEmpty)
+                          const Card(
+                            child: Padding(
+                              padding: EdgeInsets.all(20.0),
+                              child: Center(
+                                child: Text('No attendance activity logged for today yet.',
+                                    style: TextStyle(color: AppColors.textSecondaryLight, fontSize: 13)),
                               ),
-                            );
+                            ),
+                          )
+                        else
+                          ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: userTodayRecords.length,
+                            itemBuilder: (context, index) {
+                              final record = userTodayRecords[index];
+                              final formattedTime = DateFormat('hh:mm a').format(record.eventTimestamp.toLocal());
+                              final stepTitle = record.workflowStep == WorkflowStep.siteCheckIn
+                                  ? 'Site Check-In (${record.siteName ?? "Site"})'
+                                  : record.workflowStep == WorkflowStep.siteCheckOut
+                                      ? 'Site Check-Out (${record.siteName ?? "Site"})'
+                                      : record.workflowStep.displayName;
 
-                            bool isDone = record.id.isNotEmpty;
-                            bool isCurrent = step == currentStep;
-                            final formattedTime = isDone
-                                ? DateFormat('hh:mm a')
-                                    .format(record.eventTimestamp.toLocal())
-                                : '';
-
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: isCurrent
-                                    ? AppColors.primary.withOpacity(0.08)
-                                    : Theme.of(context).cardColor,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: isCurrent
-                                      ? AppColors.primary
-                                      : isDone
-                                          ? AppColors.success
-                                          : AppColors.cardBorderLight,
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).cardColor,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: AppColors.success),
                                 ),
-                              ),
-                              child: Row(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 16,
-                                    backgroundColor: isDone
-                                        ? AppColors.success
-                                        : isCurrent
-                                            ? AppColors.primary
-                                            : Colors.grey.shade300,
-                                    child: Icon(
-                                      isDone ? Icons.check : Icons.circle,
-                                      size: 14,
-                                      color: Colors.white,
+                                child: Row(
+                                  children: [
+                                    const CircleAvatar(
+                                      radius: 14,
+                                      backgroundColor: AppColors.success,
+                                      child: Icon(Icons.check, size: 14, color: Colors.white),
                                     ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                step.displayName,
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: isCurrent
-                                                      ? AppColors.primary
-                                                      : null,
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  stepTitle,
+                                                  style: const TextStyle(fontWeight: FontWeight.bold),
                                                 ),
                                               ),
-                                            ),
-                                            if (isDone) ...[
-                                              const SizedBox(width: 6),
                                               Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 2),
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                                 decoration: BoxDecoration(
-                                                  color: AppColors.primary
-                                                      .withOpacity(0.1),
-                                                  borderRadius:
-                                                      BorderRadius.circular(6),
+                                                  color: AppColors.primary.withOpacity(0.1),
+                                                  borderRadius: BorderRadius.circular(6),
                                                 ),
                                                 child: Text(
                                                   formattedTime,
@@ -696,42 +895,23 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                                   ),
                                                 ),
                                               ),
-                                            ]
-                                          ],
-                                        ),
-                                        const SizedBox(height: 3),
-                                        Text(
-                                          isDone
-                                              ? (record.address.isNotEmpty
-                                                  ? record.address
-                                                  : 'Captured')
-                                              : 'Pending capture',
-                                          style: const TextStyle(
-                                              fontSize: 12,
-                                              color:
-                                                  AppColors.textSecondaryLight),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ],
+                                            ],
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            record.address.isNotEmpty ? record.address : 'Location Logged',
+                                            style: const TextStyle(fontSize: 12, color: AppColors.textSecondaryLight),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  if (isDone) ...[
-                                    const SizedBox(width: 8),
-                                    StatusBadge(
-                                      label:
-                                          record.syncStatus.name.toUpperCase(),
-                                      color:
-                                          record.syncStatus == SyncStatus.synced
-                                              ? AppColors.success
-                                              : AppColors.warning,
-                                    ),
-                                  ]
-                                ],
-                              ),
-                            );
-                          },
-                        )
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
                       ],
                     );
                   },

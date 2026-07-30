@@ -174,18 +174,22 @@ class AuthCubit extends Cubit<AuthState> {
           e.code == 'invalid-credential' ||
           e.code == 'INVALID_LOGIN_CREDENTIALS' ||
           e.code == 'invalid-password') {
-        emit(AuthError('Incorrect password. Please check your credentials and try again.'));
+        emit(AuthError(
+            'Incorrect password. Please check your credentials and try again.'));
         return;
       } else if (e.code == 'user-not-found' || e.code == 'invalid-email') {
-        emit(AuthError('User account not found. Please check your email address.'));
+        emit(AuthError(
+            'User account not found. Please check your email address.'));
         return;
       } else {
-        emit(AuthError('Incorrect email or password. Please check your credentials.'));
+        emit(AuthError(
+            'Incorrect email or password. Please check your credentials.'));
         return;
       }
     } catch (e) {
       debugPrint('Firebase signIn error: $e');
-      emit(AuthError('Authentication error. Please verify your credentials and try again.'));
+      emit(AuthError(
+          'Authentication error. Please verify your credentials and try again.'));
       return;
     }
 

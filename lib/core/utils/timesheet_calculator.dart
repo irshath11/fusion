@@ -60,21 +60,43 @@ class TimesheetCalculator {
               orElse: () => dayRecords.first,
             );
 
-      // 2. Working time is strictly closed at Site Check-Out.
-      // Office Check-Out is purely informational and does NOT extend calculated working time.
+      // 2. Office Check-Out or Last Site Check-Out as effective end time
       DateTime? checkOutTimestamp;
-      final siteOutIndex = dayRecords.indexWhere(
-        (r) => r.workflowStep == WorkflowStep.siteCheckOut,
-      );
-
-      if (siteOutIndex != -1) {
-        checkOutTimestamp = dayRecords[siteOutIndex].eventTimestamp;
+      final officeOutMatches = dayRecords.where((r) => r.workflowStep == WorkflowStep.officeCheckOut);
+      if (officeOutMatches.isNotEmpty) {
+        checkOutTimestamp = officeOutMatches.last.eventTimestamp;
       } else {
-        final officeOutIndex = dayRecords.indexWhere(
-          (r) => r.workflowStep == WorkflowStep.officeCheckOut,
-        );
-        if (officeOutIndex != -1) {
-          checkOutTimestamp = dayRecords[officeOutIndex].eventTimestamp;
+        final siteOutMatches = dayRecords.where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
+        if (siteOutMatches.isNotEmpty) {
+          checkOutTimestamp = siteOutMatches.last.eventTimestamp;
+        }
+      }
+
+      // 3. Build Site Visits List
+      final List<SiteVisitSummary> siteVisits = [];
+      for (int i = 0; i < dayRecords.length; i++) {
+        final r = dayRecords[i];
+        if (r.workflowStep == WorkflowStep.siteCheckIn) {
+          final sName = (r.siteName != null && r.siteName!.isNotEmpty) ? r.siteName! : 'Work Site';
+          DateTime sIn = r.eventTimestamp;
+          DateTime? sOut;
+
+          // Find matching siteCheckOut
+          for (int j = i + 1; j < dayRecords.length; j++) {
+            if (dayRecords[j].workflowStep == WorkflowStep.siteCheckOut) {
+              sOut = dayRecords[j].eventTimestamp;
+              break;
+            } else if (dayRecords[j].workflowStep == WorkflowStep.siteCheckIn) {
+              // Intervening site check-in without explicit check-out
+              break;
+            }
+          }
+
+          siteVisits.add(SiteVisitSummary(
+            siteName: sName,
+            checkInTime: sIn,
+            checkOutTime: sOut,
+          ));
         }
       }
 
@@ -100,7 +122,7 @@ class TimesheetCalculator {
         }
       }
 
-      final bool isCompleted = dayRecords.any((r) => r.workflowStep == WorkflowStep.officeCheckOut || r.workflowStep == WorkflowStep.siteCheckOut);
+      final bool isCompleted = dayRecords.any((r) => r.workflowStep == WorkflowStep.officeCheckOut);
 
       entries.add(
         DailyTimesheetEntry(
@@ -114,6 +136,7 @@ class TimesheetCalculator {
           overtimeHours: overtimeHours,
           stepCount: dayRecords.length,
           isCompleted: isCompleted,
+          siteVisits: siteVisits,
         ),
       );
     });

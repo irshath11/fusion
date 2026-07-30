@@ -8,6 +8,7 @@ import '../../../core/services/camera_service.dart';
 import '../../../core/utils/geofence_calculator.dart';
 import '../domain/attendance_record.dart';
 import '../../admin/domain/employee_entity.dart';
+import '../../admin/domain/office_entity.dart';
 
 abstract class AttendanceState extends Equatable {
   @override
@@ -65,7 +66,8 @@ class AttendanceCubit extends Cubit<AttendanceState> {
   /// Executes attendance action for current workflow step with camera & geofence validation
   Future<void> executeAttendanceStep({
     required WorkflowStep step,
-    required CameraCaptureResult cameraResult,
+    CameraCaptureResult? cameraResult,
+    String? siteName,
   }) async {
     emit(AttendanceProcessing());
     try {
@@ -98,7 +100,17 @@ class AttendanceCubit extends Cubit<AttendanceState> {
       double allowedRadius = 200.0;
 
       final offices = _db.getOffices();
-      final defaultOffice = offices.firstWhere((o) => o.isDefault, orElse: () => offices.first);
+      final defaultOffice = offices.isNotEmpty
+          ? offices.firstWhere((o) => o.isDefault, orElse: () => offices.first)
+          : OfficeEntity(
+              id: 'office-default',
+              name: 'Main Office',
+              address: 'HQ Operations',
+              latitude: 25.1972,
+              longitude: 55.2744,
+              geofenceRadiusMeters: 50000.0, // generous default radius
+              isDefault: true,
+            );
       final workSites = _db.getWorkSites();
 
       if (step == WorkflowStep.officeCheckIn || step == WorkflowStep.officeCheckOut) {
@@ -169,16 +181,21 @@ class AttendanceCubit extends Cubit<AttendanceState> {
         gpsAccuracy: location.accuracy,
         address: location.address,
         deviceId: 'device-hw-${user.id}',
-        photoBase64: cameraResult.base64Image,
+        photoBase64: cameraResult?.base64Image ?? '',
         isGeofenceValid: isGeofenceValid,
-        officeId: (step == WorkflowStep.officeCheckIn || step == WorkflowStep.officeCheckOut) ? (emp.assignedOfficeId ?? defaultOffice.id) : null,
-        workSiteId: (step == WorkflowStep.siteCheckIn || step == WorkflowStep.siteCheckOut) ? (workSites.isNotEmpty ? workSites.first.id : null) : null,
+        officeId: (step == WorkflowStep.officeCheckIn || step == WorkflowStep.officeCheckOut)
+            ? (emp.assignedOfficeId ?? defaultOffice.id)
+            : null,
+        workSiteId: (step == WorkflowStep.siteCheckIn || step == WorkflowStep.siteCheckOut)
+            ? (workSites.isNotEmpty ? workSites.first.id : null)
+            : null,
+        siteName: siteName,
         syncStatus: SyncStatus.pending,
       );
 
       _db.addAttendanceRecord(record);
 
-      WorkflowStep next = step.nextStep ?? WorkflowStep.completed;
+      WorkflowStep next = _db.getWorkflowStepForEmployee();
       emit(AttendanceStepSuccess(record, next));
     } catch (e) {
       emit(AttendanceFailure('Attendance capture failed: ${e.toString()}'));

@@ -3,11 +3,13 @@ import '../constants/app_colors.dart';
 
 class OfflineBanner extends StatelessWidget {
   final int pendingCount;
+  final bool isSyncing;
   final VoidCallback onSyncPressed;
 
   const OfflineBanner({
     super.key,
     required this.pendingCount,
+    this.isSyncing = false,
     required this.onSyncPressed,
   });
 
@@ -41,9 +43,21 @@ class OfflineBanner extends StatelessWidget {
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            onPressed: onSyncPressed,
-            icon: const Icon(Icons.sync_rounded, size: 14),
-            label: const Text('Sync Now', style: TextStyle(fontSize: 12)),
+            onPressed: isSyncing ? null : onSyncPressed,
+            icon: isSyncing
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.sync_rounded, size: 14),
+            label: Text(
+              isSyncing ? 'Syncing...' : 'Sync Now',
+              style: const TextStyle(fontSize: 12),
+            ),
           ),
         ],
       ),
