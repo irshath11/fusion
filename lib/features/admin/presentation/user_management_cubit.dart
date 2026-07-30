@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
@@ -70,16 +71,25 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         );
       }).toList();
 
-      final existingEmails = remoteUsers.map((u) => u.email.toLowerCase()).toSet();
-      final allUsers = List<UserEntity>.from(remoteUsers);
+      final Map<String, UserEntity> userMap = {};
+
+      for (final u in remoteUsers) {
+        final key = u.email.trim().isNotEmpty
+            ? u.email.trim().toLowerCase()
+            : u.fullName.trim().toLowerCase();
+        userMap[key] = u;
+      }
 
       for (final localUser in localMappedUsers) {
-        if (!existingEmails.contains(localUser.email.toLowerCase())) {
-          allUsers.add(localUser);
+        final emailKey = localUser.email.trim().toLowerCase();
+        final nameKey = localUser.fullName.trim().toLowerCase();
+        final key = emailKey.isNotEmpty ? emailKey : nameKey;
+        if (!userMap.containsKey(key) && !userMap.values.any((u) => u.fullName.trim().toLowerCase() == nameKey)) {
+          userMap[key] = localUser;
         }
       }
 
-      emit(UserManagementLoaded(allUsers));
+      emit(UserManagementLoaded(userMap.values.toList()));
     } catch (e) {
       emit(UserManagementError('Failed to fetch user list: ${e.toString()}'));
     }
@@ -128,13 +138,27 @@ class UserManagementCubit extends Cubit<UserManagementState> {
           firebaseUid = credential.user!.uid;
           await credential.user!.updateDisplayName(fullName.trim());
           await secondaryAuth.signOut();
+        } else {
+          emit(UserManagementError('Failed to register employee authentication credentials.'));
+          return;
         }
       } on fb.FirebaseAuthException catch (e) {
+        debugPrint('Firebase createUser error: ${e.code} - ${e.message}');
         if (e.code == 'email-already-in-use') {
           emit(UserManagementError('An account with this email address already exists.'));
           return;
+        } else if (e.code == 'weak-password') {
+          emit(UserManagementError('Temporary password is too weak. Must be at least 6 characters.'));
+          return;
+        } else {
+          emit(UserManagementError('Authentication creation error (${e.code}): ${e.message}'));
+          return;
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Secondary Firebase App error: $e');
+        emit(UserManagementError('Failed to create employee authentication: ${e.toString()}'));
+        return;
+      }
 
       // 2. Save locally in LocalDatabaseService so UI immediately updates
       final empCode = employeeCode.trim().isNotEmpty
@@ -171,6 +195,21 @@ class UserManagementCubit extends Cubit<UserManagementState> {
       );
 
       if (createdUser != null) {
+        _db.deleteEmployee(firebaseUid);
+        final officialLocalEmp = EmployeeEntity(
+          id: createdUser.id,
+          employeeCode: empCode,
+          name: fullName.trim(),
+          mobileNumber: phoneNumber?.trim() ?? '',
+          email: email.trim().toLowerCase(),
+          designation: designation.trim().isNotEmpty ? designation.trim() : 'Team Member',
+          department: department.trim().isNotEmpty ? department.trim() : 'Operations',
+          useDefaultOffice: useDefaultOffice,
+          assignedOfficeId: assignedOfficeId,
+          assignedOfficeName: assignedOfficeName,
+          isActive: true,
+        );
+        _db.saveEmployee(officialLocalEmp);
         emit(UserManagementActionSuccess('User ${fullName.trim()} created successfully.'));
       } else {
         emit(UserManagementActionSuccess('User profile created successfully.'));

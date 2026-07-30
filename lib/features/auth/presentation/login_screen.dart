@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'auth_cubit.dart';
+import 'force_password_change_screen.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/custom_text_field.dart';
@@ -20,9 +21,6 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    // Always default to sr.irshath@gmail.com and aa123456
-    _emailController.text = 'sr.irshath@gmail.com';
-    _passwordController.text = 'aa123456';
   }
 
   @override
@@ -97,6 +95,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text(state.message), backgroundColor: AppColors.error),
                     );
+                  } else if (state is RequiresPasswordChangeState) {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(
+                        builder: (ctx) => ForcePasswordChangeScreen(user: state.user),
+                      ),
+                      (route) => false,
+                    );
                   } else if (state is Authenticated) {
                     Navigator.of(context).pushAndRemoveUntil(
                       MaterialPageRoute(builder: (ctx) => const RootRoleRouter()),
@@ -135,31 +140,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         'Public registration disabled. Contact your Administrator to provision accounts.',
                         style: TextStyle(fontSize: 12, color: AppColors.textSecondaryLight),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Center(
-                child: Column(
-                  children: [
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _emailController.text = 'sr.irshath@gmail.com';
-                          _passwordController.text = 'aa123456';
-                        });
-                      },
-                      child: const Text('Fill Default Super Admin Credentials'),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _emailController.text = 'employee@enterprise.com';
-                          _passwordController.text = 'password123';
-                        });
-                      },
-                      child: const Text('Fill Demo Employee Credentials'),
                     ),
                   ],
                 ),

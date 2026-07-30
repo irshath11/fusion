@@ -14,7 +14,9 @@ abstract class AuthState extends Equatable {
 }
 
 class AuthInitial extends AuthState {}
+
 class AuthLoading extends AuthState {}
+
 class Authenticated extends AuthState {
   final UserEntity user;
   Authenticated(this.user);
@@ -22,6 +24,7 @@ class Authenticated extends AuthState {
   @override
   List<Object?> get props => [user];
 }
+
 class RequiresPasswordChangeState extends AuthState {
   final UserEntity user;
   RequiresPasswordChangeState(this.user);
@@ -29,7 +32,9 @@ class RequiresPasswordChangeState extends AuthState {
   @override
   List<Object?> get props => [user];
 }
+
 class Unauthenticated extends AuthState {}
+
 class AuthError extends AuthState {
   final String message;
   AuthError(this.message);
@@ -49,41 +54,53 @@ class AuthCubit extends Cubit<AuthState> {
     final firebaseUser = _fbAuth.currentUser;
     final currentUser = _db.currentUser;
 
-    if (firebaseUser != null) {
-      final remoteUser = await _supabase.fetchUserByFirebaseUid(firebaseUser.uid);
-      if (remoteUser != null) {
-        if (!remoteUser.isActive) {
-          await _fbAuth.signOut();
-          _db.logout();
-          emit(AuthError('Your account has been disabled. Please contact your Administrator.'));
-          return;
-        }
-
-        if (remoteUser.requiresPasswordChange) {
-          emit(RequiresPasswordChangeState(remoteUser));
-          return;
-        }
-
-        _db.setCurrentUser(remoteUser);
-        emit(Authenticated(remoteUser));
-        return;
+    if (currentUser != null) {
+      if (currentUser.requiresPasswordChange) {
+        emit(RequiresPasswordChangeState(currentUser));
+      } else {
+        emit(Authenticated(currentUser));
       }
-
+    } else if (firebaseUser != null) {
       final isSuperAdmin = firebaseUser.email?.contains('admin') == true ||
           firebaseUser.email?.toLowerCase() == 'sr.irshath@gmail.com';
       final fallbackUser = UserEntity(
         id: firebaseUser.uid,
         firebaseUid: firebaseUser.uid,
         email: firebaseUser.email ?? 'sr.irshath@gmail.com',
-        fullName: firebaseUser.displayName ?? firebaseUser.email?.split('@').first ?? 'User',
+        fullName: firebaseUser.displayName ??
+            firebaseUser.email?.split('@').first ??
+            'User',
         role: isSuperAdmin ? UserRole.superAdmin : UserRole.employee,
-        organizationId: _db.organization?.id ?? '00000000-0000-0000-0000-000000000001',
+        organizationId:
+            _db.organization?.id ?? '00000000-0000-0000-0000-000000000001',
       );
       _db.setCurrentUser(fallbackUser);
       emit(Authenticated(fallbackUser));
-    } else if (currentUser != null) {
-      emit(Authenticated(currentUser));
-    } else {
+    }
+
+    if (firebaseUser != null) {
+      try {
+        final remoteUser =
+            await _supabase.fetchUserByFirebaseUid(firebaseUser.uid);
+        if (remoteUser != null) {
+          if (!remoteUser.isActive) {
+            await _fbAuth.signOut();
+            _db.logout();
+            emit(AuthError(
+                'Your account has been disabled. Please contact your Administrator.'));
+            return;
+          }
+
+          if (remoteUser.requiresPasswordChange) {
+            emit(RequiresPasswordChangeState(remoteUser));
+            return;
+          }
+
+          _db.setCurrentUser(remoteUser);
+          emit(Authenticated(remoteUser));
+        }
+      } catch (_) {}
+    } else if (currentUser == null) {
       emit(Unauthenticated());
     }
   }
@@ -92,6 +109,11 @@ class AuthCubit extends Cubit<AuthState> {
     emit(AuthLoading());
     final trimmedEmail = email.trim().toLowerCase();
     final trimmedPassword = password.trim();
+
+    if (trimmedEmail.isEmpty || trimmedPassword.isEmpty) {
+      emit(AuthError('Please enter both email and password.'));
+      return;
+    }
 
     try {
       // 1. Authenticate with Firebase Authentication
@@ -109,16 +131,18 @@ class AuthCubit extends Cubit<AuthState> {
         if (supabaseUser != null) {
           if (!supabaseUser.isActive) {
             await _fbAuth.signOut();
-            emit(AuthError('Your account is disabled. Please contact your organization administrator.'));
+            emit(AuthError(
+                'Your account is disabled. Please contact your organization administrator.'));
             return;
           }
+
+          _db.setCurrentUser(supabaseUser);
 
           if (supabaseUser.requiresPasswordChange) {
             emit(RequiresPasswordChangeState(supabaseUser));
             return;
           }
 
-          _db.setCurrentUser(supabaseUser);
           emit(Authenticated(supabaseUser));
           return;
         }
@@ -127,22 +151,42 @@ class AuthCubit extends Cubit<AuthState> {
         final isSuperAdmin = trimmedEmail.contains('admin') ||
             trimmedEmail == 'sr.irshath@gmail.com' ||
             (_db.organization != null &&
-                _db.organization!.superAdminEmail.toLowerCase() == trimmedEmail);
+                _db.organization!.superAdminEmail.toLowerCase() ==
+                    trimmedEmail);
         final role = isSuperAdmin ? UserRole.superAdmin : UserRole.employee;
         final fallbackUser = UserEntity(
           id: fbUid,
           firebaseUid: fbUid,
           email: credential.user!.email ?? trimmedEmail,
-          fullName: credential.user!.displayName ?? trimmedEmail.split('@').first,
+          fullName:
+              credential.user!.displayName ?? trimmedEmail.split('@').first,
           role: role,
-          organizationId: _db.organization?.id ?? '00000000-0000-0000-0000-000000000001',
+          organizationId:
+              _db.organization?.id ?? '00000000-0000-0000-0000-000000000001',
         );
         _db.setCurrentUser(fallbackUser);
         emit(Authenticated(fallbackUser));
         return;
       }
+    } on fb.FirebaseAuthException catch (e) {
+      debugPrint('Firebase signIn Exception: ${e.code} - ${e.message}');
+      if (e.code == 'wrong-password' ||
+          e.code == 'invalid-credential' ||
+          e.code == 'INVALID_LOGIN_CREDENTIALS' ||
+          e.code == 'invalid-password') {
+        emit(AuthError('Incorrect password. Please check your credentials and try again.'));
+        return;
+      } else if (e.code == 'user-not-found' || e.code == 'invalid-email') {
+        emit(AuthError('User account not found. Please check your email address.'));
+        return;
+      } else {
+        emit(AuthError('Incorrect email or password. Please check your credentials.'));
+        return;
+      }
     } catch (e) {
-      debugPrint('Firebase signIn note: $e');
+      debugPrint('Firebase signIn error: $e');
+      emit(AuthError('Authentication error. Please verify your credentials and try again.'));
+      return;
     }
 
     // 2. Offline / Demo Super Admin Credential Fallback
@@ -157,8 +201,7 @@ class AuthCubit extends Cubit<AuthState> {
               storedAdminPass.isNotEmpty &&
               storedAdminPass == trimmedPassword) ||
           trimmedPassword == 'aa123456' ||
-          trimmedPassword == 'AdminSecurePass123!' ||
-          (storedAdminPass == null || storedAdminPass.isEmpty);
+          trimmedPassword == 'AdminSecurePass123!';
 
       if (isValidPass) {
         final adminUser = UserEntity(
@@ -167,21 +210,25 @@ class AuthCubit extends Cubit<AuthState> {
           email: _db.organization?.superAdminEmail ?? trimmedEmail,
           fullName: _db.organization?.superAdminName ?? 'Irshath (Super Admin)',
           role: UserRole.superAdmin,
-          organizationId: _db.organization?.id ?? '00000000-0000-0000-0000-000000000001',
+          organizationId:
+              _db.organization?.id ?? '00000000-0000-0000-0000-000000000001',
         );
         _db.setCurrentUser(adminUser);
         emit(Authenticated(adminUser));
         return;
       } else {
-        emit(AuthError('Invalid credentials. Please verify your email and password.'));
+        emit(AuthError('Invalid email or password. Please try again.'));
         return;
       }
     }
 
-    // 3. Offline / Demo Employee Credential Fallback
+    // 3. Offline Employee Credential Fallback (Only when no internet / offline account)
     final employees = _db.getEmployees();
     final employee = employees.firstWhere(
-      (e) => e.email.toLowerCase() == trimmedEmail,
+      (e) =>
+          e.email.trim().toLowerCase() == trimmedEmail ||
+          (e.employeeCode.isNotEmpty &&
+              e.employeeCode.trim().toLowerCase() == trimmedEmail),
       orElse: () => EmployeeEntity(
         id: '',
         employeeCode: '',
@@ -194,22 +241,9 @@ class AuthCubit extends Cubit<AuthState> {
     );
 
     if (employee.id.isNotEmpty && employee.isActive) {
-      if (trimmedPassword == 'password123' || trimmedPassword.isNotEmpty) {
-        final empUser = UserEntity(
-          id: employee.id,
-          firebaseUid: employee.id,
-          email: employee.email,
-          fullName: employee.name,
-          role: UserRole.employee,
-          organizationId: _db.organization?.id ?? '00000000-0000-0000-0000-000000000001',
-        );
-        _db.setCurrentUser(empUser);
-        emit(Authenticated(empUser));
-        return;
-      } else {
-        emit(AuthError('Invalid credentials. Please verify your email and password.'));
-        return;
-      }
+      emit(AuthError(
+          'Invalid email or password. Please check your credentials.'));
+      return;
     }
 
     emit(AuthError('Invalid email or password. Account not found.'));
@@ -227,13 +261,48 @@ class AuthCubit extends Cubit<AuthState> {
       }
 
       // 2. Clear requires_password_change flag in Supabase
-      await _supabase.updateUserPasswordChangeStatus(user.id, false);
+      await _supabase.updateUserPasswordChangeStatus(
+          user.id, false, user.firebaseUid);
 
       final updatedUser = user.copyWith(requiresPasswordChange: false);
       _db.setCurrentUser(updatedUser);
       emit(Authenticated(updatedUser));
     } catch (e) {
       emit(AuthError('Failed to update password: ${e.toString()}'));
+    }
+  }
+
+  Future<bool> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final user = _fbAuth.currentUser;
+      if (user != null && user.email != null) {
+        final cred = fb.EmailAuthProvider.credential(
+          email: user.email!,
+          password: currentPassword,
+        );
+        await user.reauthenticateWithCredential(cred);
+        await user.updatePassword(newPassword);
+      }
+
+      final currentUserEntity = _db.currentUser;
+      if (currentUserEntity != null) {
+        await _supabase.updateUserPasswordChangeStatus(
+          currentUserEntity.id,
+          false,
+          currentUserEntity.firebaseUid,
+        );
+        final updatedUser =
+            currentUserEntity.copyWith(requiresPasswordChange: false);
+        _db.setCurrentUser(updatedUser);
+        emit(Authenticated(updatedUser));
+      }
+      return true;
+    } catch (e) {
+      debugPrint('Change password error: $e');
+      return false;
     }
   }
 

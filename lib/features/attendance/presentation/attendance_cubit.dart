@@ -60,7 +60,7 @@ class AttendanceCubit extends Cubit<AttendanceState> {
   final LocalDatabaseService _db = LocalDatabaseService();
   final Uuid _uuid = const Uuid();
 
-  AttendanceCubit() : super(AttendanceInitial(LocalDatabaseService().currentWorkflowStep));
+  AttendanceCubit() : super(AttendanceInitial(LocalDatabaseService().getWorkflowStepForEmployee()));
 
   /// Executes attendance action for current workflow step with camera & geofence validation
   Future<void> executeAttendanceStep({
@@ -186,6 +186,6 @@ class AttendanceCubit extends Cubit<AttendanceState> {
   }
 
   void resetState() {
-    emit(AttendanceInitial(_db.currentWorkflowStep));
+    emit(AttendanceInitial(_db.getWorkflowStepForEmployee()));
   }
 }

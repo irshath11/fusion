@@ -141,7 +141,8 @@ class _UserFormDialogState extends State<UserFormDialog> {
             ),
             const SizedBox(height: 6),
             DropdownButtonFormField<UserRole>(
-              value: _selectedRole,
+              initialValue: _selectedRole,
+              isExpanded: true,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -167,9 +168,10 @@ class _UserFormDialogState extends State<UserFormDialog> {
             ),
             const SizedBox(height: 6),
             DropdownButtonFormField<String>(
-              value: _availableLocations.any((l) => l['id'] == _selectedOfficeId)
+              initialValue: _availableLocations.any((l) => l['id'] == _selectedOfficeId)
                   ? _selectedOfficeId
                   : 'default_main',
+              isExpanded: true,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
