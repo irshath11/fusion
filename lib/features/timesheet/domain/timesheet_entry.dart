@@ -1,5 +1,25 @@
 import 'package:equatable/equatable.dart';
 
+class SiteVisitSummary extends Equatable {
+  final String siteName;
+  final DateTime checkInTime;
+  final DateTime? checkOutTime;
+
+  const SiteVisitSummary({
+    required this.siteName,
+    required this.checkInTime,
+    this.checkOutTime,
+  });
+
+  Duration get duration {
+    if (checkOutTime == null) return Duration.zero;
+    return checkOutTime!.difference(checkInTime);
+  }
+
+  @override
+  List<Object?> get props => [siteName, checkInTime, checkOutTime];
+}
+
 class DailyTimesheetEntry extends Equatable {
   final DateTime date;
   final String employeeId;
@@ -11,6 +31,7 @@ class DailyTimesheetEntry extends Equatable {
   final double overtimeHours;
   final int stepCount;
   final bool isCompleted;
+  final List<SiteVisitSummary> siteVisits;
 
   const DailyTimesheetEntry({
     required this.date,
@@ -23,6 +44,7 @@ class DailyTimesheetEntry extends Equatable {
     required this.overtimeHours,
     this.stepCount = 0,
     this.isCompleted = false,
+    this.siteVisits = const [],
   });
 
   double get totalHours => totalDuration.inMinutes / 60.0;
@@ -39,5 +61,6 @@ class DailyTimesheetEntry extends Equatable {
         overtimeHours,
         stepCount,
         isCompleted,
+        siteVisits,
       ];
 }

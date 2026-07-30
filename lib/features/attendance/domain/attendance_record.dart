@@ -16,6 +16,7 @@ class AttendanceRecord {
   final bool isGeofenceValid;
   final String? officeId;
   final String? workSiteId;
+  final String? siteName;
   final SyncStatus syncStatus;
 
   AttendanceRecord({
@@ -34,12 +35,14 @@ class AttendanceRecord {
     required this.isGeofenceValid,
     this.officeId,
     this.workSiteId,
+    this.siteName,
     this.syncStatus = SyncStatus.pending,
   });
 
   AttendanceRecord copyWith({
     SyncStatus? syncStatus,
     DateTime? syncTimestamp,
+    String? siteName,
   }) {
     return AttendanceRecord(
       id: id,
@@ -57,6 +60,7 @@ class AttendanceRecord {
       isGeofenceValid: isGeofenceValid,
       officeId: officeId,
       workSiteId: workSiteId,
+      siteName: siteName ?? this.siteName,
       syncStatus: syncStatus ?? this.syncStatus,
     );
   }
@@ -77,6 +81,7 @@ class AttendanceRecord {
         'isGeofenceValid': isGeofenceValid,
         'officeId': officeId,
         'workSiteId': workSiteId,
+        'siteName': siteName,
         'syncStatus': syncStatus.name,
       };
 
@@ -93,12 +98,13 @@ class AttendanceRecord {
         latitude: (json['latitude'] as num).toDouble(),
         longitude: (json['longitude'] as num).toDouble(),
         gpsAccuracy: (json['gpsAccuracy'] as num).toDouble(),
-        address: json['address'],
-        deviceId: json['deviceId'],
-        photoBase64: json['photoBase64'],
+        address: json['address'] ?? '',
+        deviceId: json['deviceId'] ?? '',
+        photoBase64: json['photoBase64'] ?? '',
         isGeofenceValid: json['isGeofenceValid'] ?? true,
         officeId: json['officeId'],
         workSiteId: json['workSiteId'],
+        siteName: json['siteName'],
         syncStatus: SyncStatus.values.firstWhere(
           (e) => e.name == json['syncStatus'],
           orElse: () => SyncStatus.pending,

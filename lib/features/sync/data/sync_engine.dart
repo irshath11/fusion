@@ -22,15 +22,27 @@ class SyncEngine {
   final LocalDatabaseService _db = LocalDatabaseService();
   final SupabaseService _supabase = SupabaseService();
 
-  /// Check active internet connectivity via DNS lookup
+  /// Check active internet connectivity with multi-endpoint fallback
   Future<bool> hasInternetConnection() async {
     try {
-      final result = await InternetAddress.lookup('google.com')
-          .timeout(const Duration(seconds: 4));
-      return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
-    } catch (_) {
-      return false;
-    }
+      final res1 = await InternetAddress.lookup('google.com')
+          .timeout(const Duration(seconds: 3));
+      if (res1.isNotEmpty && res1[0].rawAddress.isNotEmpty) return true;
+    } catch (_) {}
+
+    try {
+      final res2 = await InternetAddress.lookup('supabase.co')
+          .timeout(const Duration(seconds: 3));
+      if (res2.isNotEmpty && res2[0].rawAddress.isNotEmpty) return true;
+    } catch (_) {}
+
+    try {
+      final socket = await Socket.connect('8.8.8.8', 53, timeout: const Duration(seconds: 3));
+      socket.destroy();
+      return true;
+    } catch (_) {}
+
+    return false;
   }
 
   /// Trigger sync manually or via background network monitor
@@ -61,24 +73,28 @@ class SyncEngine {
     List<String> syncedIds = [];
 
     for (var record in pendingRecords) {
-      String? publicPhotoUrl;
+      try {
+        String? publicPhotoUrl;
 
-      if (record.photoBase64.isNotEmpty) {
-        publicPhotoUrl = await _supabase.uploadAttendancePhotoData(
-          photoDataOrPath: record.photoBase64,
-          recordId: record.id,
+        if (record.photoBase64.isNotEmpty) {
+          publicPhotoUrl = await _supabase.uploadAttendancePhotoData(
+            photoDataOrPath: record.photoBase64,
+            recordId: record.id,
+          );
+        }
+
+        bool success = await _supabase.insertAttendanceEntry(
+          record: record,
+          photoPublicUrl: publicPhotoUrl,
         );
-      }
 
-      bool success = await _supabase.insertAttendanceEntry(
-        record: record,
-        photoPublicUrl: publicPhotoUrl,
-      );
-
-      if (success) {
-        syncedIds.add(record.id);
-        syncedCount++;
-      } else {
+        if (success) {
+          syncedIds.add(record.id);
+          syncedCount++;
+        } else {
+          failedCount++;
+        }
+      } catch (e) {
         failedCount++;
       }
     }
@@ -87,11 +103,15 @@ class SyncEngine {
       _db.markRecordsSynced(syncedIds);
     }
 
+    final message = failedCount > 0
+        ? 'Synced $syncedCount entries ($failedCount failed).'
+        : 'Successfully synchronized $syncedCount attendance entries to cloud.';
+
     return SyncEngineResult(
       syncedCount: syncedCount,
       failedCount: failedCount,
       isNoInternet: false,
-      message: 'Successfully synchronized $syncedCount attendance entries & photos to Supabase.',
+      message: message,
     );
   }
 }

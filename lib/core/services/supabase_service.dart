@@ -786,14 +786,32 @@ class SupabaseService {
         'is_geofence_valid': record.isGeofenceValid,
         'photo_url': photoPublicUrl ?? (record.photoBase64.startsWith('http') ? record.photoBase64 : null),
         'address': record.address,
+        if (record.siteName != null && record.siteName!.isNotEmpty) 'site_name': record.siteName,
         'device_id': record.deviceId.isEmpty ? 'DEV-CLIENT' : record.deviceId,
         'created_at': DateTime.now().toIso8601String(),
       };
 
-      await client!.from('attendance_records').upsert(payload);
-      return true;
-    } catch (e) {
-      debugPrint('Supabase DB insert note: $e');
+      try {
+        await client!.from('attendance_records').upsert(payload);
+        return true;
+      } catch (e) {
+        final errStr = e.toString();
+        // Fallback: If site_name column is missing in user's Supabase table schema (PGRST204), retry without site_name
+        if (errStr.contains('site_name') || errStr.contains('PGRST204')) {
+          payload.remove('site_name');
+          try {
+            await client!.from('attendance_records').upsert(payload);
+            return true;
+          } catch (retryErr) {
+            debugPrint('Supabase DB insert retry error: $retryErr');
+            return false;
+          }
+        }
+        debugPrint('Supabase DB insert note: $e');
+        return false;
+      }
+    } catch (outerErr) {
+      debugPrint('Supabase insertAttendanceEntry outer error: $outerErr');
       return false;
     }
   }

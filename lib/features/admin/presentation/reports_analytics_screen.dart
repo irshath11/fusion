@@ -616,9 +616,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
                 final siteOutRecs = dateRecords.where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
                 final officeOutRecs = dateRecords.where((r) => r.workflowStep == WorkflowStep.officeCheckOut);
-                final endRecordTime = siteOutRecs.isNotEmpty
-                    ? siteOutRecs.first.eventTimestamp
-                    : (officeOutRecs.isNotEmpty ? officeOutRecs.first.eventTimestamp : dateRecords.last.eventTimestamp);
+                final endRecordTime = officeOutRecs.isNotEmpty
+                    ? officeOutRecs.last.eventTimestamp
+                    : (siteOutRecs.isNotEmpty ? siteOutRecs.last.eventTimestamp : dateRecords.last.eventTimestamp);
+
+                final siteCheckIns = dateRecords.where((r) => r.workflowStep == WorkflowStep.siteCheckIn && r.siteName != null && r.siteName!.isNotEmpty);
+                final siteNamesStr = siteCheckIns.isNotEmpty
+                    ? siteCheckIns.map((r) => r.siteName!).toSet().join(', ')
+                    : null;
 
                 final diff = endRecordTime.isAfter(dateRecords.first.eventTimestamp)
                     ? endRecordTime.difference(dateRecords.first.eventTimestamp)
@@ -702,6 +707,24 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               ),
                             ],
                           ),
+                          if (siteNamesStr != null) ...[
+                            const SizedBox(height: 3),
+                            Row(
+                              children: [
+                                const Icon(Icons.place_rounded,
+                                    size: 14, color: AppColors.primary),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    'Sites: $siteNamesStr',
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                           const SizedBox(height: 4),
                           Row(
                             children: [
@@ -787,22 +810,17 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     final formattedDateTitle =
         DateFormat('EEEE, dd MMMM yyyy').format(_selectedDate!);
 
-    final firstRecordTime = dateRecords.isNotEmpty ? dateRecords.first.eventTimestamp : null;
-    final siteOutRecs = dateRecords.where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
-    final officeOutRecs = dateRecords.where((r) => r.workflowStep == WorkflowStep.officeCheckOut);
-    final lastRecordTime = siteOutRecs.isNotEmpty
-        ? siteOutRecs.first.eventTimestamp
-        : (officeOutRecs.isNotEmpty
-            ? officeOutRecs.first.eventTimestamp
-            : (dateRecords.isNotEmpty ? dateRecords.last.eventTimestamp : null));
+    final dayTimesheets = TimesheetCalculator.calculateDailyTimesheets(dateRecords);
+    double totalHrs = 0.0;
+    double regHrs = 0.0;
+    double otHrs = 0.0;
 
-    final Duration dayDiff = (firstRecordTime != null && lastRecordTime != null && lastRecordTime.isAfter(firstRecordTime))
-        ? lastRecordTime.difference(firstRecordTime)
-        : Duration.zero;
-
-    final double totalHrs = dayDiff.inMinutes / 60.0;
-    final double regHrs = totalHrs <= 8.0 ? totalHrs : 8.0;
-    final double otHrs = totalHrs > 8.0 ? (totalHrs - 8.0) : 0.0;
+    if (dayTimesheets.isNotEmpty) {
+      final tEntry = dayTimesheets.first;
+      regHrs = tEntry.regularHours;
+      otHrs = tEntry.overtimeHours;
+      totalHrs = tEntry.totalHours;
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
@@ -1097,65 +1115,168 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         ),
                         const SizedBox(height: 14),
 
-                        // Live Captured Selfie Photo Section
-                        Container(
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Row(
+                        // Site Name & Photo Section
+                        () {
+                          final String siteNameText = (r.siteName != null && r.siteName!.trim().isNotEmpty)
+                              ? r.siteName!
+                              : (r.workflowStep == WorkflowStep.officeCheckIn || r.workflowStep == WorkflowStep.officeCheckOut
+                                  ? 'Main Office'
+                                  : 'Assigned Site');
+
+                          final hasPhoto = r.photoBase64.trim().isNotEmpty;
+
+                          if (hasPhoto) {
+                            return Container(
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey.shade300),
+                              ),
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Icon(Icons.camera_alt_rounded,
-                                      size: 16, color: AppColors.primary),
-                                  SizedBox(width: 6),
-                                  Text(
-                                    'Verified Live Camera Snapshot',
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.primary),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.camera_alt_rounded,
+                                          size: 16, color: AppColors.primary),
+                                      const SizedBox(width: 6),
+                                      const Text(
+                                        'Verified Live Camera Snapshot',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.primary),
+                                      ),
+                                      const Spacer(),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary
+                                              .withValues(alpha: 0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.place_rounded,
+                                                size: 12, color: AppColors.primary),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              siteNameText,
+                                              style: const TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: AppColors.primary),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Center(
+                                    child: GestureDetector(
+                                      onTap: () => _showFullImageDialog(r),
+                                      child: Container(
+                                        height: 140,
+                                        width: 140,
+                                        clipBehavior: Clip.antiAlias,
+                                        decoration: BoxDecoration(
+                                          color: Colors.black12,
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                              color: AppColors.primaryLight),
+                                        ),
+                                        child: _buildPhotoWidget(r.photoBase64),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Center(
+                                    child: TextButton.icon(
+                                      onPressed: () => _showFullImageDialog(r),
+                                      icon: const Icon(Icons.fullscreen_rounded,
+                                          size: 16),
+                                      label: const Text(
+                                        'Tap to Enlarge Verified Photo',
+                                        style: TextStyle(fontSize: 11),
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 10),
-                              Center(
-                                child: GestureDetector(
-                                  onTap: () => _showFullImageDialog(r),
-                                  child: Container(
-                                    height: 140,
-                                    width: 140,
-                                    clipBehavior: Clip.antiAlias,
+                            );
+                          } else {
+                            // Where image is not required: Display Site Name & Location Card
+                            return Container(
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                    color: AppColors.primary.withValues(alpha: 0.15)),
+                              ),
+                              padding: const EdgeInsets.all(12),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
-                                      color: Colors.black12,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                          color: AppColors.primaryLight),
+                                      color: AppColors.primary.withValues(alpha: 0.15),
+                                      shape: BoxShape.circle,
                                     ),
-                                    child: _buildPhotoWidget(r.photoBase64),
+                                    child: const Icon(
+                                      Icons.place_rounded,
+                                      size: 22,
+                                      color: AppColors.primary,
+                                    ),
                                   ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Center(
-                                child: TextButton.icon(
-                                  onPressed: () => _showFullImageDialog(r),
-                                  icon: const Icon(Icons.fullscreen_rounded,
-                                      size: 16),
-                                  label: const Text(
-                                    'Tap to Enlarge Verified Photo',
-                                    style: TextStyle(fontSize: 11),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Job Site / Location',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.textSecondaryLight,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          siteNameText,
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.primary,
+                                          ),
+                                        ),
+                                        if (r.address.isNotEmpty) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            r.address,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.grey.shade700,
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ],
+                                    ),
                                   ),
-                                ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
+                            );
+                          }
+                        }(),
                         const SizedBox(height: 10),
 
                         // Sync Status
