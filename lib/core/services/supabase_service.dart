@@ -193,15 +193,16 @@ class SupabaseService {
     }
   }
 
-  /// Fetch User Profile by Firebase UID
-  Future<UserEntity?> fetchUserByFirebaseUid(String firebaseUid) async {
+  /// Fetch User Profile by Firebase UID / ID / Email
+  Future<UserEntity?> fetchUserByFirebaseUid(String identifier) async {
     if (!_isInitialized || client == null) return null;
 
     try {
+      final cleanId = identifier.trim();
       final response = await client!
           .from('users')
           .select()
-          .eq('firebase_uid', firebaseUid)
+          .or('firebase_uid.eq.$cleanId,id.eq.$cleanId,email.eq.${cleanId.toLowerCase()}')
           .eq('is_deleted', false)
           .maybeSingle();
 
@@ -215,14 +216,23 @@ class SupabaseService {
 
   /// Update user password change requirement flag
   Future<bool> updateUserPasswordChangeStatus(
-      String userId, bool requiresPasswordChange) async {
-    if (!_isInitialized || client == null || !_isValidUuid(userId)) return false;
+      String userId, bool requiresPasswordChange, [String? firebaseUid]) async {
+    if (!_isInitialized || client == null) return false;
 
     try {
-      await client!.from('users').update({
-        'requires_password_change': requiresPasswordChange,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', userId);
+      if (_isValidUuid(userId)) {
+        await client!.from('users').update({
+          'requires_password_change': requiresPasswordChange,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', userId);
+      }
+
+      if (firebaseUid != null && firebaseUid.isNotEmpty) {
+        await client!.from('users').update({
+          'requires_password_change': requiresPasswordChange,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('firebase_uid', firebaseUid);
+      }
       return true;
     } catch (e) {
       debugPrint('Supabase updateUserPasswordChangeStatus error: $e');

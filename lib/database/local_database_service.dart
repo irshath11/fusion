@@ -26,8 +26,6 @@ class LocalDatabaseService {
   final List<WorkSiteEntity> _workSites = [];
   final List<AttendanceRecord> _attendanceRecords = [];
 
-  WorkflowStep _currentWorkflowStep = WorkflowStep.officeCheckIn;
-
   // Initialize with Hive persistence & seed enterprise defaults
   Future<void> init() async {
     try {
@@ -52,12 +50,24 @@ class LocalDatabaseService {
       }
 
       final savedEmployeesJson = _settingsBox?.get('employees_json');
-      if (savedEmployeesJson != null && savedEmployeesJson.toString().isNotEmpty) {
+      if (savedEmployeesJson != null &&
+          savedEmployeesJson.toString().isNotEmpty) {
         try {
           final List<dynamic> decoded = jsonDecode(savedEmployeesJson);
           _employees.clear();
           for (final item in decoded) {
-            _employees.add(EmployeeEntity.fromJson(item));
+            final emp = EmployeeEntity.fromJson(item);
+            int index = _employees.indexWhere((e) =>
+                e.id == emp.id ||
+                (e.email.isNotEmpty &&
+                    emp.email.isNotEmpty &&
+                    e.email.trim().toLowerCase() == emp.email.trim().toLowerCase()) ||
+                (e.name.trim().toLowerCase() == emp.name.trim().toLowerCase() && emp.name.trim().isNotEmpty));
+            if (index >= 0) {
+              _employees[index] = emp;
+            } else {
+              _employees.add(emp);
+            }
           }
         } catch (_) {}
       }
@@ -74,7 +84,8 @@ class LocalDatabaseService {
       }
 
       final savedWorkSitesJson = _settingsBox?.get('worksites_json');
-      if (savedWorkSitesJson != null && savedWorkSitesJson.toString().isNotEmpty) {
+      if (savedWorkSitesJson != null &&
+          savedWorkSitesJson.toString().isNotEmpty) {
         try {
           final List<dynamic> decoded = jsonDecode(savedWorkSitesJson);
           _workSites.clear();
@@ -85,20 +96,13 @@ class LocalDatabaseService {
       }
 
       final savedAttendanceJson = _settingsBox?.get('attendance_records_json');
-      if (savedAttendanceJson != null && savedAttendanceJson.toString().isNotEmpty) {
+      if (savedAttendanceJson != null &&
+          savedAttendanceJson.toString().isNotEmpty) {
         try {
           final List<dynamic> decoded = jsonDecode(savedAttendanceJson);
           _attendanceRecords.clear();
           for (final item in decoded) {
             _attendanceRecords.add(AttendanceRecord.fromJson(item));
-          }
-          if (_attendanceRecords.isNotEmpty) {
-            final lastRecord = _attendanceRecords.last;
-            if (lastRecord.workflowStep.nextStep != null) {
-              _currentWorkflowStep = lastRecord.workflowStep.nextStep!;
-            } else {
-              _currentWorkflowStep = WorkflowStep.completed;
-            }
           }
         } catch (_) {}
       }
@@ -109,230 +113,16 @@ class LocalDatabaseService {
       debugPrint('Hive database initialization warning: $e');
     }
 
-    // Set Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi as main default office
-    _offices.removeWhere((o) => o.id == 'office-main-001' || o.name == 'Main Office');
-    final existingDefaultIndex = _offices.indexWhere((o) => o.id == 'office-musaffah-m12-001');
-    if (existingDefaultIndex >= 0) {
-      _offices[existingDefaultIndex] = OfficeEntity(
-        id: 'office-musaffah-m12-001',
-        name: 'Store - 12',
-        address: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi',
-        latitude: 24.3644,
-        longitude: 54.5029,
-        geofenceRadiusMeters: 200.0,
-        isDefault: true,
-      );
-    } else {
-      _offices.insert(
-        0,
-        OfficeEntity(
-          id: 'office-musaffah-m12-001',
-          name: 'Store - 12',
-          address: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi',
-          latitude: 24.3644,
-          longitude: 54.5029,
-          geofenceRadiusMeters: 200.0,
-          isDefault: true,
-        ),
-      );
-    }
+    // Purge any previously seeded sample data
+    _employees.removeWhere((e) => e.id == 'emp-001' || e.id == 'emp-002');
+    _workSites.removeWhere((w) => w.id == 'site-musaffah-001');
+    _offices.removeWhere((o) => o.id == 'office-musaffah-m12-001' || o.id == 'office-main-001');
+    _attendanceRecords.removeWhere((r) => r.id.startsWith('rec-001-') || r.id.startsWith('rec-002-'));
 
-    // Ensure no other office is marked default
-    for (int i = 0; i < _offices.length; i++) {
-      if (_offices[i].id != 'office-musaffah-m12-001') {
-        _offices[i] = OfficeEntity(
-          id: _offices[i].id,
-          name: _offices[i].name,
-          address: _offices[i].address,
-          latitude: _offices[i].latitude,
-          longitude: _offices[i].longitude,
-          geofenceRadiusMeters: _offices[i].geofenceRadiusMeters,
-          isDefault: false,
-        );
-      }
-    }
     _persistOffices();
-
-    // Seed default client site if empty
-    if (_workSites.isEmpty) {
-      _workSites.add(WorkSiteEntity(
-        id: 'site-musaffah-001',
-        siteName: 'Musaffah Industrial Site',
-        clientName: 'Abu Dhabi Municipality',
-        address: 'M12 Industrial Area, Musaffah, Abu Dhabi',
-        latitude: 24.3644,
-        longitude: 54.5029,
-        radiusMeters: 300.0,
-        assignedEmployeeIds: ['emp-001', 'emp-002'],
-      ));
-      _persistWorkSites();
-    }
-
-    // Seed default employees unconditionally if empty
-    if (_employees.isEmpty) {
-      _employees.add(EmployeeEntity(
-        id: 'emp-001',
-        employeeCode: 'EMP-1001',
-        name: 'Irshath Ahamed',
-        mobileNumber: '+971521354859',
-        email: 'sr.irshath@gmail.com',
-        designation: 'Super Administrator',
-        department: 'Management',
-        useDefaultOffice: true,
-        assignedOfficeId: 'office-musaffah-m12-001',
-        assignedOfficeName: 'Store - 12',
-        isActive: true,
-      ));
-
-      _employees.add(EmployeeEntity(
-        id: 'emp-002',
-        employeeCode: 'EMP-1002',
-        name: 'Sophia Martinez',
-        mobileNumber: '+971509876543',
-        email: 'sophia@enterprise.com',
-        designation: 'Project Consultant',
-        department: 'Client Services',
-        useDefaultOffice: true,
-        assignedOfficeId: 'office-musaffah-m12-001',
-        assignedOfficeName: 'Store - 12',
-        isActive: true,
-      ));
-
-      _persistEmployees();
-    }
-
-    // Seed sample attendance records unconditionally if empty
-    if (_attendanceRecords.isEmpty) {
-      const String sampleBase64 =
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final yesterday = today.subtract(const Duration(days: 1));
-
-      // Irshath Ahamed (emp-001) Today
-      _attendanceRecords.add(AttendanceRecord(
-        id: 'rec-001-checkin',
-        employeeId: 'emp-001',
-        employeeName: 'Irshath Ahamed',
-        workflowStep: WorkflowStep.officeCheckIn,
-        eventTimestamp: today.add(const Duration(hours: 8, minutes: 30)),
-        latitude: 24.3644,
-        longitude: 54.5029,
-        gpsAccuracy: 4.8,
-        address: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi',
-        deviceId: 'DEV-ANDROID-9921',
-        photoBase64: sampleBase64,
-        isGeofenceValid: true,
-        officeId: 'office-musaffah-m12-001',
-        syncStatus: SyncStatus.synced,
-      ));
-
-      _attendanceRecords.add(AttendanceRecord(
-        id: 'rec-001-sitein',
-        employeeId: 'emp-001',
-        employeeName: 'Irshath Ahamed',
-        workflowStep: WorkflowStep.siteCheckIn,
-        eventTimestamp: today.add(const Duration(hours: 10, minutes: 15)),
-        latitude: 24.3648,
-        longitude: 54.5032,
-        gpsAccuracy: 5.5,
-        address: 'M12 Industrial Area, Musaffah, Abu Dhabi',
-        deviceId: 'DEV-ANDROID-9921',
-        photoBase64: sampleBase64,
-        isGeofenceValid: true,
-        workSiteId: 'site-musaffah-001',
-        syncStatus: SyncStatus.synced,
-      ));
-
-      _attendanceRecords.add(AttendanceRecord(
-        id: 'rec-001-sitedepart',
-        employeeId: 'emp-001',
-        employeeName: 'Irshath Ahamed',
-        workflowStep: WorkflowStep.siteCheckOut,
-        eventTimestamp: today.add(const Duration(hours: 15, minutes: 45)),
-        latitude: 24.3648,
-        longitude: 54.5032,
-        gpsAccuracy: 6.0,
-        address: 'M12 Industrial Area, Musaffah, Abu Dhabi',
-        deviceId: 'DEV-ANDROID-9921',
-        photoBase64: sampleBase64,
-        isGeofenceValid: true,
-        workSiteId: 'site-musaffah-001',
-        syncStatus: SyncStatus.synced,
-      ));
-
-      _attendanceRecords.add(AttendanceRecord(
-        id: 'rec-001-checkout',
-        employeeId: 'emp-001',
-        employeeName: 'Irshath Ahamed',
-        workflowStep: WorkflowStep.officeCheckOut,
-        eventTimestamp: today.add(const Duration(hours: 17, minutes: 30)),
-        latitude: 24.3644,
-        longitude: 54.5029,
-        gpsAccuracy: 5.0,
-        address: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi',
-        deviceId: 'DEV-ANDROID-9921',
-        photoBase64: sampleBase64,
-        isGeofenceValid: true,
-        officeId: 'office-musaffah-m12-001',
-        syncStatus: SyncStatus.synced,
-      ));
-
-      // Irshath Ahamed (emp-001) Yesterday
-      _attendanceRecords.add(AttendanceRecord(
-        id: 'rec-001-yest-checkin',
-        employeeId: 'emp-001',
-        employeeName: 'Irshath Ahamed',
-        workflowStep: WorkflowStep.officeCheckIn,
-        eventTimestamp: yesterday.add(const Duration(hours: 8, minutes: 25)),
-        latitude: 24.3644,
-        longitude: 54.5029,
-        gpsAccuracy: 5.0,
-        address: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi',
-        deviceId: 'DEV-ANDROID-9921',
-        photoBase64: sampleBase64,
-        isGeofenceValid: true,
-        officeId: 'office-musaffah-m12-001',
-        syncStatus: SyncStatus.synced,
-      ));
-
-      _attendanceRecords.add(AttendanceRecord(
-        id: 'rec-001-yest-checkout',
-        employeeId: 'emp-001',
-        employeeName: 'Irshath Ahamed',
-        workflowStep: WorkflowStep.officeCheckOut,
-        eventTimestamp: yesterday.add(const Duration(hours: 17, minutes: 35)),
-        latitude: 24.3644,
-        longitude: 54.5029,
-        gpsAccuracy: 5.0,
-        address: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi',
-        deviceId: 'DEV-ANDROID-9921',
-        photoBase64: sampleBase64,
-        isGeofenceValid: true,
-        officeId: 'office-musaffah-m12-001',
-        syncStatus: SyncStatus.synced,
-      ));
-
-      // Sophia Martinez (emp-002) Today
-      _attendanceRecords.add(AttendanceRecord(
-        id: 'rec-002-checkin',
-        employeeId: 'emp-002',
-        employeeName: 'Sophia Martinez',
-        workflowStep: WorkflowStep.officeCheckIn,
-        eventTimestamp: today.add(const Duration(hours: 9, minutes: 0)),
-        latitude: 24.3644,
-        longitude: 54.5029,
-        gpsAccuracy: 6.2,
-        address: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi',
-        deviceId: 'DEV-IPHONE-14PRO',
-        photoBase64: sampleBase64,
-        isGeofenceValid: true,
-        officeId: 'office-musaffah-m12-001',
-        syncStatus: SyncStatus.synced,
-      ));
-
-      _persistAttendanceRecords();
-    }
+    _persistEmployees();
+    _persistWorkSites();
+    _persistAttendanceRecords();
   }
 
   // Setup Wizard Flag
@@ -420,40 +210,43 @@ class LocalDatabaseService {
 
   // Employees CRUD
   List<EmployeeEntity> getEmployees() {
-    if (_employees.isEmpty) {
-      _employees.add(EmployeeEntity(
-        id: 'emp-001',
-        employeeCode: 'EMP-1001',
-        name: 'Irshath Ahamed',
-        mobileNumber: '+971521354859',
-        email: 'sr.irshath@gmail.com',
-        designation: 'Super Administrator',
-        department: 'Management',
-        useDefaultOffice: true,
-        assignedOfficeId: 'office-musaffah-m12-001',
-        assignedOfficeName: 'Store - 12',
-        isActive: true,
-      ));
-      _employees.add(EmployeeEntity(
-        id: 'emp-002',
-        employeeCode: 'EMP-1002',
-        name: 'Sophia Martinez',
-        mobileNumber: '+971509876543',
-        email: 'sophia@enterprise.com',
-        designation: 'Project Consultant',
-        department: 'Client Services',
-        useDefaultOffice: true,
-        assignedOfficeId: 'office-musaffah-m12-001',
-        assignedOfficeName: 'Store - 12',
-        isActive: true,
-      ));
-      _persistEmployees();
+    final Map<String, EmployeeEntity> uniqueMap = {};
+    for (final e in _employees) {
+      final String key = e.email.trim().isNotEmpty
+          ? e.email.trim().toLowerCase()
+          : (e.name.trim().isNotEmpty ? e.name.trim().toLowerCase() : e.id);
+
+      if (!uniqueMap.containsKey(key)) {
+        uniqueMap[key] = e;
+      } else {
+        final existing = uniqueMap[key]!;
+        uniqueMap[key] = EmployeeEntity(
+          id: existing.id.length > e.id.length ? existing.id : e.id,
+          employeeCode: existing.employeeCode.startsWith('EMP-') && existing.employeeCode != 'EMP-000'
+              ? existing.employeeCode
+              : e.employeeCode,
+          name: existing.name.isNotEmpty ? existing.name : e.name,
+          mobileNumber: existing.mobileNumber.isNotEmpty ? existing.mobileNumber : e.mobileNumber,
+          email: existing.email.isNotEmpty ? existing.email : e.email,
+          designation: existing.designation != 'Team Member' ? existing.designation : e.designation,
+          department: existing.department != 'Operations' ? existing.department : e.department,
+          useDefaultOffice: existing.useDefaultOffice,
+          assignedOfficeId: existing.assignedOfficeId ?? e.assignedOfficeId,
+          assignedOfficeName: existing.assignedOfficeName ?? e.assignedOfficeName,
+          isActive: existing.isActive && e.isActive,
+        );
+      }
     }
-    return List.unmodifiable(_employees);
+    return List.unmodifiable(uniqueMap.values.toList());
   }
 
   void saveEmployee(EmployeeEntity employee) {
-    int index = _employees.indexWhere((e) => e.id == employee.id);
+    int index = _employees.indexWhere((e) =>
+        e.id == employee.id ||
+        (e.email.isNotEmpty &&
+            employee.email.isNotEmpty &&
+            e.email.trim().toLowerCase() == employee.email.trim().toLowerCase()) ||
+        (e.name.trim().toLowerCase() == employee.name.trim().toLowerCase() && e.name.trim().isNotEmpty));
     if (index >= 0) {
       _employees[index] = employee;
     } else {
@@ -505,154 +298,62 @@ class LocalDatabaseService {
 
   // Attendance Records & Offline Sync
   List<AttendanceRecord> getAttendanceRecords() {
-    if (_attendanceRecords.isEmpty) {
-      const String sampleBase64 =
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final yesterday = today.subtract(const Duration(days: 1));
-
-      _attendanceRecords.add(AttendanceRecord(
-        id: 'rec-001-checkin',
-        employeeId: 'emp-001',
-        employeeName: 'Irshath Ahamed',
-        workflowStep: WorkflowStep.officeCheckIn,
-        eventTimestamp: today.add(const Duration(hours: 8, minutes: 30)),
-        latitude: 24.3644,
-        longitude: 54.5029,
-        gpsAccuracy: 4.8,
-        address: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi',
-        deviceId: 'DEV-ANDROID-9921',
-        photoBase64: sampleBase64,
-        isGeofenceValid: true,
-        officeId: 'office-musaffah-m12-001',
-        syncStatus: SyncStatus.synced,
-      ));
-
-      _attendanceRecords.add(AttendanceRecord(
-        id: 'rec-001-sitein',
-        employeeId: 'emp-001',
-        employeeName: 'Irshath Ahamed',
-        workflowStep: WorkflowStep.siteCheckIn,
-        eventTimestamp: today.add(const Duration(hours: 10, minutes: 15)),
-        latitude: 24.3648,
-        longitude: 54.5032,
-        gpsAccuracy: 5.5,
-        address: 'M12 Industrial Area, Musaffah, Abu Dhabi',
-        deviceId: 'DEV-ANDROID-9921',
-        photoBase64: sampleBase64,
-        isGeofenceValid: true,
-        workSiteId: 'site-musaffah-001',
-        syncStatus: SyncStatus.synced,
-      ));
-
-      _attendanceRecords.add(AttendanceRecord(
-        id: 'rec-001-sitedepart',
-        employeeId: 'emp-001',
-        employeeName: 'Irshath Ahamed',
-        workflowStep: WorkflowStep.siteCheckOut,
-        eventTimestamp: today.add(const Duration(hours: 15, minutes: 45)),
-        latitude: 24.3648,
-        longitude: 54.5032,
-        gpsAccuracy: 6.0,
-        address: 'M12 Industrial Area, Musaffah, Abu Dhabi',
-        deviceId: 'DEV-ANDROID-9921',
-        photoBase64: sampleBase64,
-        isGeofenceValid: true,
-        workSiteId: 'site-musaffah-001',
-        syncStatus: SyncStatus.synced,
-      ));
-
-      _attendanceRecords.add(AttendanceRecord(
-        id: 'rec-001-checkout',
-        employeeId: 'emp-001',
-        employeeName: 'Irshath Ahamed',
-        workflowStep: WorkflowStep.officeCheckOut,
-        eventTimestamp: today.add(const Duration(hours: 17, minutes: 30)),
-        latitude: 24.3644,
-        longitude: 54.5029,
-        gpsAccuracy: 5.0,
-        address: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi',
-        deviceId: 'DEV-ANDROID-9921',
-        photoBase64: sampleBase64,
-        isGeofenceValid: true,
-        officeId: 'office-musaffah-m12-001',
-        syncStatus: SyncStatus.synced,
-      ));
-
-      _attendanceRecords.add(AttendanceRecord(
-        id: 'rec-001-yest-checkin',
-        employeeId: 'emp-001',
-        employeeName: 'Irshath Ahamed',
-        workflowStep: WorkflowStep.officeCheckIn,
-        eventTimestamp: yesterday.add(const Duration(hours: 8, minutes: 25)),
-        latitude: 24.3644,
-        longitude: 54.5029,
-        gpsAccuracy: 5.0,
-        address: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi',
-        deviceId: 'DEV-ANDROID-9921',
-        photoBase64: sampleBase64,
-        isGeofenceValid: true,
-        officeId: 'office-musaffah-m12-001',
-        syncStatus: SyncStatus.synced,
-      ));
-
-      _attendanceRecords.add(AttendanceRecord(
-        id: 'rec-001-yest-checkout',
-        employeeId: 'emp-001',
-        employeeName: 'Irshath Ahamed',
-        workflowStep: WorkflowStep.officeCheckOut,
-        eventTimestamp: yesterday.add(const Duration(hours: 17, minutes: 35)),
-        latitude: 24.3644,
-        longitude: 54.5029,
-        gpsAccuracy: 5.0,
-        address: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi',
-        deviceId: 'DEV-ANDROID-9921',
-        photoBase64: sampleBase64,
-        isGeofenceValid: true,
-        officeId: 'office-musaffah-m12-001',
-        syncStatus: SyncStatus.synced,
-      ));
-
-      _attendanceRecords.add(AttendanceRecord(
-        id: 'rec-002-checkin',
-        employeeId: 'emp-002',
-        employeeName: 'Sophia Martinez',
-        workflowStep: WorkflowStep.officeCheckIn,
-        eventTimestamp: today.add(const Duration(hours: 9, minutes: 0)),
-        latitude: 24.3644,
-        longitude: 54.5029,
-        gpsAccuracy: 6.2,
-        address: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi',
-        deviceId: 'DEV-IPHONE-14PRO',
-        photoBase64: sampleBase64,
-        isGeofenceValid: true,
-        officeId: 'office-musaffah-m12-001',
-        syncStatus: SyncStatus.synced,
-      ));
-
-      _persistAttendanceRecords();
-    }
     return List.unmodifiable(_attendanceRecords);
   }
 
   void addAttendanceRecord(AttendanceRecord record) {
     _attendanceRecords.add(record);
-    if (record.workflowStep.nextStep != null) {
-      _currentWorkflowStep = record.workflowStep.nextStep!;
-    } else {
-      _currentWorkflowStep = WorkflowStep.completed;
-    }
     _persistAttendanceRecords();
   }
 
-  WorkflowStep get currentWorkflowStep => _currentWorkflowStep;
+  /// Dynamically computes current workflow step for a specific employee for today
+  WorkflowStep getWorkflowStepForEmployee([String? employeeId]) {
+    final targetId = employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
+    if (targetId == null || targetId.isEmpty) {
+      return WorkflowStep.officeCheckIn;
+    }
 
-  void resetWorkflowForNewDay() {
-    _currentWorkflowStep = WorkflowStep.officeCheckIn;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final todayUserRecords = _attendanceRecords.where((r) {
+      final matchesUser = (r.employeeId == targetId ||
+          (_currentUser != null &&
+              (r.employeeId == _currentUser!.id ||
+               r.employeeId == _currentUser!.firebaseUid ||
+               r.employeeName == _currentUser!.fullName)));
+      final rDate = DateTime(r.eventTimestamp.year, r.eventTimestamp.month, r.eventTimestamp.day);
+      return matchesUser && rDate.isAtSameMomentAs(today);
+    }).toList();
+
+    if (todayUserRecords.isEmpty) {
+      return WorkflowStep.officeCheckIn;
+    }
+
+    final lastRecord = todayUserRecords.last;
+    if (lastRecord.workflowStep.nextStep != null) {
+      return lastRecord.workflowStep.nextStep!;
+    } else {
+      return WorkflowStep.completed;
+    }
   }
 
-  List<AttendanceRecord> getPendingSyncRecords() {
+  WorkflowStep get currentWorkflowStep => getWorkflowStepForEmployee();
+
+  List<AttendanceRecord> getPendingSyncRecords([String? employeeId]) {
+    final targetId = employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
+    return _attendanceRecords.where((r) {
+      if (r.syncStatus != SyncStatus.pending) return false;
+      if (targetId == null || targetId.isEmpty) return true;
+      return r.employeeId == targetId ||
+          (_currentUser != null &&
+              (r.employeeId == _currentUser!.id ||
+               r.employeeId == _currentUser!.firebaseUid ||
+               r.employeeName.trim().toLowerCase() == _currentUser!.fullName.trim().toLowerCase()));
+    }).toList();
+  }
+
+  List<AttendanceRecord> getAllPendingSyncRecords() {
     return _attendanceRecords
         .where((r) => r.syncStatus == SyncStatus.pending)
         .toList();
