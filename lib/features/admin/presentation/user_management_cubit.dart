@@ -54,7 +54,8 @@ class UserManagementCubit extends Cubit<UserManagementState> {
   Future<void> fetchUsers() async {
     emit(UserManagementLoading());
     try {
-      final orgId = _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
+      final orgId =
+          _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
       final remoteUsers = await _supabase.fetchOrganizationUsers(orgId);
 
       final localEmployees = _db.getEmployees();
@@ -84,7 +85,9 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         final emailKey = localUser.email.trim().toLowerCase();
         final nameKey = localUser.fullName.trim().toLowerCase();
         final key = emailKey.isNotEmpty ? emailKey : nameKey;
-        if (!userMap.containsKey(key) && !userMap.values.any((u) => u.fullName.trim().toLowerCase() == nameKey)) {
+        if (!userMap.containsKey(key) &&
+            !userMap.values
+                .any((u) => u.fullName.trim().toLowerCase() == nameKey)) {
           userMap[key] = localUser;
         }
       }
@@ -110,13 +113,15 @@ class UserManagementCubit extends Cubit<UserManagementState> {
   }) async {
     emit(UserManagementLoading());
     try {
-      final orgId = _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
+      final orgId =
+          _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
       final actorUserId = _db.currentUser?.id;
 
       String firebaseUid = 'user_${_uuid.v4()}';
-      final passToUse = (temporaryPassword != null && temporaryPassword.trim().isNotEmpty)
-          ? temporaryPassword.trim()
-          : 'TempPass123!';
+      final passToUse =
+          (temporaryPassword != null && temporaryPassword.trim().isNotEmpty)
+              ? temporaryPassword.trim()
+              : 'aa123456';
 
       // 1. Create Firebase Authentication user with temporary password using secondary app instance so Admin session remains active
       try {
@@ -139,24 +144,29 @@ class UserManagementCubit extends Cubit<UserManagementState> {
           await credential.user!.updateDisplayName(fullName.trim());
           await secondaryAuth.signOut();
         } else {
-          emit(UserManagementError('Failed to register employee authentication credentials.'));
+          emit(UserManagementError(
+              'Failed to register employee authentication credentials.'));
           return;
         }
       } on fb.FirebaseAuthException catch (e) {
         debugPrint('Firebase createUser error: ${e.code} - ${e.message}');
         if (e.code == 'email-already-in-use') {
-          emit(UserManagementError('An account with this email address already exists.'));
+          emit(UserManagementError(
+              'An account with this email address already exists.'));
           return;
         } else if (e.code == 'weak-password') {
-          emit(UserManagementError('Temporary password is too weak. Must be at least 6 characters.'));
+          emit(UserManagementError(
+              'Temporary password is too weak. Must be at least 6 characters.'));
           return;
         } else {
-          emit(UserManagementError('Authentication creation error (${e.code}): ${e.message}'));
+          emit(UserManagementError(
+              'Authentication creation error (${e.code}): ${e.message}'));
           return;
         }
       } catch (e) {
         debugPrint('Secondary Firebase App error: $e');
-        emit(UserManagementError('Failed to create employee authentication: ${e.toString()}'));
+        emit(UserManagementError(
+            'Failed to create employee authentication: ${e.toString()}'));
         return;
       }
 
@@ -170,8 +180,10 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         name: fullName.trim(),
         mobileNumber: phoneNumber?.trim() ?? '',
         email: email.trim().toLowerCase(),
-        designation: designation.trim().isNotEmpty ? designation.trim() : 'Team Member',
-        department: department.trim().isNotEmpty ? department.trim() : 'Operations',
+        designation:
+            designation.trim().isNotEmpty ? designation.trim() : 'Team Member',
+        department:
+            department.trim().isNotEmpty ? department.trim() : 'Operations',
         useDefaultOffice: useDefaultOffice,
         assignedOfficeId: assignedOfficeId,
         assignedOfficeName: assignedOfficeName,
@@ -202,15 +214,19 @@ class UserManagementCubit extends Cubit<UserManagementState> {
           name: fullName.trim(),
           mobileNumber: phoneNumber?.trim() ?? '',
           email: email.trim().toLowerCase(),
-          designation: designation.trim().isNotEmpty ? designation.trim() : 'Team Member',
-          department: department.trim().isNotEmpty ? department.trim() : 'Operations',
+          designation: designation.trim().isNotEmpty
+              ? designation.trim()
+              : 'Team Member',
+          department:
+              department.trim().isNotEmpty ? department.trim() : 'Operations',
           useDefaultOffice: useDefaultOffice,
           assignedOfficeId: assignedOfficeId,
           assignedOfficeName: assignedOfficeName,
           isActive: true,
         );
         _db.saveEmployee(officialLocalEmp);
-        emit(UserManagementActionSuccess('User ${fullName.trim()} created successfully.'));
+        emit(UserManagementActionSuccess(
+            'User ${fullName.trim()} created successfully.'));
       } else {
         emit(UserManagementActionSuccess('User profile created successfully.'));
       }
@@ -234,7 +250,8 @@ class UserManagementCubit extends Cubit<UserManagementState> {
   }) async {
     emit(UserManagementLoading());
     try {
-      final orgId = _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
+      final orgId =
+          _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
       final actorUserId = _db.currentUser?.id;
 
       // Update local storage
@@ -262,7 +279,8 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         department: department?.trim() ?? existingEmp.department,
         useDefaultOffice: useDefaultOffice ?? existingEmp.useDefaultOffice,
         assignedOfficeId: assignedOfficeId ?? existingEmp.assignedOfficeId,
-        assignedOfficeName: assignedOfficeName ?? existingEmp.assignedOfficeName,
+        assignedOfficeName:
+            assignedOfficeName ?? existingEmp.assignedOfficeName,
         isActive: existingEmp.isActive,
       );
       _db.saveEmployee(updatedEmp);
@@ -289,7 +307,8 @@ class UserManagementCubit extends Cubit<UserManagementState> {
   Future<void> setUserActiveStatus(String userId, bool isActive) async {
     emit(UserManagementLoading());
     try {
-      final orgId = _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
+      final orgId =
+          _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
       final actorUserId = _db.currentUser?.id;
 
       // Update local storage
@@ -324,14 +343,16 @@ class UserManagementCubit extends Cubit<UserManagementState> {
       emit(UserManagementActionSuccess('User account $statusText.'));
       await fetchUsers();
     } catch (e) {
-      emit(UserManagementError('Failed to update account status: ${e.toString()}'));
+      emit(UserManagementError(
+          'Failed to update account status: ${e.toString()}'));
     }
   }
 
   Future<void> softDeleteUser(String userId) async {
     emit(UserManagementLoading());
     try {
-      final orgId = _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
+      final orgId =
+          _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
       final actorUserId = _db.currentUser?.id;
 
       await _supabase.softDeleteUser(
@@ -357,7 +378,8 @@ class UserManagementCubit extends Cubit<UserManagementState> {
       // Set temporary password change flag in Supabase
       await _supabase.updateUserPasswordChangeStatus(userId, true);
 
-      final orgId = _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
+      final orgId =
+          _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
       await _supabase.logActivity(
         orgId: orgId,
         actorUserId: _db.currentUser?.id,
@@ -366,10 +388,12 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         details: {'email': email},
       );
 
-      emit(UserManagementActionSuccess('Password reset link sent to $email. Required to change on next login.'));
+      emit(UserManagementActionSuccess(
+          'Password reset link sent to $email. Required to change on next login.'));
       await fetchUsers();
     } catch (e) {
-      emit(UserManagementError('Failed to send password reset: ${e.toString()}'));
+      emit(UserManagementError(
+          'Failed to send password reset: ${e.toString()}'));
     }
   }
 }

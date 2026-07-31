@@ -56,17 +56,17 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
 
           // Apply filters
           final filteredUsers = users.where((u) {
-            final matchesSearch = u.fullName
-                    .toLowerCase()
-                    .contains(_searchQuery.toLowerCase()) ||
-                u.email.toLowerCase().contains(_searchQuery.toLowerCase());
+            final matchesSearch =
+                u.fullName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                    u.email.toLowerCase().contains(_searchQuery.toLowerCase());
             final matchesRole = _selectedRoleFilter == 'ALL' ||
                 u.role.nameString == _selectedRoleFilter;
             return matchesSearch && matchesRole;
           }).toList();
 
-          final candidateAdmins =
-              users.where((u) => u.role == UserRole.admin && u.isActive).toList();
+          final candidateAdmins = users
+              .where((u) => u.role == UserRole.admin && u.isActive)
+              .toList();
 
           return Scaffold(
             appBar: AppBar(
@@ -137,19 +137,21 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
               },
               backgroundColor: AppColors.primary,
               icon: const Icon(Icons.person_add_rounded, color: Colors.white),
-              label: const Text('Add User', style: TextStyle(color: Colors.white)),
+              label:
+                  const Text('Add User', style: TextStyle(color: Colors.white)),
             ),
             body: Column(
               children: [
                 // Filter & Search Bar
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16.0, vertical: 8.0),
                   child: Row(
                     children: [
                       Expanded(
                         child: TextField(
-                          onChanged: (val) => setState(() => _searchQuery = val),
+                          onChanged: (val) =>
+                              setState(() => _searchQuery = val),
                           decoration: InputDecoration(
                             hintText: 'Search by name or email...',
                             prefixIcon: const Icon(Icons.search_rounded),
@@ -164,10 +166,12 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                       DropdownButton<String>(
                         value: _selectedRoleFilter,
                         items: const [
-                          DropdownMenuItem(value: 'ALL', child: Text('All Roles')),
+                          DropdownMenuItem(
+                              value: 'ALL', child: Text('All Roles')),
                           DropdownMenuItem(
                               value: 'SUPER_ADMIN', child: Text('Super Admin')),
-                          DropdownMenuItem(value: 'ADMIN', child: Text('Admins')),
+                          DropdownMenuItem(
+                              value: 'ADMIN', child: Text('Admins')),
                           DropdownMenuItem(
                               value: 'EMPLOYEE', child: Text('Employees')),
                         ],
@@ -223,7 +227,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                           ),
                           child: ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: roleBadgeColor.withValues(alpha: 0.1),
+                              backgroundColor:
+                                  roleBadgeColor.withValues(alpha: 0.1),
                               child: Text(
                                 user.fullName.isNotEmpty
                                     ? user.fullName[0].toUpperCase()
@@ -247,7 +252,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 8, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: roleBadgeColor.withValues(alpha: 0.15),
+                                    color:
+                                        roleBadgeColor.withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Text(
@@ -319,7 +325,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                       if (val == 'edit') {
                                         showDialog(
                                           context: context,
-                                          builder: (dialogCtx) => UserFormDialog(
+                                          builder: (dialogCtx) =>
+                                              UserFormDialog(
                                             userToEdit: user,
                                             onSubmit: ({
                                               required fullName,
@@ -341,9 +348,12 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                                 role: role,
                                                 designation: designation,
                                                 department: department,
-                                                useDefaultOffice: useDefaultOffice,
-                                                assignedOfficeId: assignedOfficeId,
-                                                assignedOfficeName: assignedOfficeName,
+                                                useDefaultOffice:
+                                                    useDefaultOffice,
+                                                assignedOfficeId:
+                                                    assignedOfficeId,
+                                                assignedOfficeName:
+                                                    assignedOfficeName,
                                               );
                                             },
                                           ),
@@ -355,7 +365,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                         cubit.sendPasswordReset(
                                             user.email, user.id);
                                       } else if (val == 'soft_delete') {
-                                        _confirmSoftDelete(context, user, cubit);
+                                        _confirmSoftDelete(
+                                            context, user, cubit);
                                       }
                                     },
                                     itemBuilder: (ctx) => [
@@ -376,7 +387,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                             Icon(
                                               user.isActive
                                                   ? Icons.person_off_outlined
-                                                  : Icons.person_add_alt_outlined,
+                                                  : Icons
+                                                      .person_add_alt_outlined,
                                               size: 18,
                                             ),
                                             const SizedBox(width: 8),

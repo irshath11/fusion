@@ -56,8 +56,11 @@ class _UserFormDialogState extends State<UserFormDialog> {
 
     _availableLocations = [
       {'id': 'default_main', 'name': 'Head Office (Main Office Check-In)'},
-      ...offices.where((o) => !o.isDefault).map((o) => {'id': o.id, 'name': 'Office: ${o.name}'}),
-      ...sites.map((s) => {'id': s.id, 'name': 'Site: ${s.siteName} (${s.clientName})'}),
+      ...offices
+          .where((o) => !o.isDefault)
+          .map((o) => {'id': o.id, 'name': 'Office: ${o.name}'}),
+      ...sites.map(
+          (s) => {'id': s.id, 'name': 'Site: ${s.siteName} (${s.clientName})'}),
     ];
 
     final user = widget.userToEdit;
@@ -66,17 +69,15 @@ class _UserFormDialogState extends State<UserFormDialog> {
     _phoneController = TextEditingController(text: user?.phoneNumber ?? '');
     _codeController = TextEditingController(
         text: 'EMP-${1000 + DateTime.now().millisecond % 900}');
-    _designationController =
-        TextEditingController(text: 'Operations Officer');
-    _departmentController =
-        TextEditingController(text: 'Field Engineering');
-    _tempPasswordController =
-        TextEditingController(text: 'TempPass123!');
+    _designationController = TextEditingController(text: 'Operations Officer');
+    _departmentController = TextEditingController(text: 'Field Engineering');
+    _tempPasswordController = TextEditingController(text: 'aa123456');
 
     if (user != null) {
       _selectedRole = user.role;
       final empList = LocalDatabaseService().getEmployees();
-      final empMatches = empList.where((e) => e.id == user.id || e.email == user.email);
+      final empMatches =
+          empList.where((e) => e.id == user.id || e.email == user.email);
       if (empMatches.isNotEmpty) {
         final emp = empMatches.first;
         _useDefaultOffice = emp.useDefaultOffice;
@@ -145,7 +146,8 @@ class _UserFormDialogState extends State<UserFormDialog> {
               isExpanded: true,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               ),
               items: const [
                 DropdownMenuItem(
@@ -168,14 +170,17 @@ class _UserFormDialogState extends State<UserFormDialog> {
             ),
             const SizedBox(height: 6),
             DropdownButtonFormField<String>(
-              initialValue: _availableLocations.any((l) => l['id'] == _selectedOfficeId)
-                  ? _selectedOfficeId
-                  : 'default_main',
+              initialValue:
+                  _availableLocations.any((l) => l['id'] == _selectedOfficeId)
+                      ? _selectedOfficeId
+                      : 'default_main',
               isExpanded: true,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                prefixIcon: Icon(Icons.location_on_outlined, color: AppColors.primary),
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                prefixIcon:
+                    Icon(Icons.location_on_outlined, color: AppColors.primary),
               ),
               items: _availableLocations.map((loc) {
                 return DropdownMenuItem<String>(
@@ -192,7 +197,8 @@ class _UserFormDialogState extends State<UserFormDialog> {
                   setState(() {
                     _selectedOfficeId = val;
                     _useDefaultOffice = (val == 'default_main');
-                    final match = _availableLocations.firstWhere((l) => l['id'] == val);
+                    final match =
+                        _availableLocations.firstWhere((l) => l['id'] == val);
                     _selectedOfficeName = match['name']!;
                   });
                 }
@@ -203,7 +209,8 @@ class _UserFormDialogState extends State<UserFormDialog> {
               _useDefaultOffice
                   ? '• Employee checks in at Head Office.'
                   : '• Direct site reporting: Employee checks in at $_selectedOfficeName.',
-              style: const TextStyle(fontSize: 11, color: AppColors.textSecondaryLight),
+              style: const TextStyle(
+                  fontSize: 11, color: AppColors.textSecondaryLight),
             ),
             const SizedBox(height: 12),
             Row(
@@ -242,7 +249,8 @@ class _UserFormDialogState extends State<UserFormDialog> {
               const SizedBox(height: 6),
               const Text(
                 'Employee must change this temporary password on first login.',
-                style: TextStyle(fontSize: 11, color: AppColors.textSecondaryLight),
+                style: TextStyle(
+                    fontSize: 11, color: AppColors.textSecondaryLight),
               ),
             ],
           ],
@@ -270,7 +278,8 @@ class _UserFormDialogState extends State<UserFormDialog> {
               temporaryPassword: _tempPasswordController.text.trim(),
               useDefaultOffice: _useDefaultOffice,
               assignedOfficeId: _useDefaultOffice ? null : _selectedOfficeId,
-              assignedOfficeName: _useDefaultOffice ? null : _selectedOfficeName,
+              assignedOfficeName:
+                  _useDefaultOffice ? null : _selectedOfficeName,
             );
             Navigator.of(context).pop();
           },

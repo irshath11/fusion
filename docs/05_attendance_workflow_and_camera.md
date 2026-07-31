@@ -25,7 +25,19 @@ The **Attendance Workflow & Camera Verification** feature enforces a sequential 
    - **Payload Reduction**: Reduces raw camera images from **3.0 MB – 5.0 MB** down to **~25 KB – 45 KB** (**99% payload reduction**).
    - Keeps facial features crystal clear while enabling instant sub-second database synchronization.
 
-4. **Timeline UI & Time Pill Display**:
+4. **Site Selection Dropdown (`SiteNameDialog`)**:
+   - During `Site Check-In`, employees select their job site / project location from a structured dropdown list containing:
+     - `RELAAM (AMC)`
+     - `RELAAM (WO)`
+     - `CARRIER`
+     - `MOPA`
+     - `MPM`
+     - `ELV`
+     - `OTHERS (AMC)`
+     - `OTHERS (WO)`
+   - Includes custom location detail input when selecting `OTHERS` options, and automatically includes registered work sites.
+
+5. **Timeline UI & Time Pill Display**:
    - Renders a daily timeline displaying completed steps with green check icons.
    - Formats and displays exact capture timestamps (e.g., `09:15 AM`, `05:30 PM`) in a styled badge next to step titles.
    - Displays sync badges (`SYNCED` / `PENDING`).
@@ -92,5 +104,6 @@ class AttendanceRecord {
 | [`lib/features/attendance/domain/attendance_record.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/domain/attendance_record.dart) | Attendance record data model & JSON mapping. |
 | [`lib/features/attendance/presentation/attendance_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/presentation/attendance_cubit.dart) | Cubit executing workflow step validation, geofence checks, record creation, and sync queuing. |
 | [`lib/features/employee/presentation/employee_dashboard_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/employee/presentation/employee_dashboard_screen.dart) | Employee dashboard UI with workflow timeline, capture button, and time badge displays. |
+| [`lib/features/attendance/presentation/site_name_dialog.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/presentation/site_name_dialog.dart) | Modal dialog for site selection dropdown (`RELAAM (AMC)`, `RELAAM (WO)`, `CARRIER`, `MOPA`, `MPM`, `ELV`, `OTHERS (AMC)`, `OTHERS (WO)`). |
 | [`lib/features/attendance/presentation/camera_capture_modal.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/presentation/camera_capture_modal.dart) | Camera modal dialog handling camera preview, capture, retake, and confirmation. |
 | [`lib/core/services/camera_service.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/services/camera_service.dart) | Image downscaling and JPEG quality compression service. |
