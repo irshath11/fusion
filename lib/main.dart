@@ -77,7 +77,7 @@ class RootRoleRouter extends StatelessWidget {
         }
       },
       builder: (context, state) {
-        if (state is AuthInitial || state is AuthLoading) {
+        if (state is AuthInitial) {
           return const Scaffold(
             body: Center(
               child: CircularProgressIndicator(),

@@ -127,7 +127,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
       final passToUse =
           (temporaryPassword != null && temporaryPassword.trim().isNotEmpty)
               ? temporaryPassword.trim()
-              : 'aa123456';
+              : (employeeCode.trim().isNotEmpty ? employeeCode.trim() : 'Pass#${DateTime.now().millisecond}');
 
       // 1. Create Firebase Authentication user with temporary password using secondary app instance so Admin session remains active
       try {

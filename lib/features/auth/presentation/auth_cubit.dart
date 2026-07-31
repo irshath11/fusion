@@ -105,10 +105,34 @@ class AuthCubit extends Cubit<AuthState> {
       return;
     }
 
-    fb.FirebaseAuthException? firebaseAuthError;
+    // Check account existence in local database / configuration
+    final isConfiguredAdmin = _db.organization != null &&
+        _db.organization!.superAdminEmail.toLowerCase() == trimmedEmail;
+    final isDemoAdmin = trimmedEmail == 'admin@apexlogistics.com' ||
+        trimmedEmail == 'sr.irshath@gmail.com' ||
+        trimmedEmail.contains('admin');
+    final isSuperAdminAccount = isConfiguredAdmin || isDemoAdmin;
 
+    final employees = _db.getEmployees();
+    final localEmployee = employees.firstWhere(
+      (e) =>
+          e.email.trim().toLowerCase() == trimmedEmail ||
+          (e.employeeCode.isNotEmpty &&
+              e.employeeCode.trim().toLowerCase() == trimmedEmail),
+      orElse: () => EmployeeEntity(
+        id: '',
+        employeeCode: '',
+        name: '',
+        mobileNumber: '',
+        email: '',
+        designation: '',
+        department: '',
+      ),
+    );
+    final isEmployeeAccount = localEmployee.id.isNotEmpty && localEmployee.isActive;
+
+    // 1. First try Firebase Authentication
     try {
-      // 1. Authenticate with Firebase Authentication
       final credential = await _fbAuth?.signInWithEmailAndPassword(
         email: trimmedEmail,
         password: trimmedPassword,
@@ -154,29 +178,18 @@ class AuthCubit extends Cubit<AuthState> {
         emit(Authenticated(fallbackUser));
         return;
       }
-    } on fb.FirebaseAuthException catch (e) {
-      debugPrint('Firebase signIn Exception: ${e.code} - ${e.message}');
-      firebaseAuthError = e;
     } catch (e) {
-      debugPrint('Firebase signIn error: $e');
+      debugPrint('Firebase signIn note: $e');
     }
 
-    // 2. Local / Demo Super Admin Credential Fallback
-    final isConfiguredAdmin = _db.organization != null &&
-        _db.organization!.superAdminEmail.toLowerCase() == trimmedEmail;
-    final isDemoAdmin = trimmedEmail == 'admin@apexlogistics.com' ||
-        trimmedEmail == 'sr.irshath@gmail.com' ||
-        trimmedEmail.contains('admin');
-
-    if (isConfiguredAdmin || isDemoAdmin) {
+    // 2. Check Local / Offline Super Admin Credential Match
+    if (isSuperAdminAccount) {
       final storedAdminPass = _db.organization?.superAdminPassword;
-      final isValidPass = (storedAdminPass != null &&
-              storedAdminPass.isNotEmpty &&
-              storedAdminPass == trimmedPassword) ||
-          trimmedPassword == 'aa123456' ||
-          trimmedPassword == 'AdminSecurePass123!';
+      final bool isValidAdminPass = (storedAdminPass != null &&
+          storedAdminPass.isNotEmpty &&
+          trimmedPassword == storedAdminPass);
 
-      if (isValidPass) {
+      if (isValidAdminPass) {
         final adminUser = UserEntity(
           id: 'admin-001',
           firebaseUid: 'admin-001',
@@ -198,39 +211,20 @@ class AuthCubit extends Cubit<AuthState> {
       }
     }
 
-    // 3. Local Employee Credential Fallback
-    final employees = _db.getEmployees();
-    final employee = employees.firstWhere(
-      (e) =>
-          e.email.trim().toLowerCase() == trimmedEmail ||
-          (e.employeeCode.isNotEmpty &&
-              e.employeeCode.trim().toLowerCase() == trimmedEmail),
-      orElse: () => EmployeeEntity(
-        id: '',
-        employeeCode: '',
-        name: '',
-        mobileNumber: '',
-        email: '',
-        designation: '',
-        department: '',
-      ),
-    );
-
-    if (employee.id.isNotEmpty && employee.isActive) {
-      final isValidEmpPass = trimmedPassword == 'aa123456' ||
-          trimmedPassword == employee.employeeCode ||
-          trimmedPassword == '123456' ||
-          trimmedPassword.length >= 6;
+    // 3. Check Local / Offline Employee Credential Match
+    if (isEmployeeAccount) {
+      final bool isValidEmpPass = (localEmployee.employeeCode.isNotEmpty &&
+          trimmedPassword == localEmployee.employeeCode);
 
       if (isValidEmpPass) {
         final employeeUser = UserEntity(
-          id: employee.id,
-          firebaseUid: employee.id,
-          email: employee.email.isNotEmpty
-              ? employee.email
+          id: localEmployee.id,
+          firebaseUid: localEmployee.id,
+          email: localEmployee.email.isNotEmpty
+              ? localEmployee.email
               : '$trimmedEmail@company.com',
-          fullName: employee.name,
-          phoneNumber: employee.mobileNumber,
+          fullName: localEmployee.name,
+          phoneNumber: localEmployee.mobileNumber,
           role: UserRole.employee,
           organizationId:
               _db.organization?.id ?? '00000000-0000-0000-0000-000000000001',
@@ -241,24 +235,11 @@ class AuthCubit extends Cubit<AuthState> {
       }
     }
 
-    // 4. Emit error if neither Firebase nor local/demo fallback authenticated
-    if (firebaseAuthError != null) {
-      final code = firebaseAuthError.code;
-      if (code == 'wrong-password' ||
-          code == 'invalid-credential' ||
-          code == 'INVALID_LOGIN_CREDENTIALS' ||
-          code == 'invalid-password') {
-        emit(AuthError(
-            'Incorrect password. Please check your credentials and try again.'));
-      } else if (code == 'user-not-found' || code == 'invalid-email') {
-        emit(AuthError(
-            'User account not found. Please check your email address.'));
-      } else {
-        emit(AuthError(
-            'Incorrect email or password. Please check your credentials.'));
-      }
+    // 4. Emit specific error message
+    if (isSuperAdminAccount || isEmployeeAccount) {
+      emit(AuthError('Incorrect password. Please check your password and try again.'));
     } else {
-      emit(AuthError('Invalid email or password. Account not found.'));
+      emit(AuthError('User account not found. Please check your email address.'));
     }
   }
 

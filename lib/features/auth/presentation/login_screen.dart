@@ -69,14 +69,15 @@ class _LoginScreenState extends State<LoginScreen> {
               const Center(
                 child: Text(
                   'Enterprise Attendance & User Management System',
-                  style: TextStyle(color: AppColors.textSecondaryLight, fontSize: 14),
+                  style: TextStyle(
+                      color: AppColors.textSecondaryLight, fontSize: 14),
                 ),
               ),
               const SizedBox(height: 30),
               CustomTextField(
                 controller: _emailController,
                 label: 'Email Address',
-                hint: 'sr.irshath@gmail.com',
+                hint: 'Enter Your Email',
                 prefixIcon: Icons.email_outlined,
                 keyboardType: TextInputType.emailAddress,
               ),
@@ -92,11 +93,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 listener: (context, state) {
                   if (state is AuthError) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(state.message), backgroundColor: AppColors.error),
+                      SnackBar(
+                          content: Text(state.message),
+                          backgroundColor: AppColors.error),
                     );
                   } else if (state is Authenticated) {
                     Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (ctx) => const RootRoleRouter()),
+                      MaterialPageRoute(
+                          builder: (ctx) => const RootRoleRouter()),
                       (route) => false,
                     );
                   }
@@ -121,16 +125,19 @@ class _LoginScreenState extends State<LoginScreen> {
                 decoration: BoxDecoration(
                   color: AppColors.info.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.info.withValues(alpha: 0.2)),
+                  border:
+                      Border.all(color: AppColors.info.withValues(alpha: 0.2)),
                 ),
                 child: const Row(
                   children: [
-                    Icon(Icons.shield_outlined, color: AppColors.info, size: 20),
+                    Icon(Icons.shield_outlined,
+                        color: AppColors.info, size: 20),
                     SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'Public registration disabled. Contact your Administrator to provision accounts.',
-                        style: TextStyle(fontSize: 12, color: AppColors.textSecondaryLight),
+                        style: TextStyle(
+                            fontSize: 12, color: AppColors.textSecondaryLight),
                       ),
                     ),
                   ],

@@ -69,9 +69,9 @@ class _UserFormDialogState extends State<UserFormDialog> {
     _phoneController = TextEditingController(text: user?.phoneNumber ?? '');
     _codeController = TextEditingController(
         text: 'EMP-${1000 + DateTime.now().millisecond % 900}');
-    _designationController = TextEditingController(text: 'Operations Officer');
+    _designationController = TextEditingController(text: 'Technician');
     _departmentController = TextEditingController(text: 'Field Engineering');
-    _tempPasswordController = TextEditingController(text: 'aa123456');
+    _tempPasswordController = TextEditingController();
 
     if (user != null) {
       _selectedRole = user.role;
@@ -115,14 +115,14 @@ class _UserFormDialogState extends State<UserFormDialog> {
             CustomTextField(
               controller: _nameController,
               label: 'Full Name',
-              hint: 'John Doe',
+              hint: '',
               prefixIcon: Icons.person_outline,
             ),
             const SizedBox(height: 12),
             CustomTextField(
               controller: _emailController,
               label: 'Email Address',
-              hint: 'user@enterprise.com',
+              hint: '',
               keyboardType: TextInputType.emailAddress,
               prefixIcon: Icons.email_outlined,
               enabled: !isEditing,
@@ -131,7 +131,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
             CustomTextField(
               controller: _phoneController,
               label: 'Mobile Number',
-              hint: '+971 50 123 4567',
+              hint: '',
               keyboardType: TextInputType.phone,
               prefixIcon: Icons.phone_outlined,
             ),
