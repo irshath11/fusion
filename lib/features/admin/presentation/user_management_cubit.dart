@@ -46,7 +46,13 @@ class UserManagementError extends UserManagementState {
 class UserManagementCubit extends Cubit<UserManagementState> {
   final LocalDatabaseService _db = LocalDatabaseService();
   final SupabaseService _supabase = SupabaseService();
-  final fb.FirebaseAuth _fbAuth = fb.FirebaseAuth.instance;
+  fb.FirebaseAuth? get _fbAuth {
+    try {
+      return fb.FirebaseAuth.instance;
+    } catch (_) {
+      return null;
+    }
+  }
   final Uuid _uuid = const Uuid();
 
   UserManagementCubit() : super(UserManagementInitial());
@@ -372,7 +378,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
     emit(UserManagementLoading());
     try {
       try {
-        await _fbAuth.sendPasswordResetEmail(email: email.trim().toLowerCase());
+        await _fbAuth?.sendPasswordResetEmail(email: email.trim().toLowerCase());
       } catch (_) {}
 
       // Set temporary password change flag in Supabase

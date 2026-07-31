@@ -15,5 +15,6 @@ void main() {
     // Build app and trigger a frame.
     await tester.pumpWidget(const WorkforceApp());
     expect(find.byType(MaterialApp), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
   });
 }

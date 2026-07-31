@@ -33,7 +33,13 @@ class SetupError extends SetupState {
 class SetupCubit extends Cubit<SetupState> {
   final LocalDatabaseService _db = LocalDatabaseService();
   final SupabaseService _supabase = SupabaseService();
-  final fb.FirebaseAuth _fbAuth = fb.FirebaseAuth.instance;
+  fb.FirebaseAuth? get _fbAuth {
+    try {
+      return fb.FirebaseAuth.instance;
+    } catch (_) {
+      return null;
+    }
+  }
   final Uuid _uuid = const Uuid();
 
   SetupCubit() : super(SetupInitial());
@@ -65,24 +71,30 @@ class SetupCubit extends Cubit<SetupState> {
 
       // 1. Create Super Admin account in Firebase Authentication
       try {
-        final credential = await _fbAuth.createUserWithEmailAndPassword(
-          email: trimmedAdminEmail,
-          password: adminPassword,
-        );
-        if (credential.user != null) {
-          firebaseUid = credential.user!.uid;
-          await credential.user!.updateDisplayName(trimmedAdminName);
+        final auth = _fbAuth;
+        if (auth != null) {
+          final credential = await auth.createUserWithEmailAndPassword(
+            email: trimmedAdminEmail,
+            password: adminPassword,
+          );
+          if (credential.user != null) {
+            firebaseUid = credential.user!.uid;
+            await credential.user!.updateDisplayName(trimmedAdminName);
+          }
         }
       } on fb.FirebaseAuthException catch (e) {
         // If email already in use or offline, log warning and use fallback UID
         if (e.code == 'email-already-in-use') {
           try {
-            final loginCred = await _fbAuth.signInWithEmailAndPassword(
-              email: trimmedAdminEmail,
-              password: adminPassword,
-            );
-            if (loginCred.user != null) {
-              firebaseUid = loginCred.user!.uid;
+            final auth = _fbAuth;
+            if (auth != null) {
+              final loginCred = await auth.signInWithEmailAndPassword(
+                email: trimmedAdminEmail,
+                password: adminPassword,
+              );
+              if (loginCred.user != null) {
+                firebaseUid = loginCred.user!.uid;
+              }
             }
           } catch (_) {}
         }

@@ -113,7 +113,10 @@ class AttendanceCubit extends Cubit<AttendanceState> {
             );
       final workSites = _db.getWorkSites();
 
-      if (step == WorkflowStep.officeCheckIn || step == WorkflowStep.officeCheckOut) {
+      bool isGeofenceValid = true;
+
+      // Geofence validation is ONLY enforced for the initial starting check-in (officeCheckIn)
+      if (step == WorkflowStep.officeCheckIn) {
         if (!emp.useDefaultOffice && emp.assignedOfficeId != null) {
           final customOfficeMatches = offices.where((o) => o.id == emp.assignedOfficeId);
           if (customOfficeMatches.isNotEmpty) {
@@ -137,39 +140,48 @@ class AttendanceCubit extends Cubit<AttendanceState> {
           targetLng = defaultOffice.longitude;
           allowedRadius = defaultOffice.geofenceRadiusMeters;
         }
-      } else {
-        final targetSite = workSites.isNotEmpty ? workSites.first : null;
-        if (targetSite != null) {
-          targetLat = targetSite.latitude;
-          targetLng = targetSite.longitude;
-          allowedRadius = targetSite.radiusMeters;
-        } else {
-          targetLat = defaultOffice.latitude;
-          targetLng = defaultOffice.longitude;
-          allowedRadius = defaultOffice.geofenceRadiusMeters;
+
+        double distance = GeofenceCalculator.calculateDistanceInMeters(
+          location.latitude,
+          location.longitude,
+          targetLat,
+          targetLng,
+        );
+
+        isGeofenceValid = distance <= allowedRadius;
+
+        if (!isGeofenceValid) {
+          emit(GeofenceViolationError(
+            message: 'You are outside your assigned office location geofence.',
+            distanceMeters: distance,
+            allowedRadiusMeters: allowedRadius,
+          ));
+          return;
         }
       }
 
-      // 3. Perform Geofence Validation
-      double distance = GeofenceCalculator.calculateDistanceInMeters(
-        location.latitude,
-        location.longitude,
-        targetLat,
-        targetLng,
-      );
-
-      bool isGeofenceValid = distance <= allowedRadius;
-
-      if (!isGeofenceValid) {
-        emit(GeofenceViolationError(
-          message: 'You are outside the permitted attendance area.',
-          distanceMeters: distance,
-          allowedRadiusMeters: allowedRadius,
-        ));
-        return;
+      // 4. Resolve Location Place Name & GPS Coordinates
+      String resolvedLocationName = '';
+      if (siteName != null && siteName.trim().isNotEmpty) {
+        resolvedLocationName = siteName.trim();
+      } else if (step == WorkflowStep.officeCheckIn || step == WorkflowStep.officeCheckOut) {
+        if (!emp.useDefaultOffice && emp.assignedOfficeId != null) {
+          final customOfficeMatches = offices.where((o) => o.id == emp.assignedOfficeId);
+          resolvedLocationName = customOfficeMatches.isNotEmpty
+              ? customOfficeMatches.first.name
+              : defaultOffice.name;
+        } else {
+          resolvedLocationName = defaultOffice.name;
+        }
+      } else {
+        resolvedLocationName = workSites.isNotEmpty ? workSites.first.siteName : 'Work Site';
       }
 
-      // 4. Create & Persist Attendance Record
+      final String formattedAddress = location.address.isNotEmpty
+          ? location.address
+          : await LocationService.getAddressFromCoordinates(location.latitude, location.longitude);
+
+      // 5. Create & Persist Attendance Record
       final record = AttendanceRecord(
         id: _uuid.v4(),
         employeeId: emp.id,
@@ -179,7 +191,7 @@ class AttendanceCubit extends Cubit<AttendanceState> {
         latitude: location.latitude,
         longitude: location.longitude,
         gpsAccuracy: location.accuracy,
-        address: location.address,
+        address: formattedAddress,
         deviceId: 'device-hw-${user.id}',
         photoBase64: cameraResult?.base64Image ?? '',
         isGeofenceValid: isGeofenceValid,
@@ -189,7 +201,7 @@ class AttendanceCubit extends Cubit<AttendanceState> {
         workSiteId: (step == WorkflowStep.siteCheckIn || step == WorkflowStep.siteCheckOut)
             ? (workSites.isNotEmpty ? workSites.first.id : null)
             : null,
-        siteName: siteName,
+        siteName: resolvedLocationName,
         syncStatus: SyncStatus.pending,
       );
 

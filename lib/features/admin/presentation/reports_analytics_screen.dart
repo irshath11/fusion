@@ -6,6 +6,7 @@ import '../../../database/local_database_service.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_enums.dart';
 import '../../../core/services/pdf_export_service.dart';
+import '../../../core/services/location_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/utils/timesheet_calculator.dart';
 import '../../admin/domain/employee_entity.dart';
@@ -1084,7 +1085,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         ),
                         const Divider(height: 20),
 
-                        // Location Details
+                        // Location Details: Map Place Location Name & GPS Coordinates
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -1096,14 +1097,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    r.address,
+                                    LocationService.resolvePlaceName(r.latitude, r.longitude),
                                     style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600),
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    'GPS: ${r.latitude.toStringAsFixed(6)}, ${r.longitude.toStringAsFixed(6)} (Accuracy: ${r.gpsAccuracy.toStringAsFixed(1)}m)',
+                                    'GPS Coordinates: ${r.latitude.toStringAsFixed(6)}, ${r.longitude.toStringAsFixed(6)} (Accuracy: ${r.gpsAccuracy.toStringAsFixed(1)}m)',
                                     style: TextStyle(
                                         fontSize: 11,
                                         color: Colors.grey.shade600),
@@ -1389,7 +1390,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               ),
               const SizedBox(height: 2),
               Text(
-                'Location: ${record.address}',
+                'Location: ${(record.siteName != null && record.siteName!.trim().isNotEmpty) ? record.siteName!.trim() : (record.workflowStep == WorkflowStep.officeCheckIn || record.workflowStep == WorkflowStep.officeCheckOut ? "Main Office" : "Work Site")} (${record.latitude.toStringAsFixed(6)}, ${record.longitude.toStringAsFixed(6)})',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                     fontSize: 11, color: AppColors.textSecondaryLight),

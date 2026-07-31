@@ -311,10 +311,10 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.18) : color.withOpacity(0.08),
+          color: isSelected ? color.withValues(alpha: 0.18) : color.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isSelected ? color : color.withOpacity(0.2),
+            color: isSelected ? color : color.withValues(alpha: 0.2),
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -409,7 +409,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: entry.isCompleted
-                        ? AppColors.success.withOpacity(0.1)
+                        ? AppColors.success.withValues(alpha: 0.1)
                         : Colors.grey.shade200,
                     borderRadius: BorderRadius.circular(6),
                   ),
@@ -453,7 +453,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
+                    color: AppColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Column(
@@ -641,10 +641,10 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.success.withOpacity(0.1),
+                    color: AppColors.success.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                     border:
-                        Border.all(color: AppColors.success.withOpacity(0.3)),
+                        Border.all(color: AppColors.success.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -693,9 +693,9 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

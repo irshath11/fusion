@@ -19,7 +19,7 @@ class OfflineBanner extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      color: AppColors.warning.withOpacity(0.9),
+      color: AppColors.warning.withValues(alpha: 0.9),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [

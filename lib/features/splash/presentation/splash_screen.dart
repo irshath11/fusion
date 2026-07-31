@@ -21,6 +21,8 @@ class _SplashScreenState extends State<SplashScreen>
   late Animation<Offset> _slideAnimation;
   late Animation<double> _textFadeAnimation;
 
+  Timer? _timer;
+
   @override
   void initState() {
     super.initState();
@@ -72,8 +74,8 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    // Navigate to RootRoleRouter after 3.2 seconds
-    Timer(const Duration(milliseconds: 3400), () {
+    // Navigate to RootRoleRouter after 3.4 seconds
+    _timer = Timer(const Duration(milliseconds: 3400), () {
       if (mounted) {
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
@@ -94,6 +96,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
+    _timer?.cancel();
     _controller.dispose();
     super.dispose();
   }

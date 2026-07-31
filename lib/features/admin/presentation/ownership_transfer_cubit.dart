@@ -34,7 +34,13 @@ class OwnershipTransferError extends OwnershipTransferState {
 class OwnershipTransferCubit extends Cubit<OwnershipTransferState> {
   final LocalDatabaseService _db = LocalDatabaseService();
   final SupabaseService _supabase = SupabaseService();
-  final fb.FirebaseAuth _fbAuth = fb.FirebaseAuth.instance;
+  fb.FirebaseAuth? get _fbAuth {
+    try {
+      return fb.FirebaseAuth.instance;
+    } catch (_) {
+      return null;
+    }
+  }
 
   OwnershipTransferCubit() : super(OwnershipTransferInitial());
 
@@ -46,7 +52,7 @@ class OwnershipTransferCubit extends Cubit<OwnershipTransferState> {
     emit(OwnershipTransferLoading());
     try {
       // 1. Identity Verification: Re-authenticate Super Admin with password
-      final currentUser = _fbAuth.currentUser;
+      final currentUser = _fbAuth?.currentUser;
       if (currentUser != null && currentUser.email != null) {
         try {
           final cred = fb.EmailAuthProvider.credential(

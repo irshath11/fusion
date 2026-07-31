@@ -39,12 +39,18 @@ class AuthError extends AuthState {
 class AuthCubit extends Cubit<AuthState> {
   final LocalDatabaseService _db = LocalDatabaseService();
   final SupabaseService _supabase = SupabaseService();
-  final fb.FirebaseAuth _fbAuth = fb.FirebaseAuth.instance;
+  fb.FirebaseAuth? get _fbAuth {
+    try {
+      return fb.FirebaseAuth.instance;
+    } catch (_) {
+      return null;
+    }
+  }
 
   AuthCubit() : super(AuthInitial());
 
   Future<void> checkAuthStatus() async {
-    final firebaseUser = _fbAuth.currentUser;
+    final firebaseUser = _fbAuth?.currentUser;
     final currentUser = _db.currentUser;
 
     if (currentUser != null) {
@@ -73,7 +79,7 @@ class AuthCubit extends Cubit<AuthState> {
             await _supabase.fetchUserByFirebaseUid(firebaseUser.uid);
         if (remoteUser != null) {
           if (!remoteUser.isActive) {
-            await _fbAuth.signOut();
+            await _fbAuth?.signOut();
             _db.logout();
             emit(AuthError(
                 'Your account has been disabled. Please contact your Administrator.'));
@@ -103,20 +109,20 @@ class AuthCubit extends Cubit<AuthState> {
 
     try {
       // 1. Authenticate with Firebase Authentication
-      final credential = await _fbAuth.signInWithEmailAndPassword(
+      final credential = await _fbAuth?.signInWithEmailAndPassword(
         email: trimmedEmail,
         password: trimmedPassword,
       );
 
-      if (credential.user != null) {
-        final fbUid = credential.user!.uid;
+      if (credential?.user != null) {
+        final fbUid = credential!.user!.uid;
 
         // Fetch Supabase User Profile & Role
         final supabaseUser = await _supabase.fetchUserByFirebaseUid(fbUid);
 
         if (supabaseUser != null) {
           if (!supabaseUser.isActive) {
-            await _fbAuth.signOut();
+            await _fbAuth?.signOut();
             emit(AuthError(
                 'Your account is disabled. Please contact your organization administrator.'));
             return;
@@ -137,7 +143,7 @@ class AuthCubit extends Cubit<AuthState> {
         final fallbackUser = UserEntity(
           id: fbUid,
           firebaseUid: fbUid,
-          email: credential.user!.email ?? trimmedEmail,
+          email: credential.user?.email ?? trimmedEmail,
           fullName:
               credential.user!.displayName ?? trimmedEmail.split('@').first,
           role: role,
@@ -261,7 +267,7 @@ class AuthCubit extends Cubit<AuthState> {
     required String newPassword,
   }) async {
     try {
-      final user = _fbAuth.currentUser;
+      final user = _fbAuth?.currentUser;
       if (user != null && user.email != null) {
         final cred = fb.EmailAuthProvider.credential(
           email: user.email!,
@@ -292,7 +298,7 @@ class AuthCubit extends Cubit<AuthState> {
 
   void logout() async {
     try {
-      await _fbAuth.signOut();
+      await _fbAuth?.signOut();
     } catch (_) {}
     _db.logout();
     emit(Unauthenticated());
