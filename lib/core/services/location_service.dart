@@ -1,3 +1,4 @@
+import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
 class LocationDataResult {
@@ -15,6 +16,60 @@ class LocationDataResult {
 }
 
 class LocationService {
+  /// Converts coordinates into an exact human-readable street address via native Geocoder.
+  /// Falls back to local zone presets if device is offline or Geocoder fails.
+  static Future<String> getAddressFromCoordinates(double lat, double lng) async {
+    try {
+      final placemarks = await placemarkFromCoordinates(lat, lng);
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+        final List<String> addressParts = [];
+
+        if (place.name != null &&
+            place.name!.trim().isNotEmpty &&
+            place.name != place.street) {
+          addressParts.add(place.name!.trim());
+        }
+        if (place.street != null && place.street!.trim().isNotEmpty) {
+          addressParts.add(place.street!.trim());
+        }
+        if (place.subLocality != null && place.subLocality!.trim().isNotEmpty) {
+          addressParts.add(place.subLocality!.trim());
+        }
+        if (place.locality != null && place.locality!.trim().isNotEmpty) {
+          addressParts.add(place.locality!.trim());
+        }
+        if (place.administrativeArea != null && place.administrativeArea!.trim().isNotEmpty) {
+          addressParts.add(place.administrativeArea!.trim());
+        }
+
+        if (addressParts.isNotEmpty) {
+          final joined = addressParts.toSet().join(', ');
+          return '$joined (GPS: ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)})';
+        }
+      }
+    } catch (_) {
+      // Offline fallback or platform geocoder failure
+    }
+
+    final fallbackArea = resolvePlaceName(lat, lng);
+    return '$fallbackArea (GPS: ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)})';
+  }
+
+  /// Resolves physical zone/area place name for presets or offline fallback
+  static String resolvePlaceName(double lat, double lng) {
+    if ((lat - 24.3644).abs() < 0.1 && (lng - 54.5029).abs() < 0.1) {
+      return 'Musaffah Industrial M12, Abu Dhabi';
+    }
+    if ((lat - 25.1972).abs() < 0.1 && (lng - 55.2744).abs() < 0.1) {
+      return 'Business Bay Operations, Dubai';
+    }
+    if ((lat - 25.0772).abs() < 0.1 && (lng - 55.1332).abs() < 0.1) {
+      return 'Dubai Marina Coastline, Dubai';
+    }
+    return 'As Sakeenah 2 St, Musaffah M12, Abu Dhabi';
+  }
+
   /// Fetches current GPS location with high reliability & fast hardware fallback
   static Future<LocationDataResult> getCurrentLocation() async {
     try {
@@ -36,47 +91,42 @@ class LocationService {
 
       // 2. Check if location services are enabled on device
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        // Attempt to fetch last known position if GPS toggled off
-        Position? lastPos = await Geolocator.getLastKnownPosition();
-        if (lastPos != null) {
-          return LocationDataResult(
-            latitude: lastPos.latitude,
-            longitude: lastPos.longitude,
-            accuracy: lastPos.accuracy,
-            address:
-                '${lastPos.latitude.toStringAsFixed(4)}, ${lastPos.longitude.toStringAsFixed(4)} (Last Known GPS)',
-          );
-        }
-      }
+      Position? position;
 
-      // 3. Try acquiring instant last known position first
-      Position? position = await Geolocator.getLastKnownPosition();
+      if (serviceEnabled) {
+        // 3. Try acquiring instant last known position first
+        position = await Geolocator.getLastKnownPosition();
 
-      // 4. Try live GPS acquisition with fallback accuracy
-      try {
-        position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-          timeLimit: const Duration(seconds: 6),
-        );
-      } catch (_) {
+        // 4. Try live GPS acquisition with fallback accuracy
         try {
           position = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.medium,
-            timeLimit: const Duration(seconds: 5),
+            desiredAccuracy: LocationAccuracy.high,
+            timeLimit: const Duration(seconds: 6),
           );
         } catch (_) {
-          // Keep last known position if current position times out
+          try {
+            position = await Geolocator.getCurrentPosition(
+              desiredAccuracy: LocationAccuracy.medium,
+              timeLimit: const Duration(seconds: 5),
+            );
+          } catch (_) {
+            // Keep last known position if current position times out
+          }
         }
+      } else {
+        position = await Geolocator.getLastKnownPosition();
       }
 
       if (position != null) {
+        final address = await getAddressFromCoordinates(
+          position.latitude,
+          position.longitude,
+        );
         return LocationDataResult(
           latitude: position.latitude,
           longitude: position.longitude,
           accuracy: position.accuracy,
-          address:
-              '${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)} (Live GPS)',
+          address: address,
         );
       }
 

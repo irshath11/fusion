@@ -10,6 +10,7 @@ import '../../../core/widgets/offline_banner.dart';
 import '../../attendance/presentation/attendance_cubit.dart';
 import '../../attendance/presentation/camera_capture_modal.dart';
 import '../../attendance/presentation/site_name_dialog.dart';
+import '../../../core/services/location_service.dart';
 import '../../sync/data/sync_engine.dart';
 import '../../auth/presentation/auth_cubit.dart';
 import '../../auth/presentation/login_screen.dart';
@@ -536,6 +537,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                     }
                   },
                   builder: (context, state) {
+                    final isDark = Theme.of(context).brightness == Brightness.dark;
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -551,7 +553,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                       padding: const EdgeInsets.all(12),
                                       decoration: BoxDecoration(
                                         color:
-                                            AppColors.primary.withOpacity(0.1),
+                                            AppColors.primary.withValues(alpha: 0.1),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: const Icon(
@@ -626,7 +628,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                         const SizedBox(height: 10),
                         if (currentStep == WorkflowStep.officeCheckIn) ...[
                           Card(
-                            color: AppColors.primary.withOpacity(0.05),
+                            color: isDark ? AppColors.surfaceDark : AppColors.primary.withValues(alpha: 0.05),
                             child: Padding(
                               padding: const EdgeInsets.all(16.0),
                               child: Column(
@@ -664,10 +666,10 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                           ),
                         ] else if (currentStep == WorkflowStep.siteCheckOut) ...[
                           Card(
-                            color: Colors.orange.shade50,
+                            color: isDark ? AppColors.surfaceDark : Colors.orange.shade50,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
-                              side: BorderSide(color: Colors.orange.shade200),
+                              side: BorderSide(color: isDark ? AppColors.warning : Colors.orange.shade300),
                             ),
                             child: Padding(
                               padding: const EdgeInsets.all(16.0),
@@ -681,15 +683,22 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                       Expanded(
                                         child: Text(
                                           'Currently at: ${_db.getActiveSiteNameToday(user?.id ?? user?.firebaseUid) ?? "Work Site"}',
-                                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                                          style: TextStyle(
+                                            fontSize: 17,
+                                            fontWeight: FontWeight.bold,
+                                            color: isDark ? AppColors.textPrimaryDark : Colors.orange.shade900,
+                                          ),
                                         ),
                                       ),
                                     ],
                                   ),
                                   const SizedBox(height: 8),
-                                  const Text(
+                                  Text(
                                     'Complete current site work session to log site check-out time.',
-                                    style: TextStyle(fontSize: 13, color: AppColors.textSecondaryLight),
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                    ),
                                   ),
                                   const SizedBox(height: 16),
                                   AppButton(
@@ -706,7 +715,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                           ),
                         ] else if (currentStep == WorkflowStep.siteCheckIn) ...[
                           Card(
-                            color: AppColors.primary.withOpacity(0.05),
+                            color: isDark ? AppColors.surfaceDark : AppColors.primary.withValues(alpha: 0.05),
                             child: Padding(
                               padding: const EdgeInsets.all(16.0),
                               child: Column(
@@ -799,7 +808,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: AppColors.success.withOpacity(0.1),
+                              color: AppColors.success.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: const Row(
@@ -845,11 +854,12 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                             itemBuilder: (context, index) {
                               final record = userTodayRecords[index];
                               final formattedTime = DateFormat('hh:mm a').format(record.eventTimestamp.toLocal());
-                              final stepTitle = record.workflowStep == WorkflowStep.siteCheckIn
-                                  ? 'Site Check-In (${record.siteName ?? "Site"})'
-                                  : record.workflowStep == WorkflowStep.siteCheckOut
-                                      ? 'Site Check-Out (${record.siteName ?? "Site"})'
-                                      : record.workflowStep.displayName;
+                              final hasSite = (record.workflowStep == WorkflowStep.siteCheckIn || record.workflowStep == WorkflowStep.siteCheckOut) &&
+                                  record.siteName != null &&
+                                  record.siteName!.trim().isNotEmpty;
+                              final stepTitle = hasSite
+                                  ? '${record.workflowStep.displayName} (${record.siteName!.trim()})'
+                                  : record.workflowStep.displayName;
 
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 10),
@@ -883,7 +893,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                               Container(
                                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                                 decoration: BoxDecoration(
-                                                  color: AppColors.primary.withOpacity(0.1),
+                                                  color: AppColors.primary.withValues(alpha: 0.1),
                                                   borderRadius: BorderRadius.circular(6),
                                                 ),
                                                 child: Text(
@@ -899,9 +909,14 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                           ),
                                           const SizedBox(height: 3),
                                           Text(
-                                            record.address.isNotEmpty ? record.address : 'Location Logged',
-                                            style: const TextStyle(fontSize: 12, color: AppColors.textSecondaryLight),
-                                            maxLines: 1,
+                                            record.address.isNotEmpty
+                                                ? record.address
+                                                : '${LocationService.resolvePlaceName(record.latitude, record.longitude)} (GPS: ${record.latitude.toStringAsFixed(6)}, ${record.longitude.toStringAsFixed(6)})',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                            ),
+                                            maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ],
