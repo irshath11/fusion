@@ -295,7 +295,7 @@ class _SplashScreenState extends State<SplashScreen>
                           ),
                           const SizedBox(height: 16),
                           const Text(
-                            'v1.0.0 • Fusion Maintenance System',
+                            'v1.0.0 • Fusion 360',
                             style: TextStyle(
                               color: Colors.white38,
                               fontSize: 11,

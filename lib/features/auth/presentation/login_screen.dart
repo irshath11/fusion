@@ -100,7 +100,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       const SizedBox(height: 20),
                       Center(
                         child: Text(
-                          'Workforce Tracker',
+                          'Fusion 360',
                           style: TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,

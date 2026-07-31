@@ -46,7 +46,7 @@ class WorkforceApp extends StatelessWidget {
         BlocProvider<AttendanceCubit>(create: (context) => AttendanceCubit()),
       ],
       child: MaterialApp(
-        title: 'Workforce Tracking System',
+        title: 'Fusion 360',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,

@@ -1,5 +1,5 @@
 class AppConfig {
-  static const String appName = 'Workforce Tracker';
+  static const String appName = 'Fusion 360';
   static const String appVersion = '1.0.0';
 
   // Environment Flags & Configuration
