@@ -51,6 +51,8 @@ dependencies:
 
   # Supabase Backend Services
   supabase_flutter: ^2.8.3
+  flutter_map: ^8.3.1
+  latlong2: ^0.10.1
 
 flutter:
   uses-material-design: true
