@@ -80,19 +80,27 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             title: const Row(
               children: [
-                Icon(Icons.wifi_off_rounded, color: AppColors.warning),
+                Icon(Icons.wifi_off_rounded, color: AppColors.warning, size: 24),
                 SizedBox(width: 10),
-                Text('No Internet Connection'),
+                Expanded(
+                  child: Text(
+                    'No Internet Connection',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                  ),
+                ),
               ],
             ),
-            content: const Text(
-              'Unable to synchronize attendance records. Please connect to a Wi-Fi or mobile data network and try again.',
-              style: TextStyle(fontSize: 14),
+            content: const SingleChildScrollView(
+              child: Text(
+                'Unable to synchronize attendance records. Please connect to a Wi-Fi or mobile data network and try again.',
+                style: TextStyle(fontSize: 14),
+              ),
             ),
+            actionsAlignment: MainAxisAlignment.end,
+            actionsOverflowDirection: VerticalDirection.down,
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -102,12 +110,13 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
                 onPressed: () {
                   Navigator.pop(ctx);
                   _manualSync();
                 },
-                icon: const Icon(Icons.refresh_rounded, size: 18),
+                icon: const Icon(Icons.refresh_rounded, size: 16),
                 label: const Text('Retry Sync'),
               ),
             ],
