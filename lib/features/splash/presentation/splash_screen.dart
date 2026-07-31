@@ -34,8 +34,14 @@ class _SplashScreenState extends State<SplashScreen>
 
     // Logo Scale (0.5 -> 1.05 -> 1.0)
     _scaleAnimation = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween<double>(begin: 0.4, end: 1.08).chain(CurveTween(curve: Curves.easeOutBack)), weight: 70),
-      TweenSequenceItem(tween: Tween<double>(begin: 1.08, end: 1.0).chain(CurveTween(curve: Curves.easeInOut)), weight: 30),
+      TweenSequenceItem(
+          tween: Tween<double>(begin: 0.4, end: 1.08)
+              .chain(CurveTween(curve: Curves.easeOutBack)),
+          weight: 70),
+      TweenSequenceItem(
+          tween: Tween<double>(begin: 1.08, end: 1.0)
+              .chain(CurveTween(curve: Curves.easeInOut)),
+          weight: 30),
     ]).animate(_controller);
 
     // Fade In (0.0 -> 1.0)
@@ -82,7 +88,8 @@ class _SplashScreenState extends State<SplashScreen>
             transitionDuration: const Duration(milliseconds: 700),
             pageBuilder: (context, animation, secondaryAnimation) =>
                 const RootRoleRouter(),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
               return FadeTransition(
                 opacity: animation,
                 child: child,
@@ -154,7 +161,8 @@ class _SplashScreenState extends State<SplashScreen>
                                 borderRadius: BorderRadius.circular(24),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: AppColors.primary.withValues(alpha: 0.35),
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.35),
                                     blurRadius: 30,
                                     spreadRadius: 4,
                                     offset: const Offset(0, 10),
@@ -224,10 +232,12 @@ class _SplashScreenState extends State<SplashScreen>
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 16, vertical: 6),
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(alpha: 0.15),
+                                color:
+                                    AppColors.primary.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(30),
                                 border: Border.all(
-                                  color: AppColors.primary.withValues(alpha: 0.3),
+                                  color:
+                                      AppColors.primary.withValues(alpha: 0.3),
                                 ),
                               ),
                               child: Row(
@@ -240,7 +250,7 @@ class _SplashScreenState extends State<SplashScreen>
                                   ),
                                   SizedBox(width: 8),
                                   Text(
-                                    'Enterprise Workforce Operations',
+                                    'Manages For You',
                                     style: TextStyle(
                                       color: AppColors.primaryLight,
                                       fontSize: 13,

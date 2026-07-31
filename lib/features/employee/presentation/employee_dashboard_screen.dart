@@ -626,205 +626,198 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                               ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 10),
-                        if (currentStep == WorkflowStep.officeCheckIn) ...[
-                          Card(
-                            color: isDark ? AppColors.surfaceDark : AppColors.primary.withValues(alpha: 0.05),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Row(
-                                    children: [
-                                      Icon(Icons.business_rounded, color: AppColors.primary),
-                                      SizedBox(width: 10),
-                                      Expanded(
-                                        child: Text(
-                                          'Start Work Day - Office Check-In',
-                                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  const Text(
-                                    'Check in to start your workday. Live selfie photo & GPS location required.',
-                                    style: TextStyle(fontSize: 13, color: AppColors.textSecondaryLight),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  AppButton(
-                                    text: state is AttendanceProcessing
-                                        ? 'Acquiring GPS & Logging...'
-                                        : 'Execute Office Check-In',
-                                    isLoading: state is AttendanceProcessing,
-                                    icon: Icons.camera_alt_rounded,
-                                    onPressed: () => _handleAttendanceStep(WorkflowStep.officeCheckIn),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ] else if (currentStep == WorkflowStep.siteCheckOut) ...[
-                          Card(
-                            color: isDark ? AppColors.surfaceDark : Colors.orange.shade50,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              side: BorderSide(color: isDark ? AppColors.warning : Colors.orange.shade300),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.location_on_rounded, color: Colors.orange),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Text(
-                                          'Currently at: ${_db.getActiveSiteNameToday(user?.id ?? user?.firebaseUid) ?? "Work Site"}',
-                                          style: TextStyle(
-                                            fontSize: 17,
-                                            fontWeight: FontWeight.bold,
-                                            color: isDark ? AppColors.textPrimaryDark : Colors.orange.shade900,
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 350),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          child: KeyedSubtree(
+                            key: ValueKey('workflow_step_$currentStep'),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (currentStep == WorkflowStep.officeCheckIn) ...[
+                                  Card(
+                                    color: isDark ? AppColors.surfaceDark : AppColors.primary.withValues(alpha: 0.05),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16.0),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Row(
+                                            children: [
+                                              Icon(Icons.business_rounded, color: AppColors.primary),
+                                              SizedBox(width: 10),
+                                              Expanded(
+                                                child: Text(
+                                                  'Start Work Day - Office Check-In',
+                                                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                        ),
+                                          const SizedBox(height: 8),
+                                          const Text(
+                                            'Check in to start your workday. Live selfie photo & GPS location required.',
+                                            style: TextStyle(fontSize: 13, color: AppColors.textSecondaryLight),
+                                          ),
+                                          const SizedBox(height: 16),
+                                          AppButton(
+                                            text: state is AttendanceProcessing
+                                                ? 'Acquiring GPS & Logging...'
+                                                : 'Execute Office Check-In',
+                                            isLoading: state is AttendanceProcessing,
+                                            icon: Icons.camera_alt_rounded,
+                                            onPressed: () => _handleAttendanceStep(WorkflowStep.officeCheckIn),
+                                          ),
+                                        ],
                                       ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Complete current site work session to log site check-out time.',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                     ),
                                   ),
-                                  const SizedBox(height: 16),
-                                  AppButton(
-                                    text: state is AttendanceProcessing
-                                        ? 'Acquiring GPS & Logging...'
-                                        : 'Check-Out from Site',
-                                    isLoading: state is AttendanceProcessing,
-                                    icon: Icons.logout_rounded,
-                                    onPressed: () => _handleAttendanceStep(WorkflowStep.siteCheckOut),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ] else if (currentStep == WorkflowStep.siteCheckIn) ...[
-                          Card(
-                            color: isDark ? AppColors.surfaceDark : AppColors.primary.withValues(alpha: 0.05),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Work Day in Progress',
-                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  const Text(
-                                    'Check in to your next job site or perform Final Office Check-Out to end your workday.',
-                                    style: TextStyle(fontSize: 13, color: AppColors.textSecondaryLight),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: ElevatedButton.icon(
-                                          onPressed: state is AttendanceProcessing
-                                              ? null
-                                              : () => _handleAttendanceStep(WorkflowStep.siteCheckIn),
-                                          icon: state is AttendanceProcessing
-                                              ? const SizedBox(
-                                                  width: 16,
-                                                  height: 16,
-                                                  child: CircularProgressIndicator(
-                                                    strokeWidth: 2,
-                                                    color: Colors.white,
+                                ] else if (currentStep == WorkflowStep.siteCheckOut) ...[
+                                  Card(
+                                    color: isDark ? AppColors.surfaceDark : Colors.orange.shade50,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      side: BorderSide(color: isDark ? AppColors.warning : Colors.orange.shade300),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16.0),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              const Icon(Icons.location_on_rounded, color: Colors.orange),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Text(
+                                                  'Currently at: ${_db.getActiveSiteNameToday(user?.id ?? user?.firebaseUid) ?? "Work Site"}',
+                                                  style: TextStyle(
+                                                    fontSize: 17,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: isDark ? AppColors.textPrimaryDark : Colors.orange.shade900,
                                                   ),
-                                                )
-                                              : const Icon(Icons.add_location_alt_rounded, size: 18),
-                                          label: FittedBox(
-                                            fit: BoxFit.scaleDown,
-                                            child: Text(
-                                              state is AttendanceProcessing
-                                                  ? 'Fetching GPS...'
-                                                  : 'Check-In Site',
-                                              style: const TextStyle(fontWeight: FontWeight.bold),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'Complete current site work session to log site check-out time.',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                             ),
                                           ),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: AppColors.primary,
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(vertical: 14),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                          const SizedBox(height: 16),
+                                          AppButton(
+                                            text: state is AttendanceProcessing
+                                                ? 'Acquiring GPS & Logging...'
+                                                : 'Check-Out from Site',
+                                            isLoading: state is AttendanceProcessing,
+                                            icon: Icons.logout_rounded,
+                                            onPressed: () => _handleAttendanceStep(WorkflowStep.siteCheckOut),
                                           ),
-                                        ),
+                                        ],
                                       ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: OutlinedButton.icon(
-                                          onPressed: state is AttendanceProcessing
-                                              ? null
-                                              : () => _handleAttendanceStep(WorkflowStep.officeCheckOut),
-                                          icon: state is AttendanceProcessing
-                                              ? SizedBox(
-                                                  width: 16,
-                                                  height: 16,
-                                                  child: CircularProgressIndicator(
-                                                    strokeWidth: 2,
-                                                    color: Colors.red.shade700,
+                                    ),
+                                  ),
+                                ] else if (currentStep == WorkflowStep.siteCheckIn) ...[
+                                  Card(
+                                    color: isDark ? AppColors.surfaceDark : AppColors.primary.withValues(alpha: 0.05),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16.0),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Work Day in Progress',
+                                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          const Text(
+                                            'Check in to your next job site or perform Final Office Check-Out to end your workday.',
+                                            style: TextStyle(fontSize: 13, color: AppColors.textSecondaryLight),
+                                          ),
+                                          const SizedBox(height: 16),
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                flex: 6,
+                                                child: AppButton(
+                                                  text: state is AttendanceProcessing
+                                                      ? 'Logging...'
+                                                      : 'Check-In to Site',
+                                                  isLoading: state is AttendanceProcessing,
+                                                  icon: Icons.add_location_alt_rounded,
+                                                  onPressed: () => _handleAttendanceStep(WorkflowStep.siteCheckIn),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                flex: 5,
+                                                child: OutlinedButton.icon(
+                                                  onPressed: state is AttendanceProcessing
+                                                      ? null
+                                                      : () => _handleAttendanceStep(WorkflowStep.officeCheckOut),
+                                                  icon: state is AttendanceProcessing
+                                                      ? SizedBox(
+                                                          width: 16,
+                                                          height: 16,
+                                                          child: CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                            color: Colors.red.shade700,
+                                                          ),
+                                                        )
+                                                      : const Icon(Icons.no_meeting_room_rounded, size: 18),
+                                                  label: FittedBox(
+                                                    fit: BoxFit.scaleDown,
+                                                    child: Text(
+                                                      state is AttendanceProcessing
+                                                          ? 'Processing...'
+                                                          : 'Final Day End',
+                                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                                    ),
                                                   ),
-                                                )
-                                              : const Icon(Icons.no_meeting_room_rounded, size: 18),
-                                          label: FittedBox(
-                                            fit: BoxFit.scaleDown,
-                                            child: Text(
-                                              state is AttendanceProcessing
-                                                  ? 'Processing...'
-                                                  : 'Final Day End',
-                                              style: const TextStyle(fontWeight: FontWeight.bold),
-                                            ),
+                                                  style: OutlinedButton.styleFrom(
+                                                    foregroundColor: Colors.red.shade700,
+                                                    side: BorderSide(color: Colors.red.shade400),
+                                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                          style: OutlinedButton.styleFrom(
-                                            foregroundColor: Colors.red.shade700,
-                                            side: BorderSide(color: Colors.red.shade400),
-                                            padding: const EdgeInsets.symmetric(vertical: 14),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ] else ...[
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.success.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Row(
+                                      children: [
+                                        Icon(Icons.check_circle_rounded, color: AppColors.success, size: 28),
+                                        SizedBox(width: 12),
+                                        Expanded(
+                                          child: Text(
+                                            'Daily attendance workflow fully completed. Thank you!',
+                                            style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.success),
                                           ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
+                                      ],
+                                    ),
+                                  )
                                 ],
-                              ),
-                            ),
-                          ),
-                        ] else ...[
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: AppColors.success.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Row(
-                              children: [
-                                Icon(Icons.check_circle_rounded, color: AppColors.success, size: 28),
-                                SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    'Daily attendance workflow fully completed. Thank you!',
-                                    style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.success),
-                                  ),
-                                ),
                               ],
                             ),
-                          )
-                        ],
+                          ),
+                        ),
 
                         const SizedBox(height: 24),
                         // Dynamic Workday Stepper Timeline Log
