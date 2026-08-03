@@ -18,7 +18,8 @@ class LocationDataResult {
 class LocationService {
   /// Converts coordinates into an exact human-readable street address via native Geocoder.
   /// Falls back to local zone presets if device is offline or Geocoder fails.
-  static Future<String> getAddressFromCoordinates(double lat, double lng) async {
+  static Future<String> getAddressFromCoordinates(
+      double lat, double lng) async {
     try {
       final placemarks = await placemarkFromCoordinates(lat, lng);
       if (placemarks.isNotEmpty) {
@@ -39,7 +40,8 @@ class LocationService {
         if (place.locality != null && place.locality!.trim().isNotEmpty) {
           addressParts.add(place.locality!.trim());
         }
-        if (place.administrativeArea != null && place.administrativeArea!.trim().isNotEmpty) {
+        if (place.administrativeArea != null &&
+            place.administrativeArea!.trim().isNotEmpty) {
           addressParts.add(place.administrativeArea!.trim());
         }
 
@@ -58,7 +60,7 @@ class LocationService {
 
   /// Resolves physical zone/area place name for presets or offline fallback
   static String resolvePlaceName(double lat, double lng) {
-    if ((lat - 24.3644).abs() < 0.1 && (lng - 54.5029).abs() < 0.1) {
+    if ((lat - 24.365500).abs() < 0.1 && (lng - 54.500531).abs() < 0.1) {
       return 'Musaffah Industrial M12, Abu Dhabi';
     }
     if ((lat - 25.1972).abs() < 0.1 && (lng - 55.2744).abs() < 0.1) {
@@ -82,8 +84,8 @@ class LocationService {
       if (permission == LocationPermission.deniedForever ||
           permission == LocationPermission.denied) {
         return LocationDataResult(
-          latitude: 24.3644,
-          longitude: 54.5029,
+          latitude: 24.365500,
+          longitude: 54.500531,
           accuracy: 50.0,
           address: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi',
         );
@@ -132,15 +134,15 @@ class LocationService {
 
       // Fallback if hardware GPS fix is unavailable
       return LocationDataResult(
-        latitude: 24.3644,
-        longitude: 54.5029,
+        latitude: 24.365500,
+        longitude: 54.500531,
         accuracy: 20.0,
         address: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi',
       );
     } catch (e) {
       return LocationDataResult(
-        latitude: 24.3644,
-        longitude: 54.5029,
+        latitude: 24.365500,
+        longitude: 54.500531,
         accuracy: 25.0,
         address:
             'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi ($e)',

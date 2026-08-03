@@ -15,9 +15,9 @@ class OfficeManagementScreen extends StatelessWidget {
         text: office?.address ??
             'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi');
     final latController =
-        TextEditingController(text: (office?.latitude ?? 24.3644).toString());
-    final lngController =
-        TextEditingController(text: (office?.longitude ?? 54.5029).toString());
+        TextEditingController(text: (office?.latitude ?? 24.365500).toString());
+    final lngController = TextEditingController(
+        text: (office?.longitude ?? 54.500531).toString());
     final radiusController = TextEditingController(
         text: (office?.geofenceRadiusMeters ?? 200.0).toString());
 
@@ -193,7 +193,8 @@ class OfficeManagementScreen extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(alpha: 0.15),
+                                color:
+                                    AppColors.primary.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(8)),
                             child: const Text('MAIN OFFICE',
                                 style: TextStyle(

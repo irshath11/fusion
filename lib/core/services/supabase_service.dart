@@ -18,7 +18,7 @@ class SupabaseService {
   final Uuid _uuid = const Uuid();
 
   static const String supabaseUrl = 'https://agkuybibzrjqcxtlnlrm.supabase.co';
-  
+
   // Public anon key for project agkuybibzrjqcxtlnlrm
   static const String supabaseAnonKey =
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFna3V5YmlienJqcWN4dGxubHJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5Njc1OTgsImV4cCI6MjA5ODU0MzU5OH0.lmhZ8TIklkj7I9oSRawuitWvnsZ6jMaL-95raMVLNTA';
@@ -143,7 +143,8 @@ class SupabaseService {
         details: {'org_name': setup.name, 'admin_email': setup.superAdminEmail},
       );
 
-      debugPrint('Organization setup and Super Admin successfully saved in Supabase.');
+      debugPrint(
+          'Organization setup and Super Admin successfully saved in Supabase.');
       return true;
     } catch (e) {
       debugPrint('Supabase saveOrganizationSetup error: $e');
@@ -216,7 +217,8 @@ class SupabaseService {
 
   /// Update user password change requirement flag
   Future<bool> updateUserPasswordChangeStatus(
-      String userId, bool requiresPasswordChange, [String? firebaseUid]) async {
+      String userId, bool requiresPasswordChange,
+      [String? firebaseUid]) async {
     if (!_isInitialized || client == null) return false;
 
     try {
@@ -312,7 +314,8 @@ class SupabaseService {
         'name': localOrg?.name ?? 'Enterprise Operations',
         'address': localOrg?.address ?? 'HQ Operations Center',
         'super_admin_name': localOrg?.superAdminName ?? 'Chief Administrator',
-        'super_admin_email': localOrg?.superAdminEmail ?? 'admin@enterprise.com',
+        'super_admin_email':
+            localOrg?.superAdminEmail ?? 'admin@enterprise.com',
         'mobile_number': localOrg?.mobileNumber ?? '+971501234567',
         'is_deleted': false,
         'created_at': DateTime.now().toIso8601String(),
@@ -323,7 +326,9 @@ class SupabaseService {
       return targetOrgId;
     } catch (e) {
       debugPrint('ensureOrganizationExistsInCloud note: $e');
-      return orgId != null && _isValidUuid(orgId) ? orgId : '00000000-0000-0000-0000-000000000001';
+      return orgId != null && _isValidUuid(orgId)
+          ? orgId
+          : '00000000-0000-0000-0000-000000000001';
     }
   }
 
@@ -406,7 +411,8 @@ class SupabaseService {
     String? department,
     String? actorUserId,
   }) async {
-    if (!_isInitialized || client == null || !_isValidUuid(userId)) return false;
+    if (!_isInitialized || client == null || !_isValidUuid(userId))
+      return false;
 
     try {
       final updates = <String, dynamic>{
@@ -425,7 +431,10 @@ class SupabaseService {
         if (designation != null) empUpdates['designation'] = designation;
         if (department != null) empUpdates['department'] = department;
 
-        await client!.from('employees').update(empUpdates).eq('user_id', userId);
+        await client!
+            .from('employees')
+            .update(empUpdates)
+            .eq('user_id', userId);
       }
 
       if (_isValidUuid(orgId)) {
@@ -452,7 +461,8 @@ class SupabaseService {
     required bool isActive,
     String? actorUserId,
   }) async {
-    if (!_isInitialized || client == null || !_isValidUuid(userId)) return false;
+    if (!_isInitialized || client == null || !_isValidUuid(userId))
+      return false;
 
     try {
       await client!.from('users').update({
@@ -485,7 +495,8 @@ class SupabaseService {
     required String orgId,
     String? actorUserId,
   }) async {
-    if (!_isInitialized || client == null || !_isValidUuid(userId)) return false;
+    if (!_isInitialized || client == null || !_isValidUuid(userId))
+      return false;
 
     try {
       final now = DateTime.now().toIso8601String();
@@ -528,7 +539,8 @@ class SupabaseService {
     if (!_isInitialized || client == null || !_isValidUuid(orgId)) return false;
 
     try {
-      final response = await client!.rpc('transfer_organization_ownership', params: {
+      final response =
+          await client!.rpc('transfer_organization_ownership', params: {
         'p_org_id': orgId,
         'p_current_super_admin_id': currentSuperAdminId,
         'p_target_admin_id': targetAdminId,
@@ -559,7 +571,8 @@ class SupabaseService {
       }
 
       if (targetUuid == null || !_isValidUuid(targetUuid)) {
-        debugPrint('Supabase bindDevice note: No valid user UUID found for $userId. Skipping cloud device binding.');
+        debugPrint(
+            'Supabase bindDevice note: No valid user UUID found for $userId. Skipping cloud device binding.');
         return false;
       }
 
@@ -616,7 +629,8 @@ class SupabaseService {
     if (!_isInitialized || client == null) return null;
 
     try {
-      final fileName = 'attendance_${recordId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final fileName =
+          'attendance_${recordId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final storagePath = 'photos/$fileName';
 
       Uint8List bytes;
@@ -633,10 +647,12 @@ class SupabaseService {
       await client!.storage.from('attendance_photos').uploadBinary(
             storagePath,
             bytes,
-            fileOptions: const FileOptions(contentType: 'image/jpeg', cacheControl: '3600', upsert: true),
+            fileOptions: const FileOptions(
+                contentType: 'image/jpeg', cacheControl: '3600', upsert: true),
           );
 
-      final publicUrl = client!.storage.from('attendance_photos').getPublicUrl(storagePath);
+      final publicUrl =
+          client!.storage.from('attendance_photos').getPublicUrl(storagePath);
       return publicUrl;
     } catch (e) {
       debugPrint('Supabase Storage upload note: $e');
@@ -645,7 +661,8 @@ class SupabaseService {
   }
 
   /// Helper to guarantee that a valid employee record exists in public.employees in Supabase
-  Future<String?> ensureEmployeeExistsInCloud(String employeeIdOrUid, String employeeName) async {
+  Future<String?> ensureEmployeeExistsInCloud(
+      String employeeIdOrUid, String employeeName) async {
     if (!_isInitialized || client == null) return null;
 
     try {
@@ -708,17 +725,22 @@ class SupabaseService {
       final validOrgId = await ensureOrganizationExistsInCloud(orgId) ?? orgId;
       final currentUser = LocalDatabaseService().currentUser;
 
-      final targetFirebaseUid = _isValidUuid(employeeIdOrUid) ? 'user_${_uuid.v4()}' : employeeIdOrUid;
+      final targetFirebaseUid = _isValidUuid(employeeIdOrUid)
+          ? 'user_${_uuid.v4()}'
+          : employeeIdOrUid;
 
       final createdUser = await createUserInSupabase(
         firebaseUid: targetFirebaseUid,
         orgId: validOrgId,
         email: currentUser?.email ?? 'user@enterprise.com',
-        fullName: employeeName.isNotEmpty ? employeeName : (currentUser?.fullName ?? 'Field Employee'),
+        fullName: employeeName.isNotEmpty
+            ? employeeName
+            : (currentUser?.fullName ?? 'Field Employee'),
         phoneNumber: currentUser?.phoneNumber,
         role: currentUser?.role ?? UserRole.employee,
         requiresPasswordChange: false,
-        employeeCode: 'EMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
+        employeeCode:
+            'EMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
         designation: 'Field Engineer',
         department: 'Operations',
       );
@@ -767,10 +789,12 @@ class SupabaseService {
       final localOrg = LocalDatabaseService().organization;
       final orgId = localOrg?.id ?? '00000000-0000-0000-0000-000000000001';
       final validOrgId = await ensureOrganizationExistsInCloud(orgId) ?? orgId;
-      final validEmployeeId = await ensureEmployeeExistsInCloud(record.employeeId, record.employeeName);
+      final validEmployeeId = await ensureEmployeeExistsInCloud(
+          record.employeeId, record.employeeName);
 
       if (validEmployeeId == null) {
-        debugPrint('Supabase insertAttendanceEntry note: No valid employee record found in cloud for ${record.employeeId}');
+        debugPrint(
+            'Supabase insertAttendanceEntry note: No valid employee record found in cloud for ${record.employeeId}');
         return false;
       }
 
@@ -784,9 +808,11 @@ class SupabaseService {
         'latitude': record.latitude,
         'longitude': record.longitude,
         'is_geofence_valid': record.isGeofenceValid,
-        'photo_url': photoPublicUrl ?? (record.photoBase64.startsWith('http') ? record.photoBase64 : null),
+        'photo_url': photoPublicUrl ??
+            (record.photoBase64.startsWith('http') ? record.photoBase64 : null),
         'address': record.address,
-        if (record.siteName != null && record.siteName!.isNotEmpty) 'site_name': record.siteName,
+        if (record.siteName != null && record.siteName!.isNotEmpty)
+          'site_name': record.siteName,
         'device_id': record.deviceId.isEmpty ? 'DEV-CLIENT' : record.deviceId,
         'created_at': DateTime.now().toIso8601String(),
       };
@@ -835,15 +861,16 @@ class SupabaseService {
           );
 
           records.add(AttendanceRecord(
-            id: json['id']?.toString() ?? 'rec_${DateTime.now().millisecondsSinceEpoch}',
+            id: json['id']?.toString() ??
+                'rec_${DateTime.now().millisecondsSinceEpoch}',
             employeeId: json['employee_id']?.toString() ?? 'emp-001',
             employeeName: json['employee_name']?.toString() ?? 'Employee',
             workflowStep: step,
             eventTimestamp: json['event_timestamp'] != null
                 ? DateTime.parse(json['event_timestamp'])
                 : DateTime.now(),
-            latitude: (json['latitude'] as num?)?.toDouble() ?? 24.3644,
-            longitude: (json['longitude'] as num?)?.toDouble() ?? 54.5029,
+            latitude: (json['latitude'] as num?)?.toDouble() ?? 24.365500,
+            longitude: (json['longitude'] as num?)?.toDouble() ?? 54.500531,
             gpsAccuracy: 5.0,
             address: json['address']?.toString() ?? 'Musaffah Abu Dhabi',
             deviceId: json['device_id']?.toString() ?? 'DEV-MOBILE',

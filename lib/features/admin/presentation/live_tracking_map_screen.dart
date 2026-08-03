@@ -21,7 +21,8 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
 
   String _filterRole = 'All'; // 'All', 'Offices', 'Employees', 'WorkSites'
   bool _isSatellite = false;
-  LatLng _centerPoint = const LatLng(24.3644, 54.5029); // Default Abu Dhabi / Musaffah
+  LatLng _centerPoint =
+      const LatLng(24.365500, 54.500531); // Default Abu Dhabi / Musaffah
 
   @override
   void initState() {
@@ -41,11 +42,13 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
   }
 
   void _zoomIn() {
-    _mapController.move(_mapController.camera.center, _mapController.camera.zoom + 1);
+    _mapController.move(
+        _mapController.camera.center, _mapController.camera.zoom + 1);
   }
 
   void _zoomOut() {
-    _mapController.move(_mapController.camera.center, _mapController.camera.zoom - 1);
+    _mapController.move(
+        _mapController.camera.center, _mapController.camera.zoom - 1);
   }
 
   @override
@@ -60,7 +63,8 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
     for (final r in records) {
       final key = r.employeeId.isNotEmpty ? r.employeeId : r.employeeName;
       if (!latestEmployeeRecords.containsKey(key) ||
-          r.eventTimestamp.isAfter(latestEmployeeRecords[key]!.eventTimestamp)) {
+          r.eventTimestamp
+              .isAfter(latestEmployeeRecords[key]!.eventTimestamp)) {
         latestEmployeeRecords[key] = r;
       }
     }
@@ -103,10 +107,13 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
                       color: AppColors.primary,
                       shape: BoxShape.circle,
                       boxShadow: [
-                        BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 6),
+                        BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 6),
                       ],
                     ),
-                    child: const Icon(Icons.business_rounded, color: Colors.white, size: 20),
+                    child: const Icon(Icons.business_rounded,
+                        color: Colors.white, size: 20),
                   ),
                 ],
               ),
@@ -134,10 +141,13 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
                       color: Colors.orange.shade700,
                       shape: BoxShape.circle,
                       boxShadow: [
-                        BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 6),
+                        BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 6),
                       ],
                     ),
-                    child: const Icon(Icons.location_on_rounded, color: Colors.white, size: 20),
+                    child: const Icon(Icons.location_on_rounded,
+                        color: Colors.white, size: 20),
                   ),
                 ],
               ),
@@ -160,12 +170,15 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
               child: Column(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: AppColors.success,
                       borderRadius: BorderRadius.circular(8),
                       boxShadow: [
-                        BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4),
+                        BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 4),
                       ],
                     ),
                     child: Text(
@@ -186,7 +199,8 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
                       shape: BoxShape.circle,
                       border: Border.all(color: AppColors.success, width: 2),
                     ),
-                    child: const Icon(Icons.person_pin_circle_rounded, color: AppColors.success, size: 20),
+                    child: const Icon(Icons.person_pin_circle_rounded,
+                        color: AppColors.success, size: 20),
                   ),
                 ],
               ),
@@ -201,8 +215,10 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
         title: const Text('Live Field Workforce Map'),
         actions: [
           IconButton(
-            icon: Icon(_isSatellite ? Icons.map_rounded : Icons.satellite_alt_rounded),
-            tooltip: _isSatellite ? 'Switch to Standard Map' : 'Switch to Dark Map',
+            icon: Icon(
+                _isSatellite ? Icons.map_rounded : Icons.satellite_alt_rounded),
+            tooltip:
+                _isSatellite ? 'Switch to Standard Map' : 'Switch to Dark Map',
             onPressed: () {
               setState(() => _isSatellite = !_isSatellite);
             },
@@ -268,9 +284,11 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
                     const SizedBox(width: 6),
                     _buildFilterTab(context, 'Offices', Icons.business_rounded),
                     const SizedBox(width: 6),
-                    _buildFilterTab(context, 'WorkSites', Icons.location_on_rounded),
+                    _buildFilterTab(
+                        context, 'WorkSites', Icons.location_on_rounded),
                     const SizedBox(width: 6),
-                    _buildFilterTab(context, 'Employees', Icons.people_alt_rounded),
+                    _buildFilterTab(
+                        context, 'Employees', Icons.people_alt_rounded),
                   ],
                 ),
               ),
@@ -307,17 +325,27 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
             right: 12,
             child: Card(
               elevation: 6,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildStatItem('${offices.length}', 'Offices', Icons.business_rounded, AppColors.primary),
-                    Container(height: 30, width: 1, color: Colors.grey.shade300),
-                    _buildStatItem('${workSites.length}', 'Sites', Icons.location_on_rounded, Colors.orange.shade700),
-                    Container(height: 30, width: 1, color: Colors.grey.shade300),
-                    _buildStatItem('${latestEmployeeRecords.length}', 'Live Active', Icons.person_pin_circle_rounded, AppColors.success),
+                    _buildStatItem('${offices.length}', 'Offices',
+                        Icons.business_rounded, AppColors.primary),
+                    Container(
+                        height: 30, width: 1, color: Colors.grey.shade300),
+                    _buildStatItem('${workSites.length}', 'Sites',
+                        Icons.location_on_rounded, Colors.orange.shade700),
+                    Container(
+                        height: 30, width: 1, color: Colors.grey.shade300),
+                    _buildStatItem(
+                        '${latestEmployeeRecords.length}',
+                        'Live Active',
+                        Icons.person_pin_circle_rounded,
+                        AppColors.success),
                   ],
                 ),
               ),
@@ -333,9 +361,11 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final Color activeBg = AppColors.primary;
-    final Color inactiveBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
+    final Color inactiveBg =
+        isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
     final Color activeFg = Colors.white;
-    final Color inactiveFg = isDark ? Colors.grey.shade200 : const Color(0xFF1E293B);
+    final Color inactiveFg =
+        isDark ? Colors.grey.shade200 : const Color(0xFF1E293B);
 
     return GestureDetector(
       onTap: () => setState(() => _filterRole = label),
@@ -374,7 +404,9 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
             Icon(
               icon,
               size: 16,
-              color: isSelected ? activeFg : (isDark ? Colors.lightBlueAccent : AppColors.primary),
+              color: isSelected
+                  ? activeFg
+                  : (isDark ? Colors.lightBlueAccent : AppColors.primary),
             ),
             const SizedBox(width: 6),
             Text(
@@ -391,7 +423,8 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
     );
   }
 
-  Widget _buildStatItem(String count, String label, IconData icon, Color color) {
+  Widget _buildStatItem(
+      String count, String label, IconData icon, Color color) {
     return Row(
       children: [
         Icon(icon, size: 20, color: color),
@@ -400,8 +433,12 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(count, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondaryLight)),
+            Text(count,
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 11, color: AppColors.textSecondaryLight)),
           ],
         ),
       ],
@@ -411,7 +448,8 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
   void _showOfficeDetails(OfficeEntity office) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -420,23 +458,32 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.business_rounded, color: AppColors.primary, size: 28),
+                const Icon(Icons.business_rounded,
+                    color: AppColors.primary, size: 28),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     office.name,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
             ),
             const Divider(height: 24),
-            Text('Address: ${office.address}', style: const TextStyle(fontSize: 13)),
+            Text('Address: ${office.address}',
+                style: const TextStyle(fontSize: 13)),
             const SizedBox(height: 6),
-            Text('Geofence Radius: ${office.geofenceRadiusMeters}m', style: const TextStyle(fontSize: 13, color: AppColors.primary, fontWeight: FontWeight.w600)),
+            Text('Geofence Radius: ${office.geofenceRadiusMeters}m',
+                style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
-            Text('GPS Coordinates: ${office.latitude.toStringAsFixed(6)}, ${office.longitude.toStringAsFixed(6)}',
-                style: const TextStyle(fontSize: 12, color: AppColors.textSecondaryLight)),
+            Text(
+                'GPS Coordinates: ${office.latitude.toStringAsFixed(6)}, ${office.longitude.toStringAsFixed(6)}',
+                style: const TextStyle(
+                    fontSize: 12, color: AppColors.textSecondaryLight)),
           ],
         ),
       ),
@@ -446,7 +493,8 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
   void _showWorkSiteDetails(WorkSiteEntity site) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -455,23 +503,30 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
           children: [
             Row(
               children: [
-                Icon(Icons.location_on_rounded, color: Colors.orange.shade700, size: 28),
+                Icon(Icons.location_on_rounded,
+                    color: Colors.orange.shade700, size: 28),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     site.siteName,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
             ),
             const Divider(height: 24),
-            Text('Address: ${site.address}', style: const TextStyle(fontSize: 13)),
+            Text('Address: ${site.address}',
+                style: const TextStyle(fontSize: 13)),
             const SizedBox(height: 6),
-            Text('Client: ${site.clientName.isNotEmpty ? site.clientName : "N/A"}', style: const TextStyle(fontSize: 13)),
+            Text(
+                'Client: ${site.clientName.isNotEmpty ? site.clientName : "N/A"}',
+                style: const TextStyle(fontSize: 13)),
             const SizedBox(height: 6),
-            Text('GPS Coordinates: ${site.latitude.toStringAsFixed(6)}, ${site.longitude.toStringAsFixed(6)}',
-                style: const TextStyle(fontSize: 12, color: AppColors.textSecondaryLight)),
+            Text(
+                'GPS Coordinates: ${site.latitude.toStringAsFixed(6)}, ${site.longitude.toStringAsFixed(6)}',
+                style: const TextStyle(
+                    fontSize: 12, color: AppColors.textSecondaryLight)),
           ],
         ),
       ),
@@ -481,7 +536,8 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
   void _showEmployeeDetails(AttendanceRecord record) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -490,24 +546,34 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.person_pin_circle_rounded, color: AppColors.success, size: 28),
+                const Icon(Icons.person_pin_circle_rounded,
+                    color: AppColors.success, size: 28),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(record.employeeName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      Text(record.workflowStep.displayName, style: const TextStyle(fontSize: 12, color: AppColors.success, fontWeight: FontWeight.bold)),
+                      Text(record.employeeName,
+                          style: const TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text(record.workflowStep.displayName,
+                          style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.success,
+                              fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
               ],
             ),
             const Divider(height: 24),
-            Text('Last Location: ${record.address}', style: const TextStyle(fontSize: 13)),
+            Text('Last Location: ${record.address}',
+                style: const TextStyle(fontSize: 13)),
             const SizedBox(height: 6),
-            Text('GPS Coordinates: ${record.latitude.toStringAsFixed(6)}, ${record.longitude.toStringAsFixed(6)}',
-                style: const TextStyle(fontSize: 12, color: AppColors.textSecondaryLight)),
+            Text(
+                'GPS Coordinates: ${record.latitude.toStringAsFixed(6)}, ${record.longitude.toStringAsFixed(6)}',
+                style: const TextStyle(
+                    fontSize: 12, color: AppColors.textSecondaryLight)),
           ],
         ),
       ),
