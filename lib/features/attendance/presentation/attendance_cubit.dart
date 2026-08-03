@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:uuid/uuid.dart';
@@ -7,6 +8,7 @@ import '../../../core/services/location_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/services/camera_service.dart';
 import '../../../core/utils/geofence_calculator.dart';
+import '../../sync/data/sync_engine.dart';
 import '../domain/attendance_record.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../admin/domain/office_entity.dart';
@@ -29,10 +31,16 @@ class AttendanceProcessing extends AttendanceState {}
 class AttendanceStepSuccess extends AttendanceState {
   final AttendanceRecord record;
   final WorkflowStep nextStep;
-  AttendanceStepSuccess(this.record, this.nextStep);
+  final SyncEngineResult syncResult;
+
+  AttendanceStepSuccess({
+    required this.record,
+    required this.nextStep,
+    required this.syncResult,
+  });
 
   @override
-  List<Object?> get props => [record, nextStep];
+  List<Object?> get props => [record, nextStep, syncResult];
 }
 
 class GeofenceViolationError extends AttendanceState {
@@ -215,8 +223,20 @@ class AttendanceCubit extends Cubit<AttendanceState> {
 
       _db.addAttendanceRecord(record);
 
+      // Await real-time sync to cloud database so record status is updated before emitting state
+      final syncResult = await SyncEngine().performSync();
+
+      final updatedRecord = _db.getAttendanceRecords().firstWhere(
+        (r) => r.id == record.id,
+        orElse: () => record,
+      );
+
       WorkflowStep next = _db.getWorkflowStepForEmployee();
-      emit(AttendanceStepSuccess(record, next));
+      emit(AttendanceStepSuccess(
+        record: updatedRecord,
+        nextStep: next,
+        syncResult: syncResult,
+      ));
     } catch (e) {
       emit(AttendanceFailure('Attendance capture failed: ${e.toString()}'));
     }

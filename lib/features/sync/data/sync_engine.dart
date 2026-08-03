@@ -22,24 +22,18 @@ class SyncEngine {
   final LocalDatabaseService _db = LocalDatabaseService();
   final SupabaseService _supabase = SupabaseService();
 
-  /// Check active internet connectivity with multi-endpoint fallback
+  /// Check active internet connectivity with fast 600ms timeout
   Future<bool> hasInternetConnection() async {
     try {
       final res1 = await InternetAddress.lookup('google.com')
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(milliseconds: 600));
       if (res1.isNotEmpty && res1[0].rawAddress.isNotEmpty) return true;
     } catch (_) {}
 
     try {
       final res2 = await InternetAddress.lookup('supabase.co')
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(milliseconds: 600));
       if (res2.isNotEmpty && res2[0].rawAddress.isNotEmpty) return true;
-    } catch (_) {}
-
-    try {
-      final socket = await Socket.connect('8.8.8.8', 53, timeout: const Duration(seconds: 3));
-      socket.destroy();
-      return true;
     } catch (_) {}
 
     return false;
@@ -47,16 +41,6 @@ class SyncEngine {
 
   /// Trigger sync manually or via background network monitor
   Future<SyncEngineResult> performSync() async {
-    final hasNet = await hasInternetConnection();
-    if (!hasNet) {
-      return SyncEngineResult(
-        syncedCount: 0,
-        failedCount: 0,
-        isNoInternet: true,
-        message: 'No internet connection. Please connect to Wi-Fi or mobile data.',
-      );
-    }
-
     List<AttendanceRecord> pendingRecords = _db.getAllPendingSyncRecords();
 
     if (pendingRecords.isEmpty) {
@@ -68,15 +52,26 @@ class SyncEngine {
       );
     }
 
+    final hasNet = await hasInternetConnection();
+    if (!hasNet) {
+      return SyncEngineResult(
+        syncedCount: 0,
+        failedCount: 0,
+        isNoInternet: true,
+        message: 'No internet connection. Please connect to Wi-Fi or mobile data.',
+      );
+    }
+
     int syncedCount = 0;
     int failedCount = 0;
     List<String> syncedIds = [];
+    bool encounteredNetworkError = false;
 
     for (var record in pendingRecords) {
       try {
         String? publicPhotoUrl;
 
-        if (record.photoBase64.isNotEmpty) {
+        if (record.photoBase64.isNotEmpty && !record.photoBase64.startsWith('http')) {
           publicPhotoUrl = await _supabase.uploadAttendancePhotoData(
             photoDataOrPath: record.photoBase64,
             recordId: record.id,
@@ -95,12 +90,29 @@ class SyncEngine {
           failedCount++;
         }
       } catch (e) {
+        final errStr = e.toString().toLowerCase();
+        if (errStr.contains('socketexception') ||
+            errStr.contains('handshakeexception') ||
+            errStr.contains('timeout') ||
+            errStr.contains('clientexception')) {
+          encounteredNetworkError = true;
+          break;
+        }
         failedCount++;
       }
     }
 
     if (syncedIds.isNotEmpty) {
       _db.markRecordsSynced(syncedIds);
+    }
+
+    if (encounteredNetworkError && syncedCount == 0) {
+      return SyncEngineResult(
+        syncedCount: 0,
+        failedCount: failedCount,
+        isNoInternet: true,
+        message: 'No internet connection. Please connect to Wi-Fi or mobile data.',
+      );
     }
 
     final message = failedCount > 0

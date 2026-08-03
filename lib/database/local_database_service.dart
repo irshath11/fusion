@@ -8,6 +8,8 @@ import '../features/auth/domain/user_entity.dart';
 import '../features/admin/domain/employee_entity.dart';
 import '../features/admin/domain/office_entity.dart';
 import '../features/admin/domain/work_site_entity.dart';
+import '../features/admin/domain/work_shift_entity.dart';
+import '../features/admin/domain/employee_shift_assignment_entity.dart';
 import '../features/attendance/domain/attendance_record.dart';
 
 class LocalDatabaseService {
@@ -25,6 +27,8 @@ class LocalDatabaseService {
   final List<OfficeEntity> _offices = [];
   final List<WorkSiteEntity> _workSites = [];
   final List<AttendanceRecord> _attendanceRecords = [];
+  final List<WorkShiftEntity> _shifts = [];
+  final List<EmployeeShiftAssignmentEntity> _shiftAssignments = [];
 
   // Initialize with Hive persistence & seed enterprise defaults
   Future<void> init() async {
@@ -103,6 +107,38 @@ class LocalDatabaseService {
           _attendanceRecords.clear();
           for (final item in decoded) {
             _attendanceRecords.add(AttendanceRecord.fromJson(item));
+          }
+        } catch (_) {}
+      }
+
+      final savedShiftsJson = _settingsBox?.get('shifts_json');
+      if (savedShiftsJson != null && savedShiftsJson.toString().isNotEmpty) {
+        try {
+          final List<dynamic> decoded = jsonDecode(savedShiftsJson);
+          _shifts.clear();
+          for (final item in decoded) {
+            _shifts.add(WorkShiftEntity.fromJson(item));
+          }
+        } catch (_) {}
+      }
+
+      if (_shifts.isEmpty) {
+        _shifts.addAll([
+          WorkShiftEntity(id: 'shift-morning', name: 'Morning Shift', startTime: '08:00', endTime: '18:00'),
+          WorkShiftEntity(id: 'shift-general', name: 'General Shift', startTime: '09:00', endTime: '18:00'),
+          WorkShiftEntity(id: 'shift-evening', name: 'Evening Shift', startTime: '14:00', endTime: '22:00'),
+          WorkShiftEntity(id: 'shift-night', name: 'Night Shift', startTime: '22:00', endTime: '06:00'),
+        ]);
+        _persistShifts();
+      }
+
+      final savedAssignmentsJson = _settingsBox?.get('shift_assignments_json');
+      if (savedAssignmentsJson != null && savedAssignmentsJson.toString().isNotEmpty) {
+        try {
+          final List<dynamic> decoded = jsonDecode(savedAssignmentsJson);
+          _shiftAssignments.clear();
+          for (final item in decoded) {
+            _shiftAssignments.add(EmployeeShiftAssignmentEntity.fromJson(item));
           }
         } catch (_) {}
       }
@@ -306,13 +342,14 @@ class LocalDatabaseService {
     _persistAttendanceRecords();
   }
 
-  /// Fetches today's attendance records for a specific employee
+  /// Fetches today's attendance records for a specific employee based on active shift duty 24-hr cycle
   List<AttendanceRecord> getTodayAttendanceRecords([String? employeeId]) {
     final targetId = employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
     if (targetId == null || targetId.isEmpty) return [];
 
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
+    final activeShift = getShiftForEmployee(targetId, now);
+    final todayDutyDateStr = activeShift.getDutyDateStr(now);
 
     return _attendanceRecords.where((r) {
       final matchesUser = (r.employeeId == targetId ||
@@ -320,8 +357,9 @@ class LocalDatabaseService {
               (r.employeeId == _currentUser!.id ||
                r.employeeId == _currentUser!.firebaseUid ||
                r.employeeName.trim().toLowerCase() == _currentUser!.fullName.trim().toLowerCase())));
-      final rDate = DateTime(r.eventTimestamp.year, r.eventTimestamp.month, r.eventTimestamp.day);
-      return matchesUser && rDate.isAtSameMomentAs(today);
+      final recordShift = getShiftForEmployee(targetId, r.eventTimestamp);
+      final rDutyDateStr = recordShift.getDutyDateStr(r.eventTimestamp);
+      return matchesUser && rDutyDateStr == todayDutyDateStr;
     }).toList();
   }
 
@@ -339,8 +377,8 @@ class LocalDatabaseService {
     } else if (lastRecord.workflowStep == WorkflowStep.siteCheckIn) {
       return WorkflowStep.siteCheckOut;
     } else {
-      // Last record was officeCheckIn or siteCheckOut: user can do siteCheckIn or officeCheckOut
-      return WorkflowStep.siteCheckIn;
+      // Last record was officeCheckIn or siteCheckOut: user is on duty & ready for officeCheckOut (Final Day Check-Out)
+      return WorkflowStep.officeCheckOut;
     }
   }
 
@@ -399,5 +437,100 @@ class LocalDatabaseService {
     } catch (e) {
       debugPrint('Error persisting attendance records to Hive: $e');
     }
+  }
+
+  // Work Shifts CRUD & Scheduling
+  List<WorkShiftEntity> getShifts() => List.unmodifiable(_shifts);
+
+  void saveShift(WorkShiftEntity shift) {
+    int index = _shifts.indexWhere((s) => s.id == shift.id);
+    if (index >= 0) {
+      _shifts[index] = shift;
+    } else {
+      _shifts.add(shift);
+    }
+    _persistShifts();
+  }
+
+  void deleteShift(String id) {
+    _shifts.removeWhere((s) => s.id == id);
+    _persistShifts();
+  }
+
+  void _persistShifts() {
+    try {
+      final jsonList = _shifts.map((s) => s.toJson()).toList();
+      _settingsBox?.put('shifts_json', jsonEncode(jsonList));
+    } catch (e) {
+      debugPrint('Error persisting shifts to Hive: $e');
+    }
+  }
+
+  // Employee Shift Daily Assignments
+  List<EmployeeShiftAssignmentEntity> getShiftAssignments() =>
+      List.unmodifiable(_shiftAssignments);
+
+  void saveShiftAssignment(EmployeeShiftAssignmentEntity assignment) {
+    int index = _shiftAssignments.indexWhere((a) =>
+        a.id == assignment.id ||
+        (a.employeeId == assignment.employeeId && a.dateStr == assignment.dateStr));
+    if (index >= 0) {
+      _shiftAssignments[index] = assignment;
+    } else {
+      _shiftAssignments.add(assignment);
+    }
+    _persistShiftAssignments();
+  }
+
+  void deleteShiftAssignment(String id) {
+    _shiftAssignments.removeWhere((a) => a.id == id);
+    _persistShiftAssignments();
+  }
+
+  void _persistShiftAssignments() {
+    try {
+      final jsonList = _shiftAssignments.map((a) => a.toJson()).toList();
+      _settingsBox?.put('shift_assignments_json', jsonEncode(jsonList));
+    } catch (e) {
+      debugPrint('Error persisting shift assignments to Hive: $e');
+    }
+  }
+
+  /// Gets the active shift for a specific employee on a specific date.
+  /// Falls back to General Shift if no specific daily roster assignment exists.
+  WorkShiftEntity getShiftForEmployee(String? employeeId, DateTime date) {
+    final targetId = employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
+    final dateStr = "${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+
+    if (targetId != null && targetId.isNotEmpty) {
+      final assignment = _shiftAssignments.firstWhere(
+        (a) => a.employeeId == targetId && a.dateStr == dateStr,
+        orElse: () => EmployeeShiftAssignmentEntity(
+          id: '',
+          employeeId: '',
+          dateStr: '',
+          shiftName: '',
+          startTime: '',
+          endTime: '',
+        ),
+      );
+
+      if (assignment.id.isNotEmpty) {
+        return assignment.toWorkShift();
+      }
+    }
+
+    // Default fallback shift
+    return _shifts.firstWhere(
+      (s) => s.id == 'shift-general',
+      orElse: () => _shifts.isNotEmpty
+          ? _shifts.first
+          : WorkShiftEntity(
+              id: 'shift-general',
+              name: 'General Shift',
+              startTime: '09:00',
+              endTime: '18:00',
+            ),
+    );
   }
 }

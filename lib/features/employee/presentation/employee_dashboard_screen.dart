@@ -35,19 +35,25 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
   int _pendingSyncCount = 0;
   bool _isSyncing = false;
   Timer? _workingTimeTimer;
+  Timer? _autoSyncTimer;
 
   @override
   void initState() {
     super.initState();
     _refreshSyncCount();
     _startWorkingTimeTimer();
+    _startAutoSyncListener();
     _syncCloudData();
   }
 
   Future<void> _syncCloudData() async {
     try {
       await SupabaseService().syncCloudDataToLocal();
-      if (mounted) setState(() {});
+      await _syncEngine.performSync();
+      if (mounted) {
+        _refreshSyncCount();
+        setState(() {});
+      }
     } catch (_) {}
   }
 
@@ -60,9 +66,96 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     });
   }
 
+  void _startAutoSyncListener() {
+    _autoSyncTimer?.cancel();
+    // Check every 5 seconds if internet connectivity has been restored for pending offline records
+    _autoSyncTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      if (!mounted || _isSyncing) return;
+
+      final pendingCount = _db.getPendingSyncRecords().length;
+      if (pendingCount > 0) {
+        final hasNet = await _syncEngine.hasInternetConnection();
+        if (hasNet && mounted && !_isSyncing) {
+          await _autoSyncOnInternetRestored();
+        }
+      }
+    });
+  }
+
+  Future<void> _autoSyncOnInternetRestored() async {
+    if (_isSyncing) return;
+    setState(() => _isSyncing = true);
+
+    try {
+      final result = await _syncEngine.performSync();
+      _refreshSyncCount();
+
+      if (!mounted) return;
+
+      if (result.syncedCount > 0) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.cloud_done_rounded,
+                    color: AppColors.success, size: 26),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Records Synced Successfully!',
+                    style: TextStyle(
+                        fontSize: 17, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${result.syncedCount} offline attendance record(s) were automatically synced to the cloud.',
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Internet connection was restored and your data is now securely backed up in the cloud.',
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.success,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Awesome!'),
+              ),
+            ],
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSyncing = false);
+      }
+    }
+  }
+
   @override
   void dispose() {
     _workingTimeTimer?.cancel();
+    _autoSyncTimer?.cancel();
     super.dispose();
   }
 
@@ -96,24 +189,36 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
             title: const Row(
               children: [
                 Icon(Icons.wifi_off_rounded,
-                    color: AppColors.warning, size: 24),
+                    color: AppColors.warning, size: 26),
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'No Internet Connection',
+                    'Pending Sync (Offline Mode)',
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
             ),
-            content: const SingleChildScrollView(
-              child: Text(
-                'Unable to synchronize attendance records. Please connect to a Wi-Fi or mobile data network and try again.',
-                style: TextStyle(fontSize: 14),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _pendingSyncCount > 0
+                        ? '$_pendingSyncCount record(s) pending sync to cloud database.'
+                        : 'No internet connection detected.',
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'All attendance entries are saved safely on your phone. Once you connect to Wi-Fi or mobile data, your records will be uploaded automatically.',
+                    style: TextStyle(fontSize: 13, color: Colors.black87),
+                  ),
+                ],
               ),
             ),
-            actionsAlignment: MainAxisAlignment.end,
-            actionsOverflowDirection: VerticalDirection.down,
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -139,13 +244,91 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result.message),
-          backgroundColor:
-              result.syncedCount > 0 ? AppColors.success : AppColors.info,
-        ),
-      );
+      if (result.syncedCount > 0) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.cloud_done_rounded,
+                    color: AppColors.success, size: 26),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Records Synced Successfully!',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${result.syncedCount} attendance record(s) uploaded successfully to the cloud database.',
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Your attendance data is now securely stored in the cloud and visible across all manager and admin devices.',
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.success,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Great!'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.check_circle_rounded,
+                    color: AppColors.success, size: 26),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'All Records Synced',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: const SingleChildScrollView(
+              child: Text(
+                'All your attendance records are already up to date and saved in the cloud database.',
+                style: TextStyle(fontSize: 14),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -220,13 +403,109 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
       listener: (context, state) {
         if (state is AttendanceStepSuccess) {
           _refreshSyncCount();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                  'Successfully recorded ${state.record.workflowStep.displayName}'),
-              backgroundColor: AppColors.success,
-            ),
-          );
+
+          final isSynced = state.record.syncStatus == SyncStatus.synced ||
+              state.syncResult.syncedCount > 0;
+
+          if (isSynced) {
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                title: const Row(
+                  children: [
+                    Icon(Icons.cloud_done_rounded,
+                        color: AppColors.success, size: 26),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Recorded & Synced Successfully!',
+                        style: TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Your ${state.record.workflowStep.displayName} was recorded and uploaded to the cloud database in real-time.',
+                        style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Your attendance is now securely stored in the cloud and visible across all manager and admin devices.',
+                        style: TextStyle(fontSize: 13, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.success,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Awesome!'),
+                  ),
+                ],
+              ),
+            );
+          } else {
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                title: const Row(
+                  children: [
+                    Icon(Icons.wifi_off_rounded,
+                        color: AppColors.warning, size: 26),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Attendance Recorded (Offline)',
+                        style: TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Your ${state.record.workflowStep.displayName} is saved safely on your phone.',
+                        style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'It will automatically upload to the cloud database once an internet connection is restored.',
+                        style: TextStyle(fontSize: 13, color: Colors.black87),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            );
+          }
         } else if (state is AttendanceFailure) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -258,6 +537,10 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
               pendingSyncCount: _pendingSyncCount,
               onPunchPressed: () => _handleAttendanceStep(currentStep,
                   activeSiteName: activeSiteName),
+              onSiteCheckInPressed: isCheckedIn
+                  ? () => _handleAttendanceStep(WorkflowStep.siteCheckIn)
+                  : null,
+              isFirstSiteCheckIn: _db.isFirstSiteCheckInToday(empId),
               onSyncPressed: _manualSync,
             ),
             activityView: const ActivityTimelineView(),

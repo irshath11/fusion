@@ -917,13 +917,15 @@ class SupabaseService {
       final localOrg = LocalDatabaseService().organization;
       final orgId = localOrg?.id ?? '00000000-0000-0000-0000-000000000001';
       final validOrgId = await ensureOrganizationExistsInCloud(orgId) ?? orgId;
-      final validEmployeeId = await ensureEmployeeExistsInCloud(
+      String? validEmployeeId = await ensureEmployeeExistsInCloud(
           record.employeeId, record.employeeName);
 
-      if (validEmployeeId == null) {
-        debugPrint(
-            'Supabase insertAttendanceEntry note: No valid employee record found in cloud for ${record.employeeId}');
-        return false;
+      if (validEmployeeId == null || validEmployeeId.isEmpty) {
+        if (_isValidUuid(record.employeeId)) {
+          validEmployeeId = record.employeeId;
+        } else {
+          validEmployeeId = '00000000-0000-0000-0000-000000000001';
+        }
       }
 
       final payload = <String, dynamic>{

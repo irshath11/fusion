@@ -4,6 +4,7 @@ import 'admin_cubit.dart';
 import 'employee_management_screen.dart';
 import 'office_management_screen.dart';
 import 'work_site_management_screen.dart';
+import 'shift_management_screen.dart';
 import 'live_tracking_map_screen.dart';
 import 'reports_analytics_screen.dart';
 import '../../../core/constants/app_colors.dart';
@@ -25,6 +26,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final List<Widget> _pages = const [
     AdminOverviewTab(),
     EmployeeManagementScreen(),
+    ShiftManagementScreen(),
     OfficeManagementScreen(),
     WorkSiteManagementScreen(),
     ReportsAnalyticsScreen(),
@@ -82,6 +84,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             destinations: const [
               NavigationDestination(icon: Icon(Icons.dashboard_rounded), label: 'Overview'),
               NavigationDestination(icon: Icon(Icons.people_alt_rounded), label: 'Employees'),
+              NavigationDestination(icon: Icon(Icons.more_time_rounded), label: 'Shifts'),
               NavigationDestination(icon: Icon(Icons.business_rounded), label: 'Offices'),
               NavigationDestination(icon: Icon(Icons.location_city_rounded), label: 'Work Sites'),
               NavigationDestination(icon: Icon(Icons.analytics_rounded), label: 'Reports'),

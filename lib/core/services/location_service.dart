@@ -23,7 +23,7 @@ class LocationService {
       double lat, double lng) async {
     try {
       final placemarks = await placemarkFromCoordinates(lat, lng)
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(milliseconds: 800));
       if (placemarks.isNotEmpty) {
         final place = placemarks.first;
         final List<String> addressParts = [];
@@ -79,10 +79,12 @@ class LocationService {
     try {
       // 1. Check and request location permission with timeout
       LocationPermission permission = await Geolocator.checkPermission()
-          .timeout(const Duration(seconds: 3), onTimeout: () => LocationPermission.denied);
+          .timeout(const Duration(milliseconds: 800),
+              onTimeout: () => LocationPermission.denied);
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission()
-            .timeout(const Duration(seconds: 5), onTimeout: () => LocationPermission.denied);
+            .timeout(const Duration(seconds: 3),
+                onTimeout: () => LocationPermission.denied);
       }
 
       if (permission == LocationPermission.deniedForever ||
@@ -91,37 +93,31 @@ class LocationService {
           latitude: 24.365500,
           longitude: 54.500531,
           accuracy: 50.0,
-          address: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi',
+          address:
+              'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi',
         );
       }
 
       // 2. Check if location services are enabled on device
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled()
-          .timeout(const Duration(seconds: 3), onTimeout: () => false);
+          .timeout(const Duration(milliseconds: 800), onTimeout: () => false);
       Position? position;
 
       if (serviceEnabled) {
         // 3. Try acquiring instant last known position first
         try {
           position = await Geolocator.getLastKnownPosition()
-              .timeout(const Duration(seconds: 2));
+              .timeout(const Duration(milliseconds: 500));
         } catch (_) {}
 
-        // 4. Try live GPS acquisition with fallback accuracy
-        try {
-          position = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.high,
-            timeLimit: const Duration(seconds: 4),
-          );
-        } catch (_) {
+        // 4. Try live GPS acquisition with fast fallback timeout
+        if (position == null) {
           try {
             position = await Geolocator.getCurrentPosition(
               desiredAccuracy: LocationAccuracy.medium,
-              timeLimit: const Duration(seconds: 3),
+              timeLimit: const Duration(seconds: 2),
             );
-          } catch (_) {
-            // Keep last known position if current position times out
-          }
+          } catch (_) {}
         }
       } else {
         try {

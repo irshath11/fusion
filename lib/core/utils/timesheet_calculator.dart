@@ -1,5 +1,6 @@
 import '../../features/attendance/domain/attendance_record.dart';
 import '../../features/timesheet/domain/timesheet_entry.dart';
+import '../../database/local_database_service.dart';
 import '../constants/app_enums.dart';
 
 class TimesheetCalculator {
@@ -23,12 +24,13 @@ class TimesheetCalculator {
       return idMatch || nameMatch;
     }).toList();
 
-    // Map key: "yyyy-MM-dd"
+    // Map key: "yyyy-MM-dd" (grouped by shift 24-hr duty cycle date)
     final Map<String, List<AttendanceRecord>> groupedMap = {};
+    final db = LocalDatabaseService();
 
     for (final record in filteredRecords) {
-      final dateStr =
-          "${record.eventTimestamp.year}-${record.eventTimestamp.month.toString().padLeft(2, '0')}-${record.eventTimestamp.day.toString().padLeft(2, '0')}";
+      final shift = db.getShiftForEmployee(record.employeeId, record.eventTimestamp);
+      final dateStr = shift.getDutyDateStr(record.eventTimestamp);
       groupedMap.putIfAbsent(dateStr, () => []).add(record);
     }
 

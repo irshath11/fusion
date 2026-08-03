@@ -15,6 +15,8 @@ class HomeDashboardView extends StatelessWidget {
   final String? activeSiteName;
   final int pendingSyncCount;
   final VoidCallback onPunchPressed;
+  final VoidCallback? onSiteCheckInPressed;
+  final bool isFirstSiteCheckIn;
   final VoidCallback onSyncPressed;
 
   const HomeDashboardView({
@@ -26,6 +28,8 @@ class HomeDashboardView extends StatelessWidget {
     this.activeSiteName,
     required this.pendingSyncCount,
     required this.onPunchPressed,
+    this.onSiteCheckInPressed,
+    this.isFirstSiteCheckIn = true,
     required this.onSyncPressed,
   });
 
@@ -39,21 +43,50 @@ class HomeDashboardView extends StatelessWidget {
     final todayRecords = db.getTodayAttendanceRecords();
     final allRecords = db.getAttendanceRecords();
 
-    // 1. Compute Real Today's Work Duration
+    // 1. Compute Working Time purely from First Office Check-In to Final Day Check-Out
     String workDurationStr = "00h 00m";
-    if (todayRecords.isNotEmpty) {
-      final firstRecord = todayRecords.first;
-      final lastRecord = todayRecords.last;
-      final endTime = isCheckedIn ? DateTime.now() : lastRecord.eventTimestamp;
-      final diff = endTime.difference(firstRecord.eventTimestamp);
+    String regularStr = "00h 00m";
+    String otStr = "00h 00m";
+
+    final officeInIndex = todayRecords.indexWhere(
+      (r) => r.workflowStep == WorkflowStep.officeCheckIn,
+    );
+
+    if (officeInIndex != -1) {
+      final firstOfficeIn = todayRecords[officeInIndex];
+      final officeOutMatches = todayRecords.where(
+        (r) => r.workflowStep == WorkflowStep.officeCheckOut,
+      );
+
+      final DateTime endTime = officeOutMatches.isNotEmpty
+          ? officeOutMatches.last.eventTimestamp
+          : (isCheckedIn ? DateTime.now() : todayRecords.last.eventTimestamp);
+
+      final diff = endTime.difference(firstOfficeIn.eventTimestamp);
       if (!diff.isNegative) {
         final hours = diff.inHours.toString().padLeft(2, '0');
         final mins = (diff.inMinutes % 60).toString().padLeft(2, '0');
         workDurationStr = "${hours}h ${mins}m";
+
+        final totalMins = diff.inMinutes;
+        final regMins = totalMins > 480 ? 480 : totalMins;
+        final otMins = totalMins > 480 ? totalMins - 480 : 0;
+
+        final regH = (regMins ~/ 60).toString().padLeft(2, '0');
+        final regM = (regMins % 60).toString().padLeft(2, '0');
+        regularStr = "${regH}h ${regM}m";
+
+        final otH = (otMins ~/ 60).toString().padLeft(2, '0');
+        final otM = (otMins % 60).toString().padLeft(2, '0');
+        otStr = "${otH}h ${otM}m";
       }
     }
 
-    // 2. Compute Real Monthly Punctuality
+    // 2. Compute Dynamic Shift & Real Monthly Punctuality
+    final user = db.currentUser;
+    final empId = user?.id ?? user?.firebaseUid;
+    final activeShift = db.getShiftForEmployee(empId, now);
+
     String punctualityStr = "100%";
     final nowMonthRecords = allRecords.where((r) {
       return r.eventTimestamp.year == now.year &&
@@ -65,8 +98,8 @@ class HomeDashboardView extends StatelessWidget {
     if (nowMonthRecords.isNotEmpty) {
       int onTime = 0;
       for (final r in nowMonthRecords) {
-        if (r.eventTimestamp.hour < 9 ||
-            (r.eventTimestamp.hour == 9 && r.eventTimestamp.minute <= 15)) {
+        final recordShift = db.getShiftForEmployee(empId, r.eventTimestamp);
+        if (recordShift.isOnTime(r.eventTimestamp)) {
           onTime++;
         }
       }
@@ -174,40 +207,53 @@ class HomeDashboardView extends StatelessWidget {
                     distanceMeters: isCheckedIn ? 0 : 0,
                   ),
                 ),
-                if (pendingSyncCount > 0) ...[
-                  const SizedBox(width: 8),
-                  InkWell(
-                    onTap: onSyncPressed,
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.shade700.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.amber.shade700.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.wifi_off_rounded,
-                              size: 14, color: Colors.amber.shade800),
-                          const SizedBox(width: 4),
-                          Text(
-                            '$pendingSyncCount Sync',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.amber.shade800,
-                            ),
-                          ),
-                        ],
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: onSyncPressed,
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: pendingSyncCount > 0
+                          ? Colors.amber.shade700.withValues(alpha: 0.15)
+                          : const Color(0xFF059669).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: pendingSyncCount > 0
+                            ? Colors.amber.shade700.withValues(alpha: 0.4)
+                            : const Color(0xFF059669).withValues(alpha: 0.3),
                       ),
                     ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          pendingSyncCount > 0
+                              ? Icons.wifi_off_rounded
+                              : Icons.cloud_done_rounded,
+                          size: 14,
+                          color: pendingSyncCount > 0
+                              ? Colors.amber.shade800
+                              : const Color(0xFF059669),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          pendingSyncCount > 0
+                              ? '$pendingSyncCount Pending Sync'
+                              : 'Cloud Synced',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: pendingSyncCount > 0
+                                ? Colors.amber.shade800
+                                : const Color(0xFF059669),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ],
+                ),
               ],
             ),
 
@@ -218,33 +264,35 @@ class HomeDashboardView extends StatelessWidget {
               isCheckedIn: isCheckedIn,
               isLoading: isLoading,
               onPressed: onPunchPressed,
+              onSiteCheckInPressed: onSiteCheckInPressed,
               activeSiteName: activeSiteName,
+              isFirstSiteCheckIn: isFirstSiteCheckIn,
             ),
 
             const SizedBox(height: 16),
 
-            // 4. Real Executive KPI Grid (4 Metrics)
+            // 4. Executive KPI Grid (4 Metrics: Total Work, OT, Shift Schedule 24h, Punctuality)
             Row(
               children: [
                 Expanded(
                   child: MetricKpiWidget(
-                    title: "Today's Work",
+                    title: "Total Work",
                     value: workDurationStr,
                     icon: Icons.timer_outlined,
                     iconColor: const Color(0xFF0F62FE),
-                    badgeText: isCheckedIn ? 'Active Shift' : 'Offline',
-                    badgeColor:
-                        isCheckedIn ? const Color(0xFF059669) : Colors.grey,
+                    badgeText: 'Reg: $regularStr',
+                    badgeColor: const Color(0xFF0F62FE),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: MetricKpiWidget(
-                    title: 'Punches Today',
-                    value: '${todayRecords.length}',
-                    icon: Icons.fingerprint_rounded,
-                    iconColor: const Color(0xFF8A3FFC),
-                    badgeText: 'Telemetry',
+                    title: 'Overtime (OT)',
+                    value: otStr,
+                    icon: Icons.more_time_rounded,
+                    iconColor: const Color(0xFFD97706),
+                    badgeText: '8h+ Extra',
+                    badgeColor: const Color(0xFFD97706),
                   ),
                 ),
               ],
@@ -257,10 +305,14 @@ class HomeDashboardView extends StatelessWidget {
                 Expanded(
                   child: MetricKpiWidget(
                     title: 'Shift Schedule',
-                    value: '09:00 - 18:00',
-                    icon: Icons.schedule_rounded,
-                    iconColor: const Color(0xFF0043CE),
-                    badgeText: 'Standard',
+                    value: activeShift.displayTimeRange,
+                    icon: activeShift.isNightShift
+                        ? Icons.nights_stay_rounded
+                        : Icons.schedule_rounded,
+                    iconColor: activeShift.isNightShift
+                        ? const Color(0xFF7C3AED)
+                        : const Color(0xFF0043CE),
+                    badgeText: '${activeShift.name.split('(').first.trim()} (24h)',
                   ),
                 ),
                 const SizedBox(width: 12),
