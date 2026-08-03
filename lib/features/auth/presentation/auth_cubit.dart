@@ -75,6 +75,7 @@ class AuthCubit extends Cubit<AuthState> {
 
     if (firebaseUser != null) {
       try {
+        await _supabase.syncCloudDataToLocal();
         final remoteUser =
             await _supabase.fetchUserByFirebaseUid(firebaseUser.uid);
         if (remoteUser != null) {
@@ -140,6 +141,9 @@ class AuthCubit extends Cubit<AuthState> {
 
       if (credential?.user != null) {
         final fbUid = credential!.user!.uid;
+
+        // Sync offices and employee profiles from Supabase cloud
+        await _supabase.syncCloudDataToLocal();
 
         // Fetch Supabase User Profile & Role
         final supabaseUser = await _supabase.fetchUserByFirebaseUid(fbUid);

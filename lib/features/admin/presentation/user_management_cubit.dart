@@ -209,6 +209,9 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         employeeCode: empCode,
         designation: designation.trim(),
         department: department.trim(),
+        useDefaultOffice: useDefaultOffice,
+        assignedOfficeId: assignedOfficeId,
+        assignedOfficeName: assignedOfficeName,
         actorUserId: actorUserId,
       );
 
@@ -290,7 +293,6 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         isActive: existingEmp.isActive,
       );
       _db.saveEmployee(updatedEmp);
-      _db.saveEmployee(updatedEmp);
 
       await _supabase.updateUserInSupabase(
         userId: userId,
@@ -300,6 +302,8 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         role: role,
         designation: designation,
         department: department,
+        useDefaultOffice: useDefaultOffice,
+        assignedOfficeId: assignedOfficeId,
         actorUserId: actorUserId,
       );
 

@@ -70,17 +70,26 @@ class OfficeManagementScreen extends StatelessWidget {
                           ? null
                           : () async {
                               setModalState(() => isLocating = true);
-                              final loc = await context
-                                  .read<AdminCubit>()
-                                  .captureCurrentLocationForOffice();
-                              setModalState(() {
-                                latController.text =
-                                    loc.latitude.toStringAsFixed(6);
-                                lngController.text =
-                                    loc.longitude.toStringAsFixed(6);
-                                addressController.text = loc.address;
-                                isLocating = false;
-                              });
+                              try {
+                                final loc = await context
+                                    .read<AdminCubit>()
+                                    .captureCurrentLocationForOffice();
+                                if (modalCtx.mounted) {
+                                  setModalState(() {
+                                    latController.text =
+                                        loc.latitude.toStringAsFixed(6);
+                                    lngController.text =
+                                        loc.longitude.toStringAsFixed(6);
+                                    addressController.text = loc.address;
+                                  });
+                                }
+                              } catch (e) {
+                                debugPrint('Error capturing location for office: $e');
+                              } finally {
+                                if (modalCtx.mounted) {
+                                  setModalState(() => isLocating = false);
+                                }
+                              }
                             },
                       icon: isLocating
                           ? const SizedBox(
@@ -160,6 +169,7 @@ class OfficeManagementScreen extends StatelessWidget {
         if (state is AdminDataLoaded) {
           return Scaffold(
             floatingActionButton: FloatingActionButton.extended(
+              heroTag: 'add_office_fab',
               onPressed: () => _showOfficeForm(context),
               backgroundColor: AppColors.primary,
               icon: const Icon(Icons.add_location_alt_rounded,

@@ -87,7 +87,7 @@ class AdminCubit extends Cubit<AdminState> {
   }
 
   // Save / Update Employee
-  void saveEmployee({
+  Future<void> saveEmployee({
     required String? id,
     required String code,
     required String name,
@@ -97,7 +97,7 @@ class AdminCubit extends Cubit<AdminState> {
     required String department,
     required bool useDefaultOffice,
     String? assignedOfficeId,
-  }) {
+  }) async {
     final emp = EmployeeEntity(
       id: id ?? _uuid.v4(),
       employeeCode: code.trim(),
@@ -112,7 +112,24 @@ class AdminCubit extends Cubit<AdminState> {
     );
 
     _db.saveEmployee(emp);
-    loadDashboardData('Employee profile saved successfully.');
+
+    final orgId = _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
+    if (id != null && id.isNotEmpty) {
+      try {
+        await _supabase.updateUserInSupabase(
+          userId: id,
+          orgId: orgId,
+          fullName: name.trim(),
+          phoneNumber: mobile.trim(),
+          designation: designation.trim(),
+          department: department.trim(),
+          useDefaultOffice: useDefaultOffice,
+          assignedOfficeId: assignedOfficeId,
+        );
+      } catch (_) {}
+    }
+
+    await loadDashboardData('Employee profile saved successfully.');
   }
 
   void deleteEmployee(String id) {

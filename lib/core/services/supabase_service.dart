@@ -7,6 +7,7 @@ import '../../features/attendance/domain/attendance_record.dart';
 import '../../features/setup/domain/organization_setup.dart';
 import '../../features/auth/domain/user_entity.dart';
 import '../../features/admin/domain/office_entity.dart';
+import '../../features/admin/domain/employee_entity.dart';
 import '../../database/local_database_service.dart';
 import '../constants/app_enums.dart';
 
@@ -125,8 +126,8 @@ class SupabaseService {
         'organization_id': setup.id,
         'name': 'Main Office',
         'address': setup.address,
-        'latitude': 25.1972, // Default HQ coordinates (Dubai Business Bay)
-        'longitude': 55.2744,
+        'latitude': 24.365500, // Default HQ coordinates (Dubai Business Bay)
+        'longitude': 54.500531,
         'geofence_radius_meters': 200.0,
         'is_default': true,
         'is_deleted': false,
@@ -198,21 +199,56 @@ class SupabaseService {
   Future<UserEntity?> fetchUserByFirebaseUid(String identifier) async {
     if (!_isInitialized || client == null) return null;
 
+    final cleanId = identifier.trim();
+    if (cleanId.isEmpty) return null;
+
+    // 1. Try querying by firebase_uid string
     try {
-      final cleanId = identifier.trim();
       final response = await client!
           .from('users')
           .select()
-          .or('firebase_uid.eq.$cleanId,id.eq.$cleanId,email.eq.${cleanId.toLowerCase()}')
+          .eq('firebase_uid', cleanId)
           .eq('is_deleted', false)
           .maybeSingle();
 
-      if (response == null) return null;
-      return UserEntity.fromJson(response);
+      if (response != null) return UserEntity.fromJson(response);
     } catch (e) {
-      debugPrint('Supabase fetchUserByFirebaseUid error: $e');
-      return null;
+      debugPrint('Supabase fetchUserByFirebaseUid (firebase_uid) note: $e');
     }
+
+    // 2. Try querying by email
+    if (cleanId.contains('@')) {
+      try {
+        final response = await client!
+            .from('users')
+            .select()
+            .eq('email', cleanId.toLowerCase())
+            .eq('is_deleted', false)
+            .maybeSingle();
+
+        if (response != null) return UserEntity.fromJson(response);
+      } catch (e) {
+        debugPrint('Supabase fetchUserByFirebaseUid (email) note: $e');
+      }
+    }
+
+    // 3. Try querying by id if cleanId is a valid UUID
+    if (_isValidUuid(cleanId)) {
+      try {
+        final response = await client!
+            .from('users')
+            .select()
+            .eq('id', cleanId)
+            .eq('is_deleted', false)
+            .maybeSingle();
+
+        if (response != null) return UserEntity.fromJson(response);
+      } catch (e) {
+        debugPrint('Supabase fetchUserByFirebaseUid (id) note: $e');
+      }
+    }
+
+    return null;
   }
 
   /// Update user password change requirement flag
@@ -344,6 +380,9 @@ class SupabaseService {
     String? employeeCode,
     String? designation,
     String? department,
+    bool useDefaultOffice = true,
+    String? assignedOfficeId,
+    String? assignedOfficeName,
     String? actorUserId,
   }) async {
     if (!_isInitialized || client == null) return null;
@@ -377,7 +416,9 @@ class SupabaseService {
           'employee_code': employeeCode,
           'designation': designation ?? 'Team Member',
           'department': department ?? 'Operations',
-          'use_default_office': true,
+          'use_default_office': useDefaultOffice,
+          if (assignedOfficeId != null && _isValidUuid(assignedOfficeId))
+            'assigned_office_id': assignedOfficeId,
           'is_deleted': false,
           'created_at': DateTime.now().toIso8601String(),
           'updated_at': DateTime.now().toIso8601String(),
@@ -409,6 +450,8 @@ class SupabaseService {
     UserRole? role,
     String? designation,
     String? department,
+    bool? useDefaultOffice,
+    String? assignedOfficeId,
     String? actorUserId,
   }) async {
     if (!_isInitialized || client == null || !_isValidUuid(userId))
@@ -424,18 +467,19 @@ class SupabaseService {
 
       await client!.from('users').update(updates).eq('id', userId);
 
-      if (designation != null || department != null) {
-        final empUpdates = <String, dynamic>{
-          'updated_at': DateTime.now().toIso8601String(),
-        };
-        if (designation != null) empUpdates['designation'] = designation;
-        if (department != null) empUpdates['department'] = department;
-
-        await client!
-            .from('employees')
-            .update(empUpdates)
-            .eq('user_id', userId);
+      final empUpdates = <String, dynamic>{
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+      if (designation != null) empUpdates['designation'] = designation;
+      if (department != null) empUpdates['department'] = department;
+      if (useDefaultOffice != null)
+        empUpdates['use_default_office'] = useDefaultOffice;
+      if (assignedOfficeId != null) {
+        empUpdates['assigned_office_id'] =
+            _isValidUuid(assignedOfficeId) ? assignedOfficeId : null;
       }
+
+      await client!.from('employees').update(empUpdates).eq('user_id', userId);
 
       if (_isValidUuid(orgId)) {
         await logActivity(
@@ -451,6 +495,90 @@ class SupabaseService {
     } catch (e) {
       debugPrint('Supabase updateUserInSupabase error: $e');
       return false;
+    }
+  }
+
+  /// Fetch all active Employee Records from Supabase
+  Future<List<EmployeeEntity>> fetchEmployeesFromSupabase() async {
+    if (!_isInitialized || client == null) return [];
+    try {
+      final List<dynamic> usersResp =
+          await client!.from('users').select().eq('is_deleted', false);
+
+      final List<dynamic> empResp =
+          await client!.from('employees').select().eq('is_deleted', false);
+
+      final offices = await fetchOfficesFromSupabase();
+
+      final List<EmployeeEntity> result = [];
+
+      for (final u in usersResp) {
+        if (u is! Map) continue;
+        final userId = u['id']?.toString() ?? '';
+        final email = u['email']?.toString() ?? '';
+        final name = u['full_name']?.toString() ?? '';
+        final phone = u['phone_number']?.toString() ?? '';
+        final isActive = u['is_active'] ?? true;
+
+        Map<String, dynamic>? empRow;
+        for (final e in empResp) {
+          if (e is Map && e['user_id']?.toString() == userId) {
+            empRow = Map<String, dynamic>.from(e);
+            break;
+          }
+        }
+
+        final empCode = empRow?['employee_code']?.toString() ??
+            'EMP-${userId.length >= 4 ? userId.substring(0, 4).toUpperCase() : "000"}';
+        final designation = empRow?['designation']?.toString() ?? 'Staff';
+        final department = empRow?['department']?.toString() ?? 'Operations';
+        final useDefaultOffice = empRow?['use_default_office'] ?? true;
+        final assignedOfficeId = empRow?['assigned_office_id']?.toString();
+
+        String? assignedOfficeName;
+        if (assignedOfficeId != null && assignedOfficeId.isNotEmpty) {
+          final matchedOffice = offices.where((o) => o.id == assignedOfficeId);
+          if (matchedOffice.isNotEmpty) {
+            assignedOfficeName = matchedOffice.first.name;
+          }
+        }
+
+        result.add(EmployeeEntity(
+          id: userId,
+          employeeCode: empCode,
+          name: name,
+          mobileNumber: phone,
+          email: email,
+          designation: designation,
+          department: department,
+          useDefaultOffice: useDefaultOffice,
+          assignedOfficeId: assignedOfficeId,
+          assignedOfficeName: assignedOfficeName,
+          isActive: isActive,
+        ));
+      }
+      return result;
+    } catch (e) {
+      debugPrint('Supabase fetchEmployeesFromSupabase error: $e');
+      return [];
+    }
+  }
+
+  /// Sync all cloud offices and employees down to LocalDatabaseService
+  Future<void> syncCloudDataToLocal() async {
+    if (!_isInitialized || client == null) return;
+    try {
+      final cloudOffices = await fetchOfficesFromSupabase();
+      for (final office in cloudOffices) {
+        LocalDatabaseService().saveOffice(office);
+      }
+
+      final cloudEmployees = await fetchEmployeesFromSupabase();
+      for (final emp in cloudEmployees) {
+        LocalDatabaseService().saveEmployee(emp);
+      }
+    } catch (e) {
+      debugPrint('Supabase syncCloudDataToLocal note: $e');
     }
   }
 

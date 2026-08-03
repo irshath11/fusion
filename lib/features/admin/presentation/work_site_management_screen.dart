@@ -88,6 +88,7 @@ class WorkSiteManagementScreen extends StatelessWidget {
         if (state is AdminDataLoaded) {
           return Scaffold(
             floatingActionButton: FloatingActionButton.extended(
+              heroTag: 'add_work_site_fab',
               onPressed: () => _showSiteForm(context),
               backgroundColor: AppColors.primary,
               icon: const Icon(Icons.add_location_rounded, color: Colors.white),

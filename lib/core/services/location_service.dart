@@ -17,11 +17,13 @@ class LocationDataResult {
 
 class LocationService {
   /// Converts coordinates into an exact human-readable street address via native Geocoder.
+  /// Converts coordinates into an exact human-readable street address via native Geocoder.
   /// Falls back to local zone presets if device is offline or Geocoder fails.
   static Future<String> getAddressFromCoordinates(
       double lat, double lng) async {
     try {
-      final placemarks = await placemarkFromCoordinates(lat, lng);
+      final placemarks = await placemarkFromCoordinates(lat, lng)
+          .timeout(const Duration(seconds: 3));
       if (placemarks.isNotEmpty) {
         final place = placemarks.first;
         final List<String> addressParts = [];
@@ -51,7 +53,7 @@ class LocationService {
         }
       }
     } catch (_) {
-      // Offline fallback or platform geocoder failure
+      // Offline fallback or platform geocoder failure / timeout
     }
 
     final fallbackArea = resolvePlaceName(lat, lng);
@@ -75,10 +77,12 @@ class LocationService {
   /// Fetches current GPS location with high reliability & fast hardware fallback
   static Future<LocationDataResult> getCurrentLocation() async {
     try {
-      // 1. Check and request location permission
-      LocationPermission permission = await Geolocator.checkPermission();
+      // 1. Check and request location permission with timeout
+      LocationPermission permission = await Geolocator.checkPermission()
+          .timeout(const Duration(seconds: 3), onTimeout: () => LocationPermission.denied);
       if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
+        permission = await Geolocator.requestPermission()
+            .timeout(const Duration(seconds: 5), onTimeout: () => LocationPermission.denied);
       }
 
       if (permission == LocationPermission.deniedForever ||
@@ -92,31 +96,38 @@ class LocationService {
       }
 
       // 2. Check if location services are enabled on device
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled()
+          .timeout(const Duration(seconds: 3), onTimeout: () => false);
       Position? position;
 
       if (serviceEnabled) {
         // 3. Try acquiring instant last known position first
-        position = await Geolocator.getLastKnownPosition();
+        try {
+          position = await Geolocator.getLastKnownPosition()
+              .timeout(const Duration(seconds: 2));
+        } catch (_) {}
 
         // 4. Try live GPS acquisition with fallback accuracy
         try {
           position = await Geolocator.getCurrentPosition(
             desiredAccuracy: LocationAccuracy.high,
-            timeLimit: const Duration(seconds: 6),
+            timeLimit: const Duration(seconds: 4),
           );
         } catch (_) {
           try {
             position = await Geolocator.getCurrentPosition(
               desiredAccuracy: LocationAccuracy.medium,
-              timeLimit: const Duration(seconds: 5),
+              timeLimit: const Duration(seconds: 3),
             );
           } catch (_) {
             // Keep last known position if current position times out
           }
         }
       } else {
-        position = await Geolocator.getLastKnownPosition();
+        try {
+          position = await Geolocator.getLastKnownPosition()
+              .timeout(const Duration(seconds: 2));
+        } catch (_) {}
       }
 
       if (position != null) {

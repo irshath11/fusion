@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../../../database/local_database_service.dart';
 import '../../../core/constants/app_enums.dart';
 import '../../../core/services/location_service.dart';
+import '../../../core/services/supabase_service.dart';
 import '../../../core/services/camera_service.dart';
 import '../../../core/utils/geofence_calculator.dart';
 import '../domain/attendance_record.dart';
@@ -80,6 +81,13 @@ class AttendanceCubit extends Cubit<AttendanceState> {
       // 1. Get Live GPS Location
       LocationDataResult location = await LocationService.getCurrentLocation();
 
+      // Ensure local offices & employee data are synced from Supabase cloud if missing
+      if (_db.getOffices().isEmpty) {
+        try {
+          await SupabaseService().syncCloudDataToLocal();
+        } catch (_) {}
+      }
+
       // 2. Resolve target geofence bounds based on employee's assigned office / site
       final employees = _db.getEmployees();
       final emp = employees.firstWhere(
@@ -106,8 +114,8 @@ class AttendanceCubit extends Cubit<AttendanceState> {
               id: 'office-default',
               name: 'Main Office',
               address: 'HQ Operations',
-              latitude: 25.1972,
-              longitude: 55.2744,
+              latitude: 24.365500,
+              longitude: 54.500531,
               geofenceRadiusMeters: 50000.0, // generous default radius
               isDefault: true,
             );

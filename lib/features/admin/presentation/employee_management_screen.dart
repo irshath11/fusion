@@ -101,6 +101,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
               ],
             ),
             floatingActionButton: FloatingActionButton.extended(
+              heroTag: 'add_employee_fab',
               onPressed: () {
                 showDialog(
                   context: context,
