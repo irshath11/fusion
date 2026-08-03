@@ -19,6 +19,8 @@ class AttendanceRecord {
   final String? siteName;
   final SyncStatus syncStatus;
 
+  String? get photoPath => photoBase64.isNotEmpty ? photoBase64 : null;
+
   AttendanceRecord({
     required this.id,
     required this.employeeId,
