@@ -76,8 +76,8 @@ class TimesheetCalculator {
       final List<SiteVisitSummary> siteVisits = [];
       for (int i = 0; i < dayRecords.length; i++) {
         final r = dayRecords[i];
-        if (r.workflowStep == WorkflowStep.siteCheckIn) {
-          final sName = (r.siteName != null && r.siteName!.isNotEmpty) ? r.siteName! : 'Work Site';
+        if (r.workflowStep == WorkflowStep.siteCheckIn || (r.siteName != null && r.siteName!.trim().isNotEmpty)) {
+          final sName = (r.siteName != null && r.siteName!.trim().isNotEmpty) ? r.siteName!.trim() : 'Work Site';
           DateTime sIn = r.eventTimestamp;
           DateTime? sOut;
 
@@ -92,11 +92,13 @@ class TimesheetCalculator {
             }
           }
 
-          siteVisits.add(SiteVisitSummary(
-            siteName: sName,
-            checkInTime: sIn,
-            checkOutTime: sOut,
-          ));
+          if (!siteVisits.any((sv) => sv.siteName == sName && sv.checkInTime == sIn)) {
+            siteVisits.add(SiteVisitSummary(
+              siteName: sName,
+              checkInTime: sIn,
+              checkOutTime: sOut,
+            ));
+          }
         }
       }
 

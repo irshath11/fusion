@@ -102,9 +102,9 @@ class AttendanceRecord {
         deviceId: json['deviceId'] ?? '',
         photoBase64: json['photoBase64'] ?? '',
         isGeofenceValid: json['isGeofenceValid'] ?? true,
-        officeId: json['officeId'],
-        workSiteId: json['workSiteId'],
-        siteName: json['siteName'],
+        officeId: json['officeId'] ?? json['office_id'],
+        workSiteId: json['workSiteId'] ?? json['work_site_id'],
+        siteName: json['siteName'] ?? json['site_name'],
         syncStatus: SyncStatus.values.firstWhere(
           (e) => e.name == json['syncStatus'],
           orElse: () => SyncStatus.pending,

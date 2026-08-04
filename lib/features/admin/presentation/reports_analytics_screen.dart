@@ -621,9 +621,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     ? officeOutRecs.last.eventTimestamp
                     : (siteOutRecs.isNotEmpty ? siteOutRecs.last.eventTimestamp : dateRecords.last.eventTimestamp);
 
-                final siteCheckIns = dateRecords.where((r) => r.workflowStep == WorkflowStep.siteCheckIn && r.siteName != null && r.siteName!.isNotEmpty);
-                final siteNamesStr = siteCheckIns.isNotEmpty
-                    ? siteCheckIns.map((r) => r.siteName!).toSet().join(', ')
+                final siteRecords = dateRecords.where((r) => r.siteName != null && r.siteName!.trim().isNotEmpty);
+                final siteNamesStr = siteRecords.isNotEmpty
+                    ? siteRecords.map((r) => r.siteName!.trim()).toSet().join(', ')
                     : null;
 
                 final diff = endRecordTime.isAfter(dateRecords.first.eventTimestamp)
@@ -1100,7 +1100,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                     (r.siteName != null && r.siteName!.trim().isNotEmpty)
                                         ? r.siteName!.trim()
                                         : (r.workflowStep == WorkflowStep.officeCheckIn || r.workflowStep == WorkflowStep.officeCheckOut
-                                            ? 'Main HQ Office'
+                                            ? (emp.assignedOfficeName ?? 'Main HQ Office')
                                             : LocationService.resolvePlaceName(r.latitude, r.longitude)),
                                     style: const TextStyle(
                                         fontSize: 14,
@@ -1126,7 +1126,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                           final String siteNameText = (r.siteName != null && r.siteName!.trim().isNotEmpty)
                               ? r.siteName!
                               : (r.workflowStep == WorkflowStep.officeCheckIn || r.workflowStep == WorkflowStep.officeCheckOut
-                                  ? 'Main Office'
+                                  ? (emp.assignedOfficeName ?? 'Main Office')
                                   : 'Assigned Site');
 
                           final hasPhoto = r.photoBase64.trim().isNotEmpty;
@@ -1363,6 +1363,16 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   }
 
   void _showFullImageDialog(AttendanceRecord record) {
+    final employees = _db.getEmployees();
+    EmployeeEntity? emp;
+    for (final e in employees) {
+      if (e.id == record.employeeId ||
+          e.name.trim().toLowerCase() == record.employeeName.trim().toLowerCase()) {
+        emp = e;
+        break;
+      }
+    }
+
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
@@ -1407,7 +1417,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               ),
               const SizedBox(height: 2),
               Text(
-                'Location: ${(record.siteName != null && record.siteName!.trim().isNotEmpty) ? record.siteName!.trim() : (record.workflowStep == WorkflowStep.officeCheckIn || record.workflowStep == WorkflowStep.officeCheckOut ? "Main Office" : "Work Site")} (${record.latitude.toStringAsFixed(6)}, ${record.longitude.toStringAsFixed(6)})',
+                'Location: ${(record.siteName != null && record.siteName!.trim().isNotEmpty) ? record.siteName!.trim() : (record.workflowStep == WorkflowStep.officeCheckIn || record.workflowStep == WorkflowStep.officeCheckOut ? (emp?.assignedOfficeName ?? "Main Office") : "Work Site")} (${record.latitude.toStringAsFixed(6)}, ${record.longitude.toStringAsFixed(6)})',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                     fontSize: 11, color: AppColors.textSecondaryLight),

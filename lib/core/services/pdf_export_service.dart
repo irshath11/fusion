@@ -290,9 +290,14 @@ class PdfExportService {
                     : '--:--';
                 final reg = '${entry.regularHours.toStringAsFixed(1)} h';
                 final ot = '+${entry.overtimeHours.toStringAsFixed(1)} h';
-                final sitesStr = entry.siteVisits.isNotEmpty
-                    ? entry.siteVisits.map((sv) => sv.siteName).join(', ')
+                final assignedName = (employee.assignedOfficeName != null && employee.assignedOfficeName.toString().trim().isNotEmpty)
+                    ? employee.assignedOfficeName.toString().trim()
                     : 'Main Location';
+                final sitesStr = entry.siteVisits.isNotEmpty
+                    ? entry.siteVisits.map((sv) => sv.siteName).toSet().join(', ')
+                    : (records.any((r) => r.siteName != null && r.siteName!.trim().isNotEmpty)
+                        ? records.where((r) => r.siteName != null && r.siteName!.trim().isNotEmpty).map((r) => r.siteName!.trim()).toSet().join(', ')
+                        : assignedName);
                 final status = entry.isCompleted ? 'Complete' : 'In Progress';
                 return [dateStr, inTime, outTime, reg, ot, sitesStr, status];
               }).toList(),

@@ -939,6 +939,10 @@ class SupabaseService {
         'photo_url': photoPublicUrl ??
             (record.photoBase64.isNotEmpty ? record.photoBase64 : null),
         'address': record.address,
+        if (record.officeId != null && record.officeId!.isNotEmpty && _isValidUuid(record.officeId))
+          'office_id': record.officeId,
+        if (record.workSiteId != null && record.workSiteId!.isNotEmpty && _isValidUuid(record.workSiteId))
+          'work_site_id': record.workSiteId,
         if (record.siteName != null && record.siteName!.isNotEmpty)
           'site_name': record.siteName,
         'device_id': record.deviceId.isEmpty ? 'DEV-CLIENT' : record.deviceId,
@@ -1004,6 +1008,9 @@ class SupabaseService {
             deviceId: json['device_id']?.toString() ?? 'DEV-MOBILE',
             photoBase64: json['photo_url']?.toString() ?? '',
             isGeofenceValid: json['is_geofence_valid'] ?? true,
+            officeId: json['office_id']?.toString() ?? json['officeId']?.toString(),
+            workSiteId: json['work_site_id']?.toString() ?? json['workSiteId']?.toString(),
+            siteName: json['site_name']?.toString() ?? json['siteName']?.toString(),
             syncStatus: SyncStatus.synced,
           ));
         } catch (_) {}

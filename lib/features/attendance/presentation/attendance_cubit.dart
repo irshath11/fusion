@@ -175,11 +175,20 @@ class AttendanceCubit extends Cubit<AttendanceState> {
       } else if (step == WorkflowStep.officeCheckIn || step == WorkflowStep.officeCheckOut) {
         if (!emp.useDefaultOffice && emp.assignedOfficeId != null) {
           final customOfficeMatches = offices.where((o) => o.id == emp.assignedOfficeId);
-          resolvedLocationName = customOfficeMatches.isNotEmpty
-              ? customOfficeMatches.first.name
-              : defaultOffice.name;
+          final siteMatches = workSites.where((s) => s.id == emp.assignedOfficeId);
+          if (customOfficeMatches.isNotEmpty) {
+            resolvedLocationName = customOfficeMatches.first.name;
+          } else if (siteMatches.isNotEmpty) {
+            resolvedLocationName = siteMatches.first.siteName;
+          } else if (emp.assignedOfficeName != null && emp.assignedOfficeName!.trim().isNotEmpty) {
+            resolvedLocationName = emp.assignedOfficeName!.trim();
+          } else {
+            resolvedLocationName = defaultOffice.name;
+          }
         } else {
-          resolvedLocationName = defaultOffice.name;
+          resolvedLocationName = (emp.assignedOfficeName != null && emp.assignedOfficeName!.trim().isNotEmpty)
+              ? emp.assignedOfficeName!.trim()
+              : defaultOffice.name;
         }
       } else {
         final activeSite = _db.getActiveSiteNameToday(emp.id);
