@@ -40,6 +40,7 @@ class AttendanceRecord {
   });
 
   AttendanceRecord copyWith({
+    String? address,
     SyncStatus? syncStatus,
     DateTime? syncTimestamp,
     String? siteName,
@@ -54,7 +55,7 @@ class AttendanceRecord {
       latitude: latitude,
       longitude: longitude,
       gpsAccuracy: gpsAccuracy,
-      address: address,
+      address: address ?? this.address,
       deviceId: deviceId,
       photoBase64: photoBase64,
       isGeofenceValid: isGeofenceValid,

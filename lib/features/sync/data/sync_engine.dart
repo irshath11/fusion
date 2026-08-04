@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import '../../../database/local_database_service.dart';
 import '../../../core/services/supabase_service.dart';
+import '../../../core/services/location_service.dart';
 import '../../attendance/domain/attendance_record.dart';
 
 class SyncEngineResult {
@@ -74,22 +75,43 @@ class SyncEngine {
 
     for (var record in pendingRecords) {
       try {
+        AttendanceRecord recordToSync = record;
+
+        // Deferred Reverse Geocoding:
+        // Convert raw GPS coordinates to exact live street address now that internet is available
+        if (record.latitude != 0.0 && record.longitude != 0.0) {
+          try {
+            final exactAddress = await LocationService.getAddressFromCoordinates(
+              record.latitude,
+              record.longitude,
+            ).timeout(const Duration(seconds: 4));
+
+            if (exactAddress.isNotEmpty &&
+                !exactAddress.contains('Live Field Location') &&
+                !exactAddress.contains('Timeout') &&
+                !exactAddress.contains('Error')) {
+              recordToSync = record.copyWith(address: exactAddress);
+              _db.updateAttendanceRecord(recordToSync);
+            }
+          } catch (_) {}
+        }
+
         String? publicPhotoUrl;
 
-        if (record.photoBase64.isNotEmpty) {
+        if (recordToSync.photoBase64.isNotEmpty) {
           publicPhotoUrl = await _supabase.uploadAttendancePhotoData(
-            photoDataOrPath: record.photoBase64,
-            recordId: record.id,
+            photoDataOrPath: recordToSync.photoBase64,
+            recordId: recordToSync.id,
           );
         }
 
         bool success = await _supabase.insertAttendanceEntry(
-          record: record,
+          record: recordToSync,
           photoPublicUrl: publicPhotoUrl,
         );
 
         if (success) {
-          syncedIds.add(record.id);
+          syncedIds.add(recordToSync.id);
           syncedCount++;
         } else {
           failedCount++;

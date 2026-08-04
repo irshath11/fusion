@@ -306,6 +306,14 @@ class LocalDatabaseService {
     _persistAttendanceRecords();
   }
 
+  void updateAttendanceRecord(AttendanceRecord updatedRecord) {
+    final index = _attendanceRecords.indexWhere((r) => r.id == updatedRecord.id);
+    if (index >= 0) {
+      _attendanceRecords[index] = updatedRecord;
+      _persistAttendanceRecords();
+    }
+  }
+
   /// Fetches today's attendance records for a specific employee
   List<AttendanceRecord> getTodayAttendanceRecords([String? employeeId]) {
     final targetId = employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
