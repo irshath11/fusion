@@ -432,7 +432,6 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
       }
     }
 
-    final empId = user?.id ?? user?.firebaseUid;
     final activeSiteName = _db.getActiveSiteNameToday(empId);
     final offices = _db.getOffices();
     final activeLocationDisplay = (activeSiteName != null && activeSiteName.trim().isNotEmpty)
