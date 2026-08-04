@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -45,10 +44,12 @@ class LocationService {
       );
     }
 
-    LocationPermission permission = await Geolocator.checkPermission()
-        .timeout(const Duration(seconds: 2), onTimeout: () => LocationPermission.denied);
+    LocationPermission permission = await Geolocator.checkPermission().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => LocationPermission.denied);
 
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
       return LocationCheckResult(
         isOk: false,
         message: permission == LocationPermission.deniedForever
@@ -67,7 +68,7 @@ class LocationService {
       double lat, double lng) async {
     try {
       final placemarks = await placemarkFromCoordinates(lat, lng)
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(milliseconds: 800));
       if (placemarks.isNotEmpty) {
         final place = placemarks.first;
         final List<String> addressParts = [];
@@ -115,15 +116,15 @@ class LocationService {
     if ((lat - 25.0772).abs() < 0.1 && (lng - 55.1332).abs() < 0.1) {
       return 'Dubai Marina Coastline, Dubai';
     }
-    return 'Live Field Location';
+    return 'Live Location';
   }
 
   /// Fetches current GPS location with high reliability & fast hardware fallback
   static Future<LocationDataResult> getCurrentLocation() async {
     try {
-      // 1. Check if location services (GPS) are enabled on device
+      // 1. Fast check if location services (GPS) are enabled on device (1s timeout)
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled()
-          .timeout(const Duration(seconds: 3), onTimeout: () => false);
+          .timeout(const Duration(seconds: 1), onTimeout: () => false);
 
       if (!serviceEnabled) {
         return LocationDataResult(
@@ -136,13 +137,15 @@ class LocationService {
         );
       }
 
-      // 2. Check and request location permission
+      // 2. Fast check and request location permission
       LocationPermission permission = await Geolocator.checkPermission()
-          .timeout(const Duration(seconds: 3), onTimeout: () => LocationPermission.denied);
+          .timeout(const Duration(seconds: 1),
+              onTimeout: () => LocationPermission.denied);
 
       if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission()
-            .timeout(const Duration(seconds: 10), onTimeout: () => LocationPermission.denied);
+        permission = await Geolocator.requestPermission().timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => LocationPermission.denied);
       }
 
       if (permission == LocationPermission.deniedForever) {
@@ -161,28 +164,31 @@ class LocationService {
           latitude: 0.0,
           longitude: 0.0,
           accuracy: 0.0,
-          address: 'Location Permission Denied. Please allow location access to continue.',
+          address:
+              'Location Permission Denied. Please allow location access to continue.',
           isSuccess: false,
         );
       }
 
-      // 3. Hardware GPS acquisition with high accuracy & reliable fallbacks
+      // 3. Fast-Path: Instantly fetch cached device position (<20ms)
       Position? position;
       try {
-        position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-          timeLimit: const Duration(seconds: 8),
-        );
-      } catch (_) {
-        try {
-          position = await Geolocator.getLastKnownPosition();
-        } catch (_) {}
+        position = await Geolocator.getLastKnownPosition()
+            .timeout(const Duration(milliseconds: 500), onTimeout: () => null);
+      } catch (_) {}
 
-        if (position == null) {
+      // 4. Fallback to quick live acquisition if no cached location is available (2s max)
+      if (position == null) {
+        try {
+          position = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.medium,
+            timeLimit: const Duration(seconds: 2),
+          );
+        } catch (_) {
           try {
             position = await Geolocator.getCurrentPosition(
-              desiredAccuracy: LocationAccuracy.medium,
-              timeLimit: const Duration(seconds: 5),
+              desiredAccuracy: LocationAccuracy.low,
+              timeLimit: const Duration(seconds: 1),
             );
           } catch (_) {}
         }
@@ -205,7 +211,8 @@ class LocationService {
       // Fallback if hardware GPS fix is unavailable (e.g. indoor/emulator without mock location)
       const double fallbackLat = 24.365500;
       const double fallbackLng = 54.500531;
-      final fallbackAddress = await getAddressFromCoordinates(fallbackLat, fallbackLng);
+      final fallbackAddress =
+          await getAddressFromCoordinates(fallbackLat, fallbackLng);
 
       return LocationDataResult(
         latitude: fallbackLat,
@@ -217,7 +224,8 @@ class LocationService {
     } catch (e) {
       const double fallbackLat = 24.365500;
       const double fallbackLng = 54.500531;
-      final fallbackAddress = await getAddressFromCoordinates(fallbackLat, fallbackLng);
+      final fallbackAddress =
+          await getAddressFromCoordinates(fallbackLat, fallbackLng);
 
       return LocationDataResult(
         latitude: fallbackLat,
