@@ -27,6 +27,7 @@ class DailyTimesheetEntry extends Equatable {
   final DateTime? checkInTime;
   final DateTime? checkOutTime;
   final Duration totalDuration;
+  final Duration breakDuration;
   final double regularHours;
   final double overtimeHours;
   final int stepCount;
@@ -40,6 +41,7 @@ class DailyTimesheetEntry extends Equatable {
     this.checkInTime,
     this.checkOutTime,
     required this.totalDuration,
+    this.breakDuration = Duration.zero,
     required this.regularHours,
     required this.overtimeHours,
     this.stepCount = 0,
@@ -57,6 +59,7 @@ class DailyTimesheetEntry extends Equatable {
         checkInTime,
         checkOutTime,
         totalDuration,
+        breakDuration,
         regularHours,
         overtimeHours,
         stepCount,

@@ -71,6 +71,8 @@ class TimesheetCalculator {
           checkOutTimestamp = siteOutMatches.last.eventTimestamp;
         }
       }
+      final DateTime effectiveEnd = checkOutTimestamp ?? dayRecords.last.eventTimestamp;
+
 
       // 3. Build Site Visits List
       final List<SiteVisitSummary> siteVisits = [];
@@ -100,12 +102,31 @@ class TimesheetCalculator {
         }
       }
 
-      final DateTime? checkInTimestamp = checkInRecord.eventTimestamp;
-      final DateTime effectiveEnd = checkOutTimestamp ?? DateTime.now();
+      // 4. Calculate total break duration
+      Duration totalBreakDuration = Duration.zero;
+      DateTime? currentBreakStart;
+      for (final r in dayRecords) {
+        if (r.workflowStep == WorkflowStep.breakStart) {
+          currentBreakStart = r.eventTimestamp;
+        } else if (r.workflowStep == WorkflowStep.breakEnd && currentBreakStart != null) {
+          totalBreakDuration += r.eventTimestamp.difference(currentBreakStart);
+          currentBreakStart = null;
+        }
+      }
+      if (currentBreakStart != null && effectiveEnd.isAfter(currentBreakStart)) {
+        totalBreakDuration += effectiveEnd.difference(currentBreakStart);
+      }
 
-      Duration totalWorkedDuration = Duration.zero;
+      final DateTime? checkInTimestamp = checkInRecord.eventTimestamp;
+
+      Duration rawElapsed = Duration.zero;
       if (checkInTimestamp != null && effectiveEnd.isAfter(checkInTimestamp)) {
-        totalWorkedDuration = effectiveEnd.difference(checkInTimestamp);
+        rawElapsed = effectiveEnd.difference(checkInTimestamp);
+      }
+
+      Duration totalWorkedDuration = rawElapsed - totalBreakDuration;
+      if (totalWorkedDuration.isNegative) {
+        totalWorkedDuration = Duration.zero;
       }
 
       final totalHours = totalWorkedDuration.inMinutes / 60.0;
@@ -132,6 +153,7 @@ class TimesheetCalculator {
           checkInTime: checkInTimestamp,
           checkOutTime: checkOutTimestamp,
           totalDuration: totalWorkedDuration,
+          breakDuration: totalBreakDuration,
           regularHours: regularHours,
           overtimeHours: overtimeHours,
           stepCount: dayRecords.length,

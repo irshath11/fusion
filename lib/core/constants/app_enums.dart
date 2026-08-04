@@ -81,6 +81,8 @@ enum WorkflowStep {
   officeCheckIn,
   siteCheckIn,
   siteCheckOut,
+  breakStart,
+  breakEnd,
   officeCheckOut,
   completed,
 }
@@ -94,6 +96,10 @@ extension WorkflowStepExtension on WorkflowStep {
         return '2. Site Check-In';
       case WorkflowStep.siteCheckOut:
         return '3. Site Check-Out (Leaving Site)';
+      case WorkflowStep.breakStart:
+        return 'Break Start';
+      case WorkflowStep.breakEnd:
+        return 'Break End';
       case WorkflowStep.officeCheckOut:
         return '4. Office Check-Out (Reach Office)';
       case WorkflowStep.completed:
@@ -109,6 +115,10 @@ extension WorkflowStepExtension on WorkflowStep {
         return 'SITE_CHECK_IN';
       case WorkflowStep.siteCheckOut:
         return 'SITE_CHECK_OUT';
+      case WorkflowStep.breakStart:
+        return 'BREAK_START';
+      case WorkflowStep.breakEnd:
+        return 'BREAK_END';
       case WorkflowStep.officeCheckOut:
         return 'OFFICE_CHECK_OUT';
       case WorkflowStep.completed:
@@ -123,6 +133,10 @@ extension WorkflowStepExtension on WorkflowStep {
       case WorkflowStep.siteCheckIn:
         return WorkflowStep.siteCheckOut;
       case WorkflowStep.siteCheckOut:
+        return WorkflowStep.officeCheckOut;
+      case WorkflowStep.breakStart:
+        return WorkflowStep.breakEnd;
+      case WorkflowStep.breakEnd:
         return WorkflowStep.officeCheckOut;
       case WorkflowStep.officeCheckOut:
         return WorkflowStep.completed;

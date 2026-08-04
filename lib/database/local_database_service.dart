@@ -336,12 +336,46 @@ class LocalDatabaseService {
     final lastRecord = todayUserRecords.last;
     if (lastRecord.workflowStep == WorkflowStep.officeCheckOut) {
       return WorkflowStep.completed;
+    } else if (lastRecord.workflowStep == WorkflowStep.breakStart) {
+      return WorkflowStep.breakEnd;
     } else if (lastRecord.workflowStep == WorkflowStep.siteCheckIn) {
       return WorkflowStep.siteCheckOut;
     } else {
-      // Last record was officeCheckIn or siteCheckOut: user can do siteCheckIn or officeCheckOut
+      // Last record was officeCheckIn, siteCheckOut, or breakEnd: user can do siteCheckIn or officeCheckOut
       return WorkflowStep.siteCheckIn;
     }
+  }
+
+  /// Checks if employee is currently on break
+  bool isOnBreakToday([String? employeeId]) {
+    final todayUserRecords = getTodayAttendanceRecords(employeeId);
+    if (todayUserRecords.isEmpty) return false;
+    return todayUserRecords.last.workflowStep == WorkflowStep.breakStart;
+  }
+
+  /// Calculates total break duration for today
+  Duration getBreakDurationForToday([String? employeeId]) {
+    final todayRecords = getTodayAttendanceRecords(employeeId);
+    if (todayRecords.isEmpty) return Duration.zero;
+
+    Duration totalBreak = Duration.zero;
+    DateTime? breakStart;
+
+    for (final r in todayRecords) {
+      if (r.workflowStep == WorkflowStep.breakStart) {
+        breakStart = r.eventTimestamp;
+      } else if (r.workflowStep == WorkflowStep.breakEnd && breakStart != null) {
+        totalBreak += r.eventTimestamp.difference(breakStart);
+        breakStart = null;
+      }
+    }
+
+    // If currently on an active break
+    if (breakStart != null) {
+      totalBreak += DateTime.now().difference(breakStart);
+    }
+
+    return totalBreak;
   }
 
   /// Checks if the employee has already completed at least one site check-in today

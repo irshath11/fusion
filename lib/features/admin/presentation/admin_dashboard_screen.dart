@@ -9,6 +9,7 @@ import 'reports_analytics_screen.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_enums.dart';
 import '../../../database/local_database_service.dart';
+import '../../attendance/domain/attendance_record.dart';
 import '../../auth/presentation/auth_cubit.dart';
 import '../../auth/presentation/login_screen.dart';
 
@@ -127,7 +128,21 @@ class AdminOverviewTab extends StatelessWidget {
                 .toSet();
             final totalCompletedToday = completedEmpIds.length;
 
+            final Map<String, AttendanceRecord> latestTodayRecords = {};
+            for (final r in todayRecords) {
+              final key = r.employeeId.isNotEmpty ? r.employeeId : r.employeeName;
+              if (!latestTodayRecords.containsKey(key) ||
+                  r.eventTimestamp.isAfter(latestTodayRecords[key]!.eventTimestamp)) {
+                latestTodayRecords[key] = r;
+              }
+            }
+
+            final onBreakCount = latestTodayRecords.values
+                .where((r) => r.workflowStep == WorkflowStep.breakStart)
+                .length;
+
             final onDutyCount = (totalCheckedInToday - totalCompletedToday).clamp(0, totalCheckedInToday);
+            final activeWorkingCount = (onDutyCount - onBreakCount).clamp(0, onDutyCount);
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -146,7 +161,8 @@ class AdminOverviewTab extends StatelessWidget {
                   childAspectRatio: 1.4,
                   children: [
                     _buildStatCard(context, 'Total Employees', '${employees.length}', Icons.badge_rounded, AppColors.primary),
-                    _buildStatCard(context, 'On Duty Currently', '$onDutyCount', Icons.access_time_filled_rounded, AppColors.success),
+                    _buildStatCard(context, 'Active Working', '$activeWorkingCount', Icons.access_time_filled_rounded, AppColors.success),
+                    _buildStatCard(context, 'On Break Currently', '$onBreakCount', Icons.free_breakfast_rounded, Colors.orange),
                     _buildStatCard(context, 'Checked In Today', '$totalCheckedInToday', Icons.how_to_reg_rounded, AppColors.secondary),
                     _buildStatCard(context, 'Shift Completed Today', '$totalCompletedToday', Icons.task_alt_rounded, AppColors.info),
                     _buildStatCard(context, 'Offices Geofenced', '${offices.length}', Icons.business_rounded, AppColors.primary),

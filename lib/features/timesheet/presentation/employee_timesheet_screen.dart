@@ -512,6 +512,35 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(width: 6),
+                // Break Duration Pill
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.shade300),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Break',
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.amber.shade900),
+                      ),
+                      Text(
+                        '${entry.breakDuration.inMinutes}m',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: Colors.amber.shade900),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ],

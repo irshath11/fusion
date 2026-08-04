@@ -192,6 +192,10 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
             step: step,
             siteName: sName,
           );
+    } else if (step == WorkflowStep.breakStart || step == WorkflowStep.breakEnd) {
+      context.read<AttendanceCubit>().executeAttendanceStep(
+            step: step,
+          );
     } else if (step == WorkflowStep.officeCheckOut) {
       _openCameraModal(step);
     }
@@ -416,6 +420,10 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
 
     final empId = user?.id ?? user?.firebaseUid;
     final userTodayRecords = _db.getTodayAttendanceRecords(empId);
+    final breakDuration = _db.getBreakDurationForToday(empId);
+    final breakHrs = breakDuration.inHours.toString().padLeft(2, '0');
+    final breakMins = (breakDuration.inMinutes % 60).toString().padLeft(2, '0');
+    final String breakTimeStr = '${breakHrs}h ${breakMins}m';
 
     String workingTime = '00h 00m';
     if (userTodayRecords.isNotEmpty) {
@@ -431,15 +439,18 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
         } else if (lastRecord.workflowStep == WorkflowStep.siteCheckOut) {
           endTime = lastRecord.eventTimestamp;
         } else {
-          // officeCheckIn or siteCheckIn: Duty is currently active!
+          // officeCheckIn, siteCheckIn, or breakStart/breakEnd: Duty is currently active!
           endTime = now;
         }
 
-        final diff = endTime.isAfter(checkInTime)
+        final rawDiff = endTime.isAfter(checkInTime)
             ? endTime.difference(checkInTime)
             : Duration.zero;
-        final hrs = diff.inHours.toString().padLeft(2, '0');
-        final mins = (diff.inMinutes % 60).toString().padLeft(2, '0');
+        final netDiff = rawDiff - breakDuration;
+        final netDuration = netDiff.isNegative ? Duration.zero : netDiff;
+
+        final hrs = netDuration.inHours.toString().padLeft(2, '0');
+        final mins = (netDuration.inMinutes % 60).toString().padLeft(2, '0');
         workingTime = '${hrs}h ${mins}m';
       }
     }
@@ -713,7 +724,9 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                           : '${currentStep.index + 1}/4',
                                     ),
                                     _buildInfoMetric(
-                                        'Working Time', workingTime),
+                                        'Net Work Time', workingTime),
+                                    _buildInfoMetric(
+                                        'Break Time', breakTimeStr),
                                     _buildInfoMetric(
                                         'Pending Sync', '$_pendingSyncCount'),
                                   ],
@@ -884,7 +897,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                           ),
                                           const SizedBox(height: 6),
                                           const Text(
-                                            'Check in to your next job site or perform Final Office Check-Out to end your workday.',
+                                            'Check in to your next job site, start a break, or perform Final Office Check-Out to end your workday.',
                                             style: TextStyle(
                                                 fontSize: 13,
                                                 color: AppColors
@@ -894,12 +907,12 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                           Row(
                                             children: [
                                               Expanded(
-                                                flex: 6,
+                                                flex: 5,
                                                 child: AppButton(
                                                   text: state
                                                           is AttendanceProcessing
                                                       ? 'Logging...'
-                                                      : 'Check-In to Site',
+                                                      : 'Site Check-In',
                                                   isLoading: state
                                                       is AttendanceProcessing,
                                                   icon: Icons
@@ -910,9 +923,53 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                                               .siteCheckIn),
                                                 ),
                                               ),
-                                              const SizedBox(width: 10),
+                                              const SizedBox(width: 6),
                                               Expanded(
-                                                flex: 5,
+                                                flex: 4,
+                                                child: OutlinedButton.icon(
+                                                  onPressed: state
+                                                          is AttendanceProcessing
+                                                      ? null
+                                                      : () =>
+                                                          _handleAttendanceStep(
+                                                              WorkflowStep
+                                                                  .breakStart),
+                                                  icon: const Icon(
+                                                      Icons.free_breakfast_rounded,
+                                                      size: 16),
+                                                  label: FittedBox(
+                                                    fit: BoxFit.scaleDown,
+                                                    child: Text(
+                                                      state is AttendanceProcessing
+                                                          ? 'Logging...'
+                                                          : 'Start Break',
+                                                      style: const TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold),
+                                                    ),
+                                                  ),
+                                                  style:
+                                                      OutlinedButton.styleFrom(
+                                                    foregroundColor:
+                                                        Colors.amber.shade900,
+                                                    side: BorderSide(
+                                                        color: Colors
+                                                            .amber.shade600),
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        vertical: 14, horizontal: 4),
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        10)),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                flex: 4,
                                                 child: OutlinedButton.icon(
                                                   onPressed: state
                                                           is AttendanceProcessing
@@ -936,7 +993,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                                       : const Icon(
                                                           Icons
                                                               .no_meeting_room_rounded,
-                                                          size: 18),
+                                                          size: 16),
                                                   label: FittedBox(
                                                     fit: BoxFit.scaleDown,
                                                     child: Text(
@@ -957,7 +1014,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                                             .red.shade400),
                                                     padding: const EdgeInsets
                                                         .symmetric(
-                                                        vertical: 14),
+                                                        vertical: 14, horizontal: 4),
                                                     shape:
                                                         RoundedRectangleBorder(
                                                             borderRadius:

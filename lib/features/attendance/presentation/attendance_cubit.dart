@@ -203,6 +203,8 @@ class AttendanceCubit extends Cubit<AttendanceState> {
       String resolvedLocationName = '';
       if (siteName != null && siteName.trim().isNotEmpty) {
         resolvedLocationName = siteName.trim();
+      } else if (step == WorkflowStep.breakStart || step == WorkflowStep.breakEnd) {
+        resolvedLocationName = step.displayName;
       } else if (step == WorkflowStep.officeCheckIn || step == WorkflowStep.officeCheckOut) {
         if (!emp.useDefaultOffice && emp.assignedOfficeId != null) {
           final customOfficeMatches = offices.where((o) => o.id == emp.assignedOfficeId);

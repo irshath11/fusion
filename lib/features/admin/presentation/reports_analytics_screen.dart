@@ -626,9 +626,26 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     ? siteCheckIns.map((r) => r.siteName!).toSet().join(', ')
                     : null;
 
-                final diff = endRecordTime.isAfter(dateRecords.first.eventTimestamp)
+                Duration breakDuration = Duration.zero;
+                DateTime? breakStart;
+                for (final r in dateRecords) {
+                  if (r.workflowStep == WorkflowStep.breakStart) {
+                    breakStart = r.eventTimestamp;
+                  } else if (r.workflowStep == WorkflowStep.breakEnd && breakStart != null) {
+                    breakDuration += r.eventTimestamp.difference(breakStart);
+                    breakStart = null;
+                  }
+                }
+                if (breakStart != null && endRecordTime.isAfter(breakStart)) {
+                  breakDuration += endRecordTime.difference(breakStart);
+                }
+
+                final rawDiff = endRecordTime.isAfter(dateRecords.first.eventTimestamp)
                     ? endRecordTime.difference(dateRecords.first.eventTimestamp)
                     : Duration.zero;
+                final netDiff = rawDiff - breakDuration;
+                final diff = netDiff.isNegative ? Duration.zero : netDiff;
+
                 final dayHrs = diff.inMinutes / 60.0;
                 final dayReg = dayHrs <= 8.0 ? dayHrs : 8.0;
                 final dayOt = dayHrs > 8.0 ? (dayHrs - 8.0) : 0.0;
@@ -1410,6 +1427,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         return Icons.location_on_rounded;
       case WorkflowStep.siteCheckOut:
         return Icons.directions_run_rounded;
+      case WorkflowStep.breakStart:
+        return Icons.free_breakfast_rounded;
+      case WorkflowStep.breakEnd:
+        return Icons.play_arrow_rounded;
       case WorkflowStep.officeCheckOut:
         return Icons.logout_rounded;
       case WorkflowStep.completed:
@@ -1425,6 +1446,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         return AppColors.primary;
       case WorkflowStep.siteCheckOut:
         return AppColors.warning;
+      case WorkflowStep.breakStart:
+        return Colors.orange;
+      case WorkflowStep.breakEnd:
+        return AppColors.info;
       case WorkflowStep.officeCheckOut:
         return Colors.purple;
       case WorkflowStep.completed:

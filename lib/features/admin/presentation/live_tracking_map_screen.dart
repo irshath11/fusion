@@ -160,6 +160,11 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
     // 3. Employee Markers
     if (_filterRole == 'All' || _filterRole == 'Employees') {
       latestEmployeeRecords.forEach((empKey, record) {
+        final stepColor = _getStepColor(record.workflowStep);
+        final stepIcon = record.workflowStep == WorkflowStep.breakStart
+            ? Icons.free_breakfast_rounded
+            : Icons.person_pin_circle_rounded;
+
         markers.add(
           Marker(
             point: LatLng(record.latitude, record.longitude),
@@ -173,7 +178,7 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: AppColors.success,
+                      color: stepColor,
                       borderRadius: BorderRadius.circular(8),
                       boxShadow: [
                         BoxShadow(
@@ -197,10 +202,9 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.success, width: 2),
+                      border: Border.all(color: stepColor, width: 2),
                     ),
-                    child: const Icon(Icons.person_pin_circle_rounded,
-                        color: AppColors.success, size: 20),
+                    child: Icon(stepIcon, color: stepColor, size: 20),
                   ),
                 ],
               ),
@@ -533,7 +537,48 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
     );
   }
 
+  Color _getStepColor(WorkflowStep step) {
+    switch (step) {
+      case WorkflowStep.officeCheckIn:
+        return AppColors.success;
+      case WorkflowStep.siteCheckIn:
+        return AppColors.primary;
+      case WorkflowStep.siteCheckOut:
+        return AppColors.warning;
+      case WorkflowStep.breakStart:
+        return Colors.orange;
+      case WorkflowStep.breakEnd:
+        return AppColors.info;
+      case WorkflowStep.officeCheckOut:
+        return Colors.purple;
+      case WorkflowStep.completed:
+        return AppColors.success;
+    }
+  }
+
+  IconData _getStepIcon(WorkflowStep step) {
+    switch (step) {
+      case WorkflowStep.officeCheckIn:
+        return Icons.login_rounded;
+      case WorkflowStep.siteCheckIn:
+        return Icons.location_on_rounded;
+      case WorkflowStep.siteCheckOut:
+        return Icons.directions_run_rounded;
+      case WorkflowStep.breakStart:
+        return Icons.free_breakfast_rounded;
+      case WorkflowStep.breakEnd:
+        return Icons.play_arrow_rounded;
+      case WorkflowStep.officeCheckOut:
+        return Icons.logout_rounded;
+      case WorkflowStep.completed:
+        return Icons.check_circle_rounded;
+    }
+  }
+
   void _showEmployeeDetails(AttendanceRecord record) {
+    final stepColor = _getStepColor(record.workflowStep);
+    final stepIcon = _getStepIcon(record.workflowStep);
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -546,8 +591,7 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.person_pin_circle_rounded,
-                    color: AppColors.success, size: 28),
+                Icon(stepIcon, color: stepColor, size: 28),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -557,9 +601,9 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
                           style: const TextStyle(
                               fontSize: 18, fontWeight: FontWeight.bold)),
                       Text(record.workflowStep.displayName,
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 12,
-                              color: AppColors.success,
+                              color: stepColor,
                               fontWeight: FontWeight.bold)),
                     ],
                   ),
