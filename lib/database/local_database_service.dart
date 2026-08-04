@@ -21,6 +21,7 @@ class LocalDatabaseService {
   UserEntity? _currentUser;
   Box? _settingsBox;
 
+  final List<UserEntity> _users = [];
   final List<EmployeeEntity> _employees = [];
   final List<OfficeEntity> _offices = [];
   final List<WorkSiteEntity> _workSites = [];
@@ -46,6 +47,17 @@ class LocalDatabaseService {
       if (savedUserJson != null && savedUserJson.toString().isNotEmpty) {
         try {
           _currentUser = UserEntity.fromJson(jsonDecode(savedUserJson));
+        } catch (_) {}
+      }
+
+      final savedUsersJson = _settingsBox?.get('users_json');
+      if (savedUsersJson != null && savedUsersJson.toString().isNotEmpty) {
+        try {
+          final List<dynamic> decoded = jsonDecode(savedUsersJson);
+          _users.clear();
+          for (final item in decoded) {
+            _users.add(UserEntity.fromJson(item));
+          }
         } catch (_) {}
       }
 
@@ -179,6 +191,77 @@ class LocalDatabaseService {
     try {
       _settingsBox?.delete('current_user_json');
     } catch (_) {}
+  }
+
+  // Users CRUD
+  List<UserEntity> getUsers() {
+    final Map<String, UserEntity> uniqueMap = {};
+    for (final u in _users) {
+      final key = u.email.trim().isNotEmpty
+          ? u.email.trim().toLowerCase()
+          : (u.fullName.trim().isNotEmpty ? u.fullName.trim().toLowerCase() : u.id);
+      uniqueMap[key] = u;
+    }
+    for (final e in _employees) {
+      final key = e.email.trim().isNotEmpty
+          ? e.email.trim().toLowerCase()
+          : (e.name.trim().isNotEmpty ? e.name.trim().toLowerCase() : e.id);
+      if (!uniqueMap.containsKey(key)) {
+        uniqueMap[key] = UserEntity(
+          id: e.id,
+          firebaseUid: e.id,
+          email: e.email,
+          fullName: e.name,
+          phoneNumber: e.mobileNumber,
+          role: UserRole.employee,
+          organizationId: _organization?.id ?? '00000000-0000-0000-0000-000000000001',
+          isActive: e.isActive,
+        );
+      }
+    }
+    if (_currentUser != null) {
+      final key = _currentUser!.email.trim().isNotEmpty
+          ? _currentUser!.email.trim().toLowerCase()
+          : (_currentUser!.fullName.trim().isNotEmpty ? _currentUser!.fullName.trim().toLowerCase() : _currentUser!.id);
+      if (!uniqueMap.containsKey(key) || _currentUser!.role == UserRole.superAdmin || _currentUser!.role == UserRole.admin) {
+        uniqueMap[key] = _currentUser!;
+      }
+    }
+    return List.unmodifiable(uniqueMap.values.toList());
+  }
+
+  void saveUser(UserEntity user) {
+    int index = _users.indexWhere((u) =>
+        u.id == user.id ||
+        (u.email.isNotEmpty &&
+            user.email.isNotEmpty &&
+            u.email.trim().toLowerCase() == user.email.trim().toLowerCase()));
+    if (index >= 0) {
+      _users[index] = user;
+    } else {
+      _users.add(user);
+    }
+    _persistUsers();
+  }
+
+  void saveUsers(List<UserEntity> users) {
+    for (final user in users) {
+      saveUser(user);
+    }
+  }
+
+  void deleteUser(String id) {
+    _users.removeWhere((u) => u.id == id);
+    _persistUsers();
+  }
+
+  void _persistUsers() {
+    try {
+      final jsonList = _users.map((u) => u.toJson()).toList();
+      _settingsBox?.put('users_json', jsonEncode(jsonList));
+    } catch (e) {
+      debugPrint('Error persisting users to Hive: $e');
+    }
   }
 
   // Offices CRUD

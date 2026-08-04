@@ -182,12 +182,27 @@ class AttendanceCubit extends Cubit<AttendanceState> {
           resolvedLocationName = defaultOffice.name;
         }
       } else {
-        resolvedLocationName = workSites.isNotEmpty ? workSites.first.siteName : 'Work Site';
+        final activeSite = _db.getActiveSiteNameToday(emp.id);
+        resolvedLocationName = (activeSite != null && activeSite.trim().isNotEmpty)
+            ? activeSite.trim()
+            : (workSites.isNotEmpty ? workSites.first.siteName : 'Work Site');
       }
 
       final String formattedAddress = location.address.isNotEmpty
           ? location.address
           : await LocationService.getAddressFromCoordinates(location.latitude, location.longitude);
+
+      String? matchedWorkSiteId;
+      if (step == WorkflowStep.siteCheckIn || step == WorkflowStep.siteCheckOut) {
+        final matches = workSites.where((s) =>
+            resolvedLocationName.toLowerCase().contains(s.siteName.toLowerCase()) ||
+            s.siteName.toLowerCase().contains(resolvedLocationName.toLowerCase()));
+        if (matches.isNotEmpty) {
+          matchedWorkSiteId = matches.first.id;
+        } else if (workSites.isNotEmpty) {
+          matchedWorkSiteId = workSites.first.id;
+        }
+      }
 
       // 5. Create & Persist Attendance Record
       final record = AttendanceRecord(
@@ -206,9 +221,7 @@ class AttendanceCubit extends Cubit<AttendanceState> {
         officeId: (step == WorkflowStep.officeCheckIn || step == WorkflowStep.officeCheckOut)
             ? (emp.assignedOfficeId ?? defaultOffice.id)
             : null,
-        workSiteId: (step == WorkflowStep.siteCheckIn || step == WorkflowStep.siteCheckOut)
-            ? (workSites.isNotEmpty ? workSites.first.id : null)
-            : null,
+        workSiteId: matchedWorkSiteId,
         siteName: resolvedLocationName,
         syncStatus: SyncStatus.pending,
       );

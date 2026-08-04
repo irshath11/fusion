@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_enums.dart';
 import '../../../core/widgets/custom_text_field.dart';
 import '../../../core/widgets/app_button.dart';
+import '../../../database/local_database_service.dart';
 import '../../auth/domain/user_entity.dart';
 import 'ownership_transfer_cubit.dart';
 
 class OwnershipTransferDialog extends StatefulWidget {
-  final UserEntity currentSuperAdmin;
-  final List<UserEntity> candidateAdmins;
+  final UserEntity? currentSuperAdmin;
+  final List<UserEntity>? candidateAdmins;
 
   const OwnershipTransferDialog({
     super.key,
-    required this.currentSuperAdmin,
-    required this.candidateAdmins,
+    this.currentSuperAdmin,
+    this.candidateAdmins,
   });
 
   @override
@@ -23,14 +25,34 @@ class OwnershipTransferDialog extends StatefulWidget {
 
 class _OwnershipTransferDialogState extends State<OwnershipTransferDialog> {
   UserEntity? _selectedAdmin;
+  late final UserEntity _effectiveSuperAdmin;
+  late final List<UserEntity> _effectiveCandidateAdmins;
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   @override
   void initState() {
     super.initState();
-    if (widget.candidateAdmins.isNotEmpty) {
-      _selectedAdmin = widget.candidateAdmins.first;
+    final db = LocalDatabaseService();
+    _effectiveSuperAdmin = widget.currentSuperAdmin ??
+        db.currentUser ??
+        UserEntity(
+          id: '00000000-0000-0000-0000-000000000001',
+          firebaseUid: 'admin_uid',
+          organizationId: '00000000-0000-0000-0000-000000000001',
+          email: 'admin@enterprise.com',
+          fullName: 'Super Admin',
+          role: UserRole.superAdmin,
+        );
+
+    _effectiveCandidateAdmins = widget.candidateAdmins ??
+        db
+            .getUsers()
+            .where((u) => u.role == UserRole.admin && u.isActive)
+            .toList();
+
+    if (_effectiveCandidateAdmins.isNotEmpty) {
+      _selectedAdmin = _effectiveCandidateAdmins.first;
     }
   }
 
@@ -105,7 +127,7 @@ class _OwnershipTransferDialogState extends State<OwnershipTransferDialog> {
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                     const SizedBox(height: 8),
-                    widget.candidateAdmins.isEmpty
+                    _effectiveCandidateAdmins.isEmpty
                         ? Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
@@ -125,7 +147,7 @@ class _OwnershipTransferDialogState extends State<OwnershipTransferDialog> {
                               contentPadding: EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 10),
                             ),
-                            items: widget.candidateAdmins.map((admin) {
+                            items: _effectiveCandidateAdmins.map((admin) {
                               return DropdownMenuItem(
                                 value: admin,
                                 child: Text(
@@ -165,7 +187,7 @@ class _OwnershipTransferDialogState extends State<OwnershipTransferDialog> {
                 onPressed: () => Navigator.of(context).pop(false),
                 child: const Text('Cancel'),
               ),
-              if (widget.candidateAdmins.isNotEmpty)
+              if (_effectiveCandidateAdmins.isNotEmpty)
                 AppButton(
                   text: 'Confirm Transfer',
                   isLoading: isLoading,
@@ -185,7 +207,7 @@ class _OwnershipTransferDialogState extends State<OwnershipTransferDialog> {
                     context
                         .read<OwnershipTransferCubit>()
                         .executeOwnershipTransfer(
-                          currentSuperAdmin: widget.currentSuperAdmin,
+                          currentSuperAdmin: _effectiveSuperAdmin,
                           targetAdmin: _selectedAdmin!,
                           superAdminPassword: _passwordController.text.trim(),
                         );

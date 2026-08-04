@@ -1097,10 +1097,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    LocationService.resolvePlaceName(r.latitude, r.longitude),
+                                    (r.siteName != null && r.siteName!.trim().isNotEmpty)
+                                        ? r.siteName!.trim()
+                                        : (r.workflowStep == WorkflowStep.officeCheckIn || r.workflowStep == WorkflowStep.officeCheckOut
+                                            ? 'Main HQ Office'
+                                            : LocationService.resolvePlaceName(r.latitude, r.longitude)),
                                     style: const TextStyle(
                                         fontSize: 14,
-                                        fontWeight: FontWeight.bold),
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primary),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
@@ -1323,17 +1328,29 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   // ==========================================
   // HELPER WIDGETS & METHODS
   // ==========================================
-  Widget _buildPhotoWidget(String photoBase64) {
-    if (photoBase64.isEmpty) {
+  Widget _buildPhotoWidget(String photoStr) {
+    final photo = photoStr.trim();
+    if (photo.isEmpty) {
       return const Center(
           child: Icon(Icons.person_pin, size: 60, color: Colors.white70));
     }
 
+    if (photo.startsWith('http://') || photo.startsWith('https://')) {
+      return Image.network(
+        photo,
+        fit: BoxFit.cover,
+        errorBuilder: (ctx, err, stack) => const Center(
+          child: Icon(Icons.broken_image_rounded, size: 40, color: Colors.white70),
+        ),
+      );
+    }
+
     try {
-      if (File(photoBase64).existsSync()) {
-        return Image.file(File(photoBase64), fit: BoxFit.cover);
+      if (File(photo).existsSync()) {
+        return Image.file(File(photo), fit: BoxFit.cover);
       }
-      final decodedBytes = base64Decode(photoBase64);
+      final cleanBase64 = photo.replaceAll(RegExp(r'[\r\n\s]+'), '');
+      final decodedBytes = base64Decode(cleanBase64);
       return Image.memory(decodedBytes, fit: BoxFit.cover);
     } catch (_) {
       return Container(

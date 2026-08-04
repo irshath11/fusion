@@ -14,12 +14,12 @@ class AppTheme {
         surface: AppColors.surfaceLight,
         error: AppColors.error,
       ),
-      cardTheme: CardThemeData(
+      cardTheme: const CardThemeData(
         color: AppColors.surfaceLight,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppColors.cardBorderLight, width: 1),
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+          side: BorderSide(color: AppColors.cardBorderLight, width: 1),
         ),
       ),
       appBarTheme: const AppBarTheme(
@@ -59,12 +59,12 @@ class AppTheme {
         surface: AppColors.surfaceDark,
         error: AppColors.error,
       ),
-      cardTheme: CardThemeData(
+      cardTheme: const CardThemeData(
         color: AppColors.surfaceDark,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppColors.cardBorderDark, width: 1),
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+          side: BorderSide(color: AppColors.cardBorderDark, width: 1),
         ),
       ),
       appBarTheme: const AppBarTheme(

@@ -937,7 +937,7 @@ class SupabaseService {
         'longitude': record.longitude,
         'is_geofence_valid': record.isGeofenceValid,
         'photo_url': photoPublicUrl ??
-            (record.photoBase64.startsWith('http') ? record.photoBase64 : null),
+            (record.photoBase64.isNotEmpty ? record.photoBase64 : null),
         'address': record.address,
         if (record.siteName != null && record.siteName!.isNotEmpty)
           'site_name': record.siteName,

@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fusion 360 - Admin Web Suite & Operations Control</title>
+  
+  <!-- Inter Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet Maps CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  
+  <!-- Application CSS -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Login Modal Overlay -->
+  <div id="login-overlay">
+    <div class="login-card">
+      <div class="login-brand">
+        <div class="brand-icon">F360</div>
+        <h1 class="login-title">Admin Web Portal</h1>
+        <p class="login-subtitle">Sign in with Super Admin or Admin credentials</p>
+      </div>
+
+      <div id="login-error-alert" class="error-alert"></div>
+
+      <form id="login-form">
+        <div class="form-group">
+          <label class="form-label" for="login-email">Email Address</label>
+          <input type="email" id="login-email" class="form-control" placeholder="admin@enterprise.com" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="login-password">Password / Firebase Access Code</label>
+          <input type="password" id="login-password" class="form-control" placeholder="••••••••" required autocomplete="current-password">
+        </div>
+        <button type="submit" id="login-submit-btn" class="btn btn-primary" style="width: 100%; margin-top: 8px;">
+          Authenticate Admin Session
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- App Layout -->
+  <div id="app">
+
+    <!-- Enterprise Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand-icon">F360</div>
+        <div class="brand-info">
+          <span class="brand-title">Fusion 360</span>
+          <span class="brand-subtitle">Workforce Management Suite</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">Navigation</div>
+        
+        <div class="nav-item active" data-tab="overview">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+          </svg>
+          <span>Overview</span>
+        </div>
+
+        <div class="nav-item" data-tab="employees">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+          </svg>
+          <span>Employees</span>
+        </div>
+
+        <div class="nav-item" data-tab="offices">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          </svg>
+          <span>Offices & Geofences</span>
+        </div>
+
+        <div class="nav-item" data-tab="sites">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span>Work Sites</span>
+        </div>
+
+        <div class="nav-item" data-tab="map">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+          </svg>
+          <span>Live GPS Tracking</span>
+        </div>
+
+        <div class="nav-item" data-tab="reports">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span>Timesheets & Reports</span>
+        </div>
+
+        <div class="nav-section-title">Governance</div>
+
+        <div class="nav-item" data-tab="security">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+          <span>Security & Ownership</span>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-profile-badge">
+          <div id="user-avatar" class="user-avatar">A</div>
+          <div class="user-meta">
+            <span id="user-display-name" class="user-name">Super Admin</span>
+            <span id="user-display-role" class="user-role">SUPER_ADMIN</span>
+          </div>
+        </div>
+        <button id="logout-btn" class="btn-icon" title="Sign Out">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Wrapper Area -->
+    <main class="main-wrapper">
+      
+      <!-- Top Sticky Header -->
+      <header class="top-header">
+        <div class="header-left">
+          <h2 id="active-page-title" class="page-title">Executive Command Center</h2>
+          <div class="sync-status-indicator">
+            <span class="sync-dot"></span>
+            <span>Supabase Cloud Active</span>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <button id="btn-theme-toggle" class="btn btn-secondary btn-sm">
+            🌙 Theme
+          </button>
+          <button id="btn-refresh-data" class="btn btn-secondary btn-sm">
+            🔄 Refresh
+          </button>
+        </div>
+      </header>
+
+      <!-- Main Content Viewport Area -->
+      <div class="content-body">
+
+        <!-- TAB 1: OVERVIEW -->
+        <div id="tab-overview" class="tab-pane active">
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-title">Total Employees</span>
+                <div class="metric-icon">👥</div>
+              </div>
+              <div id="metric-total-employees" class="metric-value">0</div>
+              <div class="metric-footer">Active workforce accounts</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-title">On Duty Currently</span>
+                <div class="metric-icon">⏱️</div>
+              </div>
+              <div id="metric-on-duty" class="metric-value">0</div>
+              <div class="metric-footer">Active checked-in field staff</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-title">Checked In Today</span>
+                <div class="metric-icon">✅</div>
+              </div>
+              <div id="metric-checked-in-today" class="metric-value">0</div>
+              <div class="metric-footer">Unique daily logins</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-title">Offices Geofenced</span>
+                <div class="metric-icon">🏢</div>
+              </div>
+              <div id="metric-offices-count" class="metric-value">0</div>
+              <div class="metric-footer">Active HQ & branch locations</div>
+            </div>
+          </div>
+
+          <div class="card-table-wrapper" style="padding: 20px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+              <span style="font-size: 18px;">🛡️</span>
+              <h3 style="font-size: 15px; font-weight: 600;">Geofence & Camera Audit Security Enforcement</h3>
+            </div>
+            <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.6;">
+              • <strong>Live Selfie Camera Audit:</strong> Every employee check-in requires biometric photo proof captured on site.<br>
+              • <strong>Haversine Geofence Calculation:</strong> Automatic calculation of exact distance to office/site coordinates (200m radius threshold).<br>
+              • <strong>Cloud Storage & Database Sync:</strong> Real-time PostgreSQL row updates connected via Supabase client SDK.
+            </p>
+          </div>
+        </div>
+
+        <!-- TAB 2: EMPLOYEES -->
+        <div id="tab-employees" class="tab-pane">
+          <div class="card-table-wrapper">
+            <div class="table-toolbar">
+              <div class="table-title-group">
+                <h3 class="table-title">Employee Directory</h3>
+                <span id="employee-count-badge" class="table-count-badge">0 Employees</span>
+              </div>
+              <div class="table-actions">
+                <div class="search-input-wrapper">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <input type="text" id="employee-search-input" class="form-control" placeholder="Search name or code...">
+                </div>
+                <button id="btn-add-employee" class="btn btn-primary">
+                  + Add Employee
+                </button>
+              </div>
+            </div>
+
+            <div class="data-table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Emp Code</th>
+                    <th>Full Name</th>
+                    <th>Email / Contact</th>
+                    <th>Designation</th>
+                    <th>Department</th>
+                    <th>Assigned Office</th>
+                    <th>Status</th>
+                    <th style="text-align: right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="employee-table-body">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 3: OFFICES -->
+        <div id="tab-offices" class="tab-pane">
+          <div class="card-table-wrapper">
+            <div class="table-toolbar">
+              <div class="table-title-group">
+                <h3 class="table-title">Office Locations & Geofence Boundaries</h3>
+                <span id="office-count-badge" class="table-count-badge">0 Offices</span>
+              </div>
+              <div class="table-actions">
+                <button id="btn-add-office" class="btn btn-primary">
+                  + Add Office Location
+                </button>
+              </div>
+            </div>
+
+            <div class="data-table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Office Name</th>
+                    <th>Address</th>
+                    <th>GPS Coordinates (Lat, Long)</th>
+                    <th>Geofence Radius</th>
+                    <th>Default HQ</th>
+                  </tr>
+                </thead>
+                <tbody id="office-table-body">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 4: WORK SITES -->
+        <div id="tab-sites" class="tab-pane">
+          <div class="card-table-wrapper">
+            <div class="table-toolbar">
+              <div class="table-title-group">
+                <h3 class="table-title">Client Work Sites</h3>
+                <span id="site-count-badge" class="table-count-badge">0 Sites</span>
+              </div>
+              <div class="table-actions">
+                <button id="btn-add-site" class="btn btn-primary">
+                  + Add Work Site
+                </button>
+              </div>
+            </div>
+
+            <div class="data-table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Site Name</th>
+                    <th>Client Name</th>
+                    <th>Site Address</th>
+                    <th>Coordinates</th>
+                    <th>Radius (m)</th>
+                  </tr>
+                </thead>
+                <tbody id="site-table-body">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 5: LIVE GPS TRACKING MAP -->
+        <div id="tab-map" class="tab-pane">
+          <div class="map-view-container">
+            <div class="map-sidebar">
+              <div class="map-sidebar-header">
+                <h4 style="font-size: 14px; font-weight: 600;">Active Field Staff</h4>
+                <div class="search-input-wrapper" style="width: 100%;">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <input type="text" id="map-search-input" class="form-control" placeholder="Search staff location...">
+                </div>
+              </div>
+              <div id="map-staff-list" class="map-employee-list">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
+            <div id="leaflet-map" class="map-area"></div>
+          </div>
+        </div>
+
+        <!-- TAB 6: REPORTS & TIMESHEETS -->
+        <div id="tab-reports" class="tab-pane">
+          <div class="card-table-wrapper">
+            <div class="table-toolbar">
+              <div class="table-title-group">
+                <h3 class="table-title">Attendance Log & Timesheet Export</h3>
+              </div>
+              <div class="table-actions">
+                <button id="btn-export-csv" class="btn btn-secondary">
+                  📄 Export CSV
+                </button>
+                <button id="btn-export-excel" class="btn btn-primary">
+                  📊 Export Excel
+                </button>
+              </div>
+            </div>
+
+            <div class="data-table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Employee Name</th>
+                    <th>Event Type</th>
+                    <th>Location / Address</th>
+                    <th>Geofence</th>
+                    <th>Photo Proof</th>
+                  </tr>
+                </thead>
+                <tbody id="reports-table-body">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 7: SECURITY & OWNERSHIP -->
+        <div id="tab-security" class="tab-pane">
+          <div class="card-table-wrapper" style="padding: 20px;">
+            <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">Organization Ownership Management</h3>
+            <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 20px;">
+              Transfer Super Admin control to another designated Admin user. This executes the atomic PostgreSQL RPC function in Supabase.
+            </p>
+            <button id="btn-open-transfer-modal" class="btn btn-danger">
+              🛡️ Initiate Ownership Transfer
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Employee Form Slide-Over Drawer -->
+  <div id="employee-drawer-backdrop" class="drawer-backdrop"></div>
+  <div id="employee-drawer" class="slide-drawer">
+    <div class="drawer-header">
+      <h3 id="drawer-title" class="drawer-title">Add New Employee</h3>
+      <button id="drawer-close-btn" class="btn-icon">✕</button>
+    </div>
+    <div class="drawer-body">
+      <form id="employee-form">
+        <input type="hidden" id="emp-id">
+        
+        <div class="form-group">
+          <label class="form-label" for="emp-code">Employee Code *</label>
+          <input type="text" id="emp-code" class="form-control" placeholder="EMP-1001" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="emp-name">Full Name *</label>
+          <input type="text" id="emp-name" class="form-control" placeholder="John Doe" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="emp-email">Email Address *</label>
+          <input type="email" id="emp-email" class="form-control" placeholder="john@company.com" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="emp-phone">Mobile Phone</label>
+          <input type="text" id="emp-phone" class="form-control" placeholder="+971501234567">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="emp-designation">Designation *</label>
+          <input type="text" id="emp-designation" class="form-control" placeholder="Field Engineer" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="emp-department">Department *</label>
+          <input type="text" id="emp-department" class="form-control" placeholder="Operations" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="emp-role">Access Role *</label>
+          <select id="emp-role" class="form-control" required>
+            <option value="EMPLOYEE">EMPLOYEE (Standard Staff)</option>
+            <option value="ADMIN">ADMIN (Administrative Access)</option>
+          </select>
+        </div>
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button id="drawer-cancel-btn" class="btn btn-secondary">Cancel</button>
+      <button id="drawer-save-btn" class="btn btn-primary">Save Employee</button>
+    </div>
+  </div>
+
+  <!-- Ownership Transfer Modal -->
+  <div id="transfer-modal-backdrop" class="modal-backdrop"></div>
+  <div id="transfer-modal" class="modal-box">
+    <div class="modal-header">
+      <h3 class="modal-title">Transfer Super Admin Ownership</h3>
+      <button id="transfer-modal-close" class="btn-icon">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
+        Warning: Transferring ownership will demote your account to regular Admin status. Select the target Admin user below:
+      </p>
+      <div class="form-group">
+        <label class="form-label" for="transfer-target-select">Select Target Admin User</label>
+        <select id="transfer-target-select" class="form-control"></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="transfer-cancel-btn" class="btn btn-secondary">Cancel</button>
+      <button id="transfer-confirm-btn" class="btn btn-danger">Confirm Transfer</button>
+    </div>
+  </div>
+
+  <!-- Photo Lightbox Audit Modal -->
+  <div id="photo-modal-backdrop" class="modal-backdrop"></div>
+  <div id="photo-modal" class="modal-box" style="max-width: 520px;">
+    <div class="modal-header">
+      <h3 id="photo-modal-title" class="modal-title">Selfie Verification Audit</h3>
+      <button id="photo-modal-close" class="btn-icon">✕</button>
+    </div>
+    <div class="modal-body" style="text-align: center; padding: 16px;">
+      <img id="photo-modal-img" src="" alt="Attendance Photo Audit" style="max-width: 100%; max-height: 420px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); object-fit: contain;">
+      <div id="photo-modal-meta" style="margin-top: 12px; font-size: 12px; color: var(--text-secondary);"></div>
+    </div>
+  </div>
+
+  <!-- Supabase JS Client SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <!-- Leaflet Map JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  
+  <!-- SheetJS for Excel Export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- Application JS Controller -->
+  <script src="app.js"></script>
+
+</body>
+</html>

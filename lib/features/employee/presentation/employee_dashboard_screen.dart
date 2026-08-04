@@ -432,9 +432,12 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
       }
     }
 
+    final empId = user?.id ?? user?.firebaseUid;
+    final activeSiteName = _db.getActiveSiteNameToday(empId);
     final offices = _db.getOffices();
-    final assignedOffice =
-        offices.isNotEmpty ? offices.first.name : 'Main Office';
+    final activeLocationDisplay = (activeSiteName != null && activeSiteName.trim().isNotEmpty)
+        ? activeSiteName.trim()
+        : (offices.isNotEmpty ? offices.first.name : 'Main HQ Office');
 
     return Scaffold(
       appBar: AppBar(
@@ -591,15 +594,15 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          const Text(
-                                            'Assigned Office Station',
-                                            style: TextStyle(
+                                          Text(
+                                            activeSiteName != null ? 'Active Work Site Location' : 'Assigned Office Station',
+                                            style: const TextStyle(
                                                 fontSize: 12,
                                                 color: AppColors
                                                     .textSecondaryLight),
                                           ),
                                           Text(
-                                            assignedOffice,
+                                            activeLocationDisplay,
                                             style: const TextStyle(
                                                 fontWeight: FontWeight.bold,
                                                 fontSize: 16),

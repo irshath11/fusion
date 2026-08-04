@@ -63,6 +63,9 @@ class UserManagementCubit extends Cubit<UserManagementState> {
       final orgId =
           _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
       final remoteUsers = await _supabase.fetchOrganizationUsers(orgId);
+      if (remoteUsers.isNotEmpty) {
+        _db.saveUsers(remoteUsers);
+      }
 
       final localEmployees = _db.getEmployees();
       final localMappedUsers = localEmployees.map((e) {

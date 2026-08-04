@@ -1,14 +1,14 @@
 # Offline-First Employee Attendance & Field Workforce Tracking Application
 
-Enterprise-grade, offline-first mobile application built using **Flutter**, **Supabase (PostgreSQL, RLS, Storage)**, **Firebase Authentication**, **Hive Local Storage**, and **Clean Architecture**.
+Enterprise-grade, offline-first mobile and web application built using **Flutter**, **Flutter Web**, **Supabase (PostgreSQL, RLS, Storage)**, **Firebase Authentication**, **Hive Local Storage**, and **Clean Architecture**.
 
 ---
 
 ## 🌟 Key Application Features & Specifications
 
-### 1. Dual-Role Architecture
-- **Super Admin Module**: Total operational oversight, employee management, office management, work site management, live map tracking, and analytics reporting.
-- **Employee Module**: Enforced 6-step attendance workflow stepper, live photo capture, geofence verification, and pending offline sync monitor.
+### 1. Dual-Role Architecture & Dedicated Admin Web Application
+- **Super Admin Web & Mobile Suite**: Standalone Web Admin Portal (`web_admin`) and Flutter Web/Mobile Admin Dashboard for total operational oversight, employee directory management, office geofence configuration, work site registry, real-time GPS map tracking, and analytics reporting.
+- **Employee Mobile Portal**: Enforced 6-step attendance workflow stepper, live photo capture, geofence verification, and pending offline sync monitor.
 
 ### 2. First-Time Setup Wizard
 - When opened for the very first time, prompts for **Organization Name**, **Address**, **Super Admin Credentials**, and automatically provisions the organization, default office, and Super Admin account.
@@ -44,14 +44,42 @@ Enterprise-grade, offline-first mobile application built using **Flutter**, **Su
 
 ---
 
+## 💻 Running the Admin Web Application
+
+### Option A: Running as a Flutter Web App
+You can run the Flutter Web application directly using Flutter:
+```bash
+# Run in Chrome browser
+flutter run -d chrome
+```
+
+### Option B: Running the Standalone Web Admin Site (`web_admin`)
+A dedicated, ultra-fast web admin portal constructed with HTML5/CSS3/JS, Supabase SDK, and Leaflet Maps is located in `web_admin/`:
+```bash
+cd web_admin
+npm start
+```
+Or serve via any web server / Python server:
+```bash
+npx serve -s . -l 3000
+```
+Open `http://localhost:3000` in your browser.
+
+---
+
 ## 📁 Project Architecture & Folder Structure
 
 ```
 attendance_app/
 ├── backend/
 │   └── supabase_schema.sql         # Supabase PostgreSQL schema, UUID FKs, RLS Policies
+├── web_admin/                      # Standalone Enterprise Web Admin Portal
+│   ├── index.html                  # HTML5 SPA Container
+│   ├── styles.css                  # Enterprise Design System & CSS Variables
+│   ├── app.js                      # JavaScript Controller & Supabase/Leaflet Integration
+│   └── package.json                # Local web server script
 ├── lib/
-│   ├── main.dart                   # Role-Based Router Entry Point
+│   ├── main.dart                   # Role-Based Router Entry Point (Web & Mobile)
 │   ├── app_config.dart             # Global environment configurations
 │   ├── core/                       # Shared utilities, constants, & themes
 │   │   ├── constants/              # Colors, Themes, Enums (UserRole, WorkflowStep)
@@ -64,7 +92,7 @@ attendance_app/
 │       ├── auth/                   # Login Screen, Firebase/Supabase Auth & Cubit
 │       ├── attendance/             # Attendance Workflow Stepper, Camera Modal, Cubit
 │       ├── employee/               # Employee Duty Portal & Timeline
-│       ├── admin/                  # Super Admin Dashboard, Employee/Office/Site CRUD, Reports
+│       ├── admin/                  # Super Admin Dashboard & Responsive Desktop Web View
 │       └── sync/                   # Offline Sync Engine
 ├── pubspec.yaml
 └── README.md
@@ -82,9 +110,9 @@ attendance_app/
    ```bash
    flutter pub get
    ```
-3. **Run Application**:
+3. **Run Mobile / Desktop Web App**:
    ```bash
-   flutter run
+   flutter run -d chrome
    ```
 4. **Deploy Database**:
    - Copy `backend/supabase_schema.sql` into your Supabase SQL Editor and execute.
