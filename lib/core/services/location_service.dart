@@ -68,7 +68,7 @@ class LocationService {
       double lat, double lng) async {
     try {
       final placemarks = await placemarkFromCoordinates(lat, lng)
-          .timeout(const Duration(milliseconds: 800));
+          .timeout(const Duration(seconds: 3));
       if (placemarks.isNotEmpty) {
         final place = placemarks.first;
         final List<String> addressParts = [];
@@ -116,15 +116,15 @@ class LocationService {
     if ((lat - 25.0772).abs() < 0.1 && (lng - 55.1332).abs() < 0.1) {
       return 'Dubai Marina Coastline, Dubai';
     }
-    return 'Live Location';
+    return 'Live Field Location';
   }
 
   /// Fetches current GPS location with high reliability & fast hardware fallback
   static Future<LocationDataResult> getCurrentLocation() async {
     try {
-      // 1. Fast check if location services (GPS) are enabled on device (1s timeout)
+      // 1. Check if location services (GPS) are enabled on device
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled()
-          .timeout(const Duration(seconds: 1), onTimeout: () => false);
+          .timeout(const Duration(seconds: 3), onTimeout: () => false);
 
       if (!serviceEnabled) {
         return LocationDataResult(
@@ -137,14 +137,14 @@ class LocationService {
         );
       }
 
-      // 2. Fast check and request location permission
+      // 2. Check and request location permission
       LocationPermission permission = await Geolocator.checkPermission()
-          .timeout(const Duration(seconds: 1),
+          .timeout(const Duration(seconds: 3),
               onTimeout: () => LocationPermission.denied);
 
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission().timeout(
-            const Duration(seconds: 5),
+            const Duration(seconds: 10),
             onTimeout: () => LocationPermission.denied);
       }
 
@@ -170,25 +170,23 @@ class LocationService {
         );
       }
 
-      // 3. Fast-Path: Instantly fetch cached device position (<20ms)
+      // 3. Hardware GPS acquisition with high accuracy & reliable fallbacks
       Position? position;
       try {
-        position = await Geolocator.getLastKnownPosition()
-            .timeout(const Duration(milliseconds: 500), onTimeout: () => null);
-      } catch (_) {}
-
-      // 4. Fallback to quick live acquisition if no cached location is available (2s max)
-      if (position == null) {
+        position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 8),
+        );
+      } catch (_) {
         try {
-          position = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.medium,
-            timeLimit: const Duration(seconds: 2),
-          );
-        } catch (_) {
+          position = await Geolocator.getLastKnownPosition();
+        } catch (_) {}
+
+        if (position == null) {
           try {
             position = await Geolocator.getCurrentPosition(
-              desiredAccuracy: LocationAccuracy.low,
-              timeLimit: const Duration(seconds: 1),
+              desiredAccuracy: LocationAccuracy.medium,
+              timeLimit: const Duration(seconds: 5),
             );
           } catch (_) {}
         }
