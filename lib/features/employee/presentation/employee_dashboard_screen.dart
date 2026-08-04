@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../../database/local_database_service.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_enums.dart';
@@ -157,6 +158,17 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
       {String? activeSiteName}) async {
     final user = _db.currentUser;
     final empId = user?.id ?? user?.firebaseUid;
+
+    // Fast 10ms pre-check location status before showing camera or dialogs
+    final status = await LocationService.quickStatusCheck();
+    if (!status.isOk) {
+      if (!mounted) return;
+      context.read<AttendanceCubit>().emitLocationError(
+            status.message,
+            isPermissionDenied: status.isPermissionDenied,
+          );
+      return;
+    }
 
     if (step == WorkflowStep.officeCheckIn) {
       _openCameraModal(step);
@@ -556,6 +568,76 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                               child: const Text('OK'),
                             )
                           ],
+                        ),
+                      );
+                    } else if (state is LocationServicesDisabledError) {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                          title: const Row(
+                            children: [
+                              Icon(Icons.location_off_rounded,
+                                  color: AppColors.error, size: 28),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Location Required',
+                                  style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                state.message,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.error,
+                                    fontSize: 13),
+                              ),
+                              const SizedBox(height: 10),
+                              const Text(
+                                'Attendance log cannot be saved without valid GPS location. Please turn on Location (GPS) services on your device and try logging again.',
+                                style: TextStyle(
+                                    fontSize: 12, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                          actions: [
+                            OutlinedButton.icon(
+                              icon: const Icon(Icons.location_on_rounded,
+                                  size: 18),
+                              label: Text(state.isPermissionDenied
+                                  ? 'Open App Settings'
+                                  : 'Turn On Location'),
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                if (state.isPermissionDenied) {
+                                  Geolocator.openAppSettings();
+                                } else {
+                                  Geolocator.openLocationSettings();
+                                }
+                              },
+                            ),
+                            ElevatedButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('OK'),
+                            ),
+                          ],
+                        ),
+                      );
+                    } else if (state is AttendanceFailure) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(state.errorMessage),
+                          backgroundColor: AppColors.error,
                         ),
                       );
                     }
@@ -1021,7 +1103,9 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                           ),
                                           const SizedBox(height: 3),
                                           Text(
-                                            record.address.isNotEmpty
+                                            (record.address.isNotEmpty &&
+                                                    !record.address.contains('Live Field Location (GPS Active)') &&
+                                                    !record.address.contains('Live Field Operations (GPS Active)'))
                                                 ? record.address
                                                 : '${LocationService.resolvePlaceName(record.latitude, record.longitude)} (GPS: ${record.latitude.toStringAsFixed(6)}, ${record.longitude.toStringAsFixed(6)})',
                                             style: TextStyle(
