@@ -111,6 +111,10 @@ class SyncEngine {
         );
 
         if (success) {
+          if (publicPhotoUrl != null && publicPhotoUrl.isNotEmpty) {
+            recordToSync = recordToSync.copyWith(photoBase64: publicPhotoUrl);
+            _db.updateAttendanceRecord(recordToSync);
+          }
           syncedIds.add(recordToSync.id);
           syncedCount++;
         } else {

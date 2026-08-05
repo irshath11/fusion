@@ -290,9 +290,18 @@ class PdfExportService {
                     : '--:--';
                 final reg = '${entry.regularHours.toStringAsFixed(1)} h';
                 final ot = '+${entry.overtimeHours.toStringAsFixed(1)} h';
+                final dayRecs = records.where((r) {
+                  final rDate = DateFormat('yyyy-MM-dd').format(r.eventTimestamp);
+                  return rDate == dateStr;
+                }).toList();
+                final resolvedSites = dayRecs
+                    .map((r) => TimesheetCalculator.resolveSiteName(r))
+                    .toSet()
+                    .where((s) => s.isNotEmpty && s != 'Work Site')
+                    .join(', ');
                 final sitesStr = entry.siteVisits.isNotEmpty
                     ? entry.siteVisits.map((sv) => sv.siteName).join(', ')
-                    : 'Main Location';
+                    : (resolvedSites.isNotEmpty ? resolvedSites : 'Main Office');
                 final status = entry.isCompleted ? 'Complete' : 'In Progress';
                 return [dateStr, inTime, outTime, reg, ot, sitesStr, status];
               }).toList(),

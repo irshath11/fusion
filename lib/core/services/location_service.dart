@@ -107,13 +107,13 @@ class LocationService {
 
   /// Resolves physical zone/area place name for presets or offline fallback
   static String resolvePlaceName(double lat, double lng) {
-    if ((lat - 24.365500).abs() < 0.1 && (lng - 54.500531).abs() < 0.1) {
+    if ((lat - 24.365500).abs() < 0.01 && (lng - 54.500531).abs() < 0.01) {
       return 'Musaffah Industrial M12, Abu Dhabi';
     }
-    if ((lat - 25.1972).abs() < 0.1 && (lng - 55.2744).abs() < 0.1) {
+    if ((lat - 25.1972).abs() < 0.01 && (lng - 55.2744).abs() < 0.01) {
       return 'Business Bay Operations, Dubai';
     }
-    if ((lat - 25.0772).abs() < 0.1 && (lng - 55.1332).abs() < 0.1) {
+    if ((lat - 25.0772).abs() < 0.01 && (lng - 55.1332).abs() < 0.01) {
       return 'Dubai Marina Coastline, Dubai';
     }
     return 'Live Field Location';

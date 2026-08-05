@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../database/local_database_service.dart';
@@ -621,9 +622,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     ? officeOutRecs.last.eventTimestamp
                     : (siteOutRecs.isNotEmpty ? siteOutRecs.last.eventTimestamp : dateRecords.last.eventTimestamp);
 
-                final siteCheckIns = dateRecords.where((r) => r.workflowStep == WorkflowStep.siteCheckIn && r.siteName != null && r.siteName!.isNotEmpty);
+                final siteCheckIns = dateRecords.where((r) => r.workflowStep == WorkflowStep.siteCheckIn);
                 final siteNamesStr = siteCheckIns.isNotEmpty
-                    ? siteCheckIns.map((r) => r.siteName!).toSet().join(', ')
+                    ? siteCheckIns.map((r) => TimesheetCalculator.resolveSiteName(r)).toSet().join(', ')
                     : null;
 
                 final diff = endRecordTime.isAfter(dateRecords.first.eventTimestamp)
@@ -1097,7 +1098,12 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    LocationService.resolvePlaceName(r.latitude, r.longitude),
+                                    (r.address.trim().isNotEmpty &&
+                                            !r.address.contains('Live Field Location') &&
+                                            !r.address.contains('Timeout') &&
+                                            !r.address.contains('Error'))
+                                        ? r.address.trim()
+                                        : LocationService.resolvePlaceName(r.latitude, r.longitude),
                                     style: const TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.bold),
@@ -1118,11 +1124,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
                         // Site Name & Photo Section
                         () {
-                          final String siteNameText = (r.siteName != null && r.siteName!.trim().isNotEmpty)
-                              ? r.siteName!
-                              : (r.workflowStep == WorkflowStep.officeCheckIn || r.workflowStep == WorkflowStep.officeCheckOut
-                                  ? 'Main Office'
-                                  : 'Assigned Site');
+                          final String siteNameText = TimesheetCalculator.resolveSiteName(r);
 
                           final hasPhoto = r.photoBase64.trim().isNotEmpty;
 
@@ -1324,16 +1326,52 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   // HELPER WIDGETS & METHODS
   // ==========================================
   Widget _buildPhotoWidget(String photoBase64) {
-    if (photoBase64.isEmpty) {
-      return const Center(
-          child: Icon(Icons.person_pin, size: 60, color: Colors.white70));
+    final cleanPhoto = photoBase64.trim();
+    if (cleanPhoto.isEmpty) {
+      return Container(
+        color: Colors.blueGrey.shade800,
+        child: const Center(
+          child: Icon(Icons.person_pin, size: 65, color: Colors.white70),
+        ),
+      );
     }
 
     try {
-      if (File(photoBase64).existsSync()) {
-        return Image.file(File(photoBase64), fit: BoxFit.cover);
+      if (cleanPhoto.startsWith('http://') || cleanPhoto.startsWith('https://')) {
+        return Image.network(
+          cleanPhoto,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              color: Colors.blueGrey.shade800,
+              child: const Center(
+                child: Icon(Icons.broken_image_rounded, size: 50, color: Colors.white70),
+              ),
+            );
+          },
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return Container(
+              color: Colors.blueGrey.shade900,
+              child: const Center(
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+              ),
+            );
+          },
+        );
       }
-      final decodedBytes = base64Decode(photoBase64);
+
+      if (!kIsWeb && File(cleanPhoto).existsSync()) {
+        return Image.file(File(cleanPhoto), fit: BoxFit.cover);
+      }
+
+      String base64Str = cleanPhoto;
+      if (base64Str.contains(',')) {
+        base64Str = base64Str.split(',').last;
+      }
+      base64Str = base64Str.replaceAll(RegExp(r'\s+'), '');
+
+      final decodedBytes = base64Decode(base64Str);
       return Image.memory(decodedBytes, fit: BoxFit.cover);
     } catch (_) {
       return Container(
@@ -1390,7 +1428,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               ),
               const SizedBox(height: 2),
               Text(
-                'Location: ${(record.siteName != null && record.siteName!.trim().isNotEmpty) ? record.siteName!.trim() : (record.workflowStep == WorkflowStep.officeCheckIn || record.workflowStep == WorkflowStep.officeCheckOut ? "Main Office" : "Work Site")} (${record.latitude.toStringAsFixed(6)}, ${record.longitude.toStringAsFixed(6)})',
+                'Location: ${TimesheetCalculator.resolveSiteName(record)} (${record.latitude.toStringAsFixed(6)}, ${record.longitude.toStringAsFixed(6)})',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                     fontSize: 11, color: AppColors.textSecondaryLight),

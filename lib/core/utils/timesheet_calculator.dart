@@ -1,3 +1,4 @@
+import '../../database/local_database_service.dart';
 import '../../features/attendance/domain/attendance_record.dart';
 import '../../features/timesheet/domain/timesheet_entry.dart';
 import '../constants/app_enums.dart';
@@ -5,6 +6,44 @@ import '../constants/app_enums.dart';
 class TimesheetCalculator {
   /// Standard max regular work hours per day before overtime applies
   static const double standardRegularHoursPerDay = 8.0;
+
+  /// Resolves exact human-readable site or location name for an attendance record
+  static String resolveSiteName(AttendanceRecord r) {
+    if (r.siteName != null && r.siteName!.trim().isNotEmpty) {
+      return r.siteName!.trim();
+    }
+    final db = LocalDatabaseService();
+    if (r.workSiteId != null && r.workSiteId!.isNotEmpty) {
+      final siteMatches = db.getWorkSites().where((w) => w.id == r.workSiteId);
+      if (siteMatches.isNotEmpty) {
+        return siteMatches.first.siteName;
+      }
+    }
+    if (r.officeId != null && r.officeId!.isNotEmpty) {
+      final officeMatches = db.getOffices().where((o) => o.id == r.officeId);
+      if (officeMatches.isNotEmpty) {
+        return officeMatches.first.name;
+      }
+    }
+    if (r.address.trim().isNotEmpty &&
+        !r.address.contains('Live Field Location') &&
+        !r.address.contains('Timeout') &&
+        !r.address.contains('Error')) {
+      return r.address.trim();
+    }
+    final empMatches = db.getEmployees().where((e) => e.id == r.employeeId);
+    if (empMatches.isNotEmpty) {
+      final emp = empMatches.first;
+      if (emp.assignedOfficeName != null && emp.assignedOfficeName!.isNotEmpty) {
+        return emp.assignedOfficeName!;
+      }
+    }
+    if (r.workflowStep == WorkflowStep.officeCheckIn ||
+        r.workflowStep == WorkflowStep.officeCheckOut) {
+      return 'Main Office';
+    }
+    return 'Work Site';
+  }
 
   /// Calculates daily timesheet entries from raw attendance records for an employee or all employees
   static List<DailyTimesheetEntry> calculateDailyTimesheets(
@@ -77,7 +116,7 @@ class TimesheetCalculator {
       for (int i = 0; i < dayRecords.length; i++) {
         final r = dayRecords[i];
         if (r.workflowStep == WorkflowStep.siteCheckIn) {
-          final sName = (r.siteName != null && r.siteName!.isNotEmpty) ? r.siteName! : 'Work Site';
+          final sName = resolveSiteName(r);
           DateTime sIn = r.eventTimestamp;
           DateTime? sOut;
 
