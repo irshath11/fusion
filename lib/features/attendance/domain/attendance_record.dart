@@ -39,6 +39,8 @@ class AttendanceRecord {
     this.syncStatus = SyncStatus.pending,
   });
 
+  String get displayName => workflowStep.displayName;
+
   AttendanceRecord copyWith({
     String? address,
     SyncStatus? syncStatus,

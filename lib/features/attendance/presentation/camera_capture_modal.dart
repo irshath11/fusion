@@ -1,8 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../core/services/camera_service.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/animated_widgets.dart';
 
 class CameraCaptureModal extends StatefulWidget {
   final String stepName;
@@ -36,7 +39,6 @@ class _CameraCaptureModalState extends State<CameraCaptureModal> {
     try {
       _cameras = await availableCameras();
       if (_cameras.isNotEmpty) {
-        // Prefer front camera for selfie verification, fallback to first available
         final frontCamera = _cameras.firstWhere(
           (cam) => cam.lensDirection == CameraLensDirection.front,
           orElse: () => _cameras.first,
@@ -50,7 +52,6 @@ class _CameraCaptureModalState extends State<CameraCaptureModal> {
           );
           await _cameraController!.initialize();
         } catch (_) {
-          // Fallback to low resolution for vendor OEM devices (MediaTek / Xiaomi / Vivo / Oppo)
           _cameraController = CameraController(
             frontCamera,
             ResolutionPreset.low,
@@ -60,9 +61,7 @@ class _CameraCaptureModalState extends State<CameraCaptureModal> {
         }
 
         if (mounted) {
-          setState(() {
-            _isInitializing = false;
-          });
+          setState(() => _isInitializing = false);
         }
       } else {
         if (mounted) {
@@ -89,9 +88,7 @@ class _CameraCaptureModalState extends State<CameraCaptureModal> {
   }
 
   Future<void> _triggerLiveCapture() async {
-    setState(() {
-      _isCapturing = true;
-    });
+    setState(() => _isCapturing = true);
 
     try {
       if (_cameraController != null && _cameraController!.value.isInitialized) {
@@ -104,7 +101,6 @@ class _CameraCaptureModalState extends State<CameraCaptureModal> {
           });
         }
       } else {
-        // Fallback capture for restricted hardware
         final result = await CameraService.captureLivePhoto();
         if (mounted) {
           setState(() {
@@ -114,7 +110,6 @@ class _CameraCaptureModalState extends State<CameraCaptureModal> {
         }
       }
     } catch (e) {
-      // Graceful fallback to verified compressed snapshot
       final result = await CameraService.captureLivePhoto();
       if (mounted) {
         setState(() {
@@ -126,236 +121,230 @@ class _CameraCaptureModalState extends State<CameraCaptureModal> {
   }
 
   void _retakePhoto() {
-    setState(() {
-      _capturedResult = null;
-    });
+    setState(() => _capturedResult = null);
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.camera_alt_rounded, color: AppColors.primary),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Live Photo Verification',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
-                )
-              ],
-            ),
-            const Divider(height: 24),
-            Container(
-              height: 260,
-              width: double.infinity,
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.primaryLight, width: 2),
-              ),
-              child: _buildCameraContent(),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+      backgroundColor: isDark ? AppColors.surfaceDark : Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header Row
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    onPressed: _capturedResult == null
-                        ? (_isCapturing ? null : _triggerLiveCapture)
-                        : _retakePhoto,
-                    icon: Icon(_capturedResult == null
-                        ? Icons.camera
-                        : Icons.refresh_rounded),
-                    label: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        _capturedResult == null ? 'Capture Photo' : 'Retake',
-                        maxLines: 1,
-                      ),
-                    ),
+                    child: const Icon(Icons.face_retouching_natural_rounded,
+                        color: AppColors.primary, size: 20),
                   ),
-                ),
-                if (_capturedResult != null) ...[
                   const SizedBox(width: 12),
                   Expanded(
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      onPressed: () {
-                        widget.onPhotoCaptured(_capturedResult!);
-                        Navigator.pop(context);
-                      },
-                      icon: const Icon(Icons.check_circle_rounded),
-                      label: const FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          'Confirm',
-                          maxLines: 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Selfie Verification',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: isDark
+                                ? AppColors.textPrimaryDark
+                                : AppColors.textPrimaryLight,
+                          ),
                         ),
-                      ),
+                        Text(
+                          widget.stepName,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w500,
+                            color: isDark
+                                ? AppColors.textTertiaryDark
+                                : AppColors.textSecondaryLight,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ]
-              ],
-            )
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCameraContent() {
-    if (_isCapturing) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(color: Colors.white),
-            SizedBox(height: 12),
-            Text(
-              'Capturing live camera frame...',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_capturedResult != null) {
-      final fileExists = File(_capturedResult!.imagePath).existsSync();
-      return Stack(
-        alignment: Alignment.center,
-        fit: StackFit.expand,
-        children: [
-          if (fileExists)
-            Image.file(
-              File(_capturedResult!.imagePath),
-              fit: BoxFit.cover,
-            )
-          else
-            Container(
-              color: Colors.blueGrey.shade900,
-              child: const Center(
-                child: Icon(Icons.person_pin, size: 90, color: Colors.white70),
-              ),
-            ),
-          Positioned(
-            bottom: 12,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.black87,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                'Live Verified Photo (${(_capturedResult!.compressedSizeBytes / 1024).toStringAsFixed(1)} KB)',
-                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
-              ),
-            ),
-          )
-        ],
-      );
-    }
-
-    if (_isInitializing) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(color: Colors.white),
-            SizedBox(height: 12),
-            Text(
-              'Initializing Camera Hardware...',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_cameraController != null && _cameraController!.value.isInitialized) {
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          CameraPreview(_cameraController!),
-          Positioned(
-            top: 10,
-            left: 10,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.black54,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.fiber_manual_record, color: Colors.red, size: 12),
-                  SizedBox(width: 6),
-                  Text('LIVE STREAM',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold)),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: () => Navigator.pop(context),
+                  ),
                 ],
               ),
-            ),
-          ),
-        ],
-      );
-    }
+              const SizedBox(height: 18),
 
-    // Camera hardware denied by SELinux / OEM driver -> Fallback mode button
-    return Container(
-      color: Colors.grey.shade900,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.videocam_off_rounded, size: 44, color: Colors.white70),
-          const SizedBox(height: 8),
-          Text(
-            _cameraError ?? 'Camera stream blocked by device security policy',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+              // Camera Viewfinder / Preview
+              ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  height: 280,
+                  width: double.infinity,
+                  color: isDark ? const Color(0xFF0F1524) : Colors.black87,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      if (_capturedResult != null)
+                        Image.file(
+                          File(_capturedResult!.imagePath),
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: double.infinity,
+                        )
+                      else if (_isInitializing)
+                        const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
+                            ),
+                            SizedBox(height: 12),
+                            Text(
+                              'Initializing camera sensor...',
+                              style: TextStyle(
+                                  color: Colors.white70, fontSize: 12),
+                            ),
+                          ],
+                        )
+                      else if (_cameraError != null)
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.camera_alt_outlined,
+                                  color: Colors.white60, size: 36),
+                              const SizedBox(height: 8),
+                              Text(
+                                _cameraError!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                    color: Colors.white70, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        )
+                      else if (_cameraController != null &&
+                          _cameraController!.value.isInitialized)
+                        CameraPreview(_cameraController!)
+                      else
+                        const Icon(Icons.camera_alt_outlined,
+                            color: Colors.white60, size: 48),
+
+                      // Viewfinder Overlay Reticle
+                      if (_capturedResult == null && !_isInitializing)
+                        Container(
+                          margin: const EdgeInsets.all(32),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: AppColors.primaryLight
+                                  .withValues(alpha: 0.5),
+                              width: 1.5,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Actions
+              if (_capturedResult == null)
+                BouncingButton(
+                  onTap: (_isInitializing || _isCapturing)
+                      ? null
+                      : _triggerLiveCapture,
+                  child: Container(
+                    height: 54,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      gradient: AppColors.primaryGradient,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withValues(alpha: 0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: _isCapturing
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.camera_rounded,
+                                    color: Colors.white, size: 18),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Capture Live Photo',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppButton(
+                        text: 'Retake',
+                        variant: AppButtonVariant.secondary,
+                        height: 48,
+                        icon: Icons.refresh_rounded,
+                        onPressed: _retakePhoto,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: AppButton(
+                        text: 'Verify & Confirm',
+                        variant: AppButtonVariant.success,
+                        height: 48,
+                        icon: Icons.check_rounded,
+                        onPressed: () {
+                          widget.onPhotoCaptured(_capturedResult!);
+                          Navigator.pop(context);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+            ],
           ),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            ),
-            onPressed: _triggerLiveCapture,
-            icon: const Icon(Icons.camera_front, size: 16),
-            label: const Text('Capture Snapshot', style: TextStyle(fontSize: 12)),
-          )
-        ],
+        ),
       ),
     );
   }

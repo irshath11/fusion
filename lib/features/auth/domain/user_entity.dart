@@ -25,6 +25,9 @@ class UserEntity {
     this.isDeleted = false,
   });
 
+  String get name => fullName;
+  String get displayName => fullName;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'firebase_uid': firebaseUid,

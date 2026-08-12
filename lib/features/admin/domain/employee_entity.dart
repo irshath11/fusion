@@ -25,6 +25,9 @@ class EmployeeEntity {
     this.isActive = true,
   });
 
+  String get fullName => name;
+  String get displayName => name;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'employeeCode': employeeCode,

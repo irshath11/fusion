@@ -19,6 +19,9 @@ class WorkSiteEntity {
     required this.assignedEmployeeIds,
   });
 
+  String get name => siteName;
+  String get displayName => siteName;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'siteName': siteName,

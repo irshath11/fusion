@@ -1,31 +1,12 @@
 enum UserRole {
-  superAdmin,
-  admin,
-  employee,
-}
+  superAdmin('SUPER_ADMIN', 'Super Admin'),
+  admin('ADMIN', 'Administrator'),
+  employee('EMPLOYEE', 'Employee');
 
-extension UserRoleExtension on UserRole {
-  String get nameString {
-    switch (this) {
-      case UserRole.superAdmin:
-        return 'SUPER_ADMIN';
-      case UserRole.admin:
-        return 'ADMIN';
-      case UserRole.employee:
-        return 'EMPLOYEE';
-    }
-  }
+  final String nameString;
+  final String displayName;
 
-  String get displayName {
-    switch (this) {
-      case UserRole.superAdmin:
-        return 'Super Admin';
-      case UserRole.admin:
-        return 'Administrator';
-      case UserRole.employee:
-        return 'Employee';
-    }
-  }
+  const UserRole(this.nameString, this.displayName);
 
   static UserRole fromString(String role) {
     switch (role.toUpperCase()) {
@@ -40,81 +21,44 @@ extension UserRoleExtension on UserRole {
   }
 }
 
+extension UserRoleExtension on UserRole {
+  String get nameString => this.nameString;
+  String get displayName => this.displayName;
+
+  static UserRole fromString(String role) => UserRole.fromString(role);
+}
+
 enum ActivityLogAction {
-  orgSetup,
-  employeeCreated,
-  employeeUpdated,
-  employeeDisabled,
-  employeeActivated,
-  employeeDeleted,
-  passwordReset,
-  ownershipTransferred,
-  deviceBound,
+  orgSetup('ORG_SETUP'),
+  employeeCreated('EMPLOYEE_CREATED'),
+  employeeUpdated('EMPLOYEE_UPDATED'),
+  employeeDisabled('EMPLOYEE_DISABLED'),
+  employeeActivated('EMPLOYEE_ACTIVATED'),
+  employeeDeleted('EMPLOYEE_DELETED'),
+  passwordReset('PASSWORD_RESET'),
+  ownershipTransferred('OWNERSHIP_TRANSFERRED'),
+  deviceBound('DEVICE_BOUND');
+
+  final String dbValue;
+
+  const ActivityLogAction(this.dbValue);
 }
 
 extension ActivityLogActionExtension on ActivityLogAction {
-  String get dbValue {
-    switch (this) {
-      case ActivityLogAction.orgSetup:
-        return 'ORG_SETUP';
-      case ActivityLogAction.employeeCreated:
-        return 'EMPLOYEE_CREATED';
-      case ActivityLogAction.employeeUpdated:
-        return 'EMPLOYEE_UPDATED';
-      case ActivityLogAction.employeeDisabled:
-        return 'EMPLOYEE_DISABLED';
-      case ActivityLogAction.employeeActivated:
-        return 'EMPLOYEE_ACTIVATED';
-      case ActivityLogAction.employeeDeleted:
-        return 'EMPLOYEE_DELETED';
-      case ActivityLogAction.passwordReset:
-        return 'PASSWORD_RESET';
-      case ActivityLogAction.ownershipTransferred:
-        return 'OWNERSHIP_TRANSFERRED';
-      case ActivityLogAction.deviceBound:
-        return 'DEVICE_BOUND';
-    }
-  }
+  String get dbValue => this.dbValue;
 }
 
 enum WorkflowStep {
-  officeCheckIn,
-  siteCheckIn,
-  siteCheckOut,
-  officeCheckOut,
-  completed,
-}
+  officeCheckIn('1. Office Check-In', 'OFFICE_CHECK_IN'),
+  siteCheckIn('2. Site Check-In', 'SITE_CHECK_IN'),
+  siteCheckOut('3. Site Check-Out (Leaving Site)', 'SITE_CHECK_OUT'),
+  officeCheckOut('4. Office Check-Out (Reach Office)', 'OFFICE_CHECK_OUT'),
+  completed('Shift Completed', 'COMPLETED');
 
-extension WorkflowStepExtension on WorkflowStep {
-  String get displayName {
-    switch (this) {
-      case WorkflowStep.officeCheckIn:
-        return '1. Office Check-In';
-      case WorkflowStep.siteCheckIn:
-        return '2. Site Check-In';
-      case WorkflowStep.siteCheckOut:
-        return '3. Site Check-Out (Leaving Site)';
-      case WorkflowStep.officeCheckOut:
-        return '4. Office Check-Out (Reach Office)';
-      case WorkflowStep.completed:
-        return 'Shift Completed';
-    }
-  }
+  final String displayName;
+  final String dbValue;
 
-  String get dbValue {
-    switch (this) {
-      case WorkflowStep.officeCheckIn:
-        return 'OFFICE_CHECK_IN';
-      case WorkflowStep.siteCheckIn:
-        return 'SITE_CHECK_IN';
-      case WorkflowStep.siteCheckOut:
-        return 'SITE_CHECK_OUT';
-      case WorkflowStep.officeCheckOut:
-        return 'OFFICE_CHECK_OUT';
-      case WorkflowStep.completed:
-        return 'COMPLETED';
-    }
-  }
+  const WorkflowStep(this.displayName, this.dbValue);
 
   WorkflowStep? get nextStep {
     switch (this) {
@@ -130,6 +74,12 @@ extension WorkflowStepExtension on WorkflowStep {
         return null;
     }
   }
+}
+
+extension WorkflowStepExtension on WorkflowStep {
+  String get displayName => this.displayName;
+  String get dbValue => this.dbValue;
+  WorkflowStep? get nextStep => this.nextStep;
 }
 
 enum SyncStatus {

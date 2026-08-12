@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../constants/app_colors.dart';
+import 'animated_widgets.dart';
 
 class OfflineBanner extends StatelessWidget {
   final int pendingCount;
@@ -16,66 +18,83 @@ class OfflineBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isVisible = pendingCount > 0;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return AnimatedSize(
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 280),
       curve: Curves.easeInOutCubic,
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 250),
-        opacity: isVisible ? 1.0 : 0.0,
-        child: isVisible
-            ? Container(
-                width: double.infinity,
-                color: AppColors.warning.withValues(alpha: 0.95),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                child: Row(
-                  children: [
-                    const Icon(Icons.wifi_off_rounded, color: Colors.black87, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Offline Mode: $pendingCount pending sync record${pendingCount > 1 ? 's' : ''}',
-                        style: const TextStyle(
-                          color: Colors.black87,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black87,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      onPressed: isSyncing ? null : onSyncPressed,
-                      icon: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        child: isSyncing
-                            ? const SizedBox(
-                                key: ValueKey('sync_spinner'),
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.sync_rounded, key: ValueKey('sync_icon'), size: 14),
-                      ),
-                      label: Text(
-                        isSyncing ? 'Syncing...' : 'Sync Now',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ],
+      child: isVisible
+          ? Container(
+              width: double.infinity,
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xFF2A1C0A)
+                    : const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.warning.withValues(alpha: isDark ? 0.4 : 0.6),
+                  width: 0.8,
                 ),
-              )
-            : const SizedBox(width: double.infinity, height: 0),
-      ),
+              ),
+              child: Row(
+                children: [
+                  PulsingStatusDot(color: AppColors.warning, size: 7),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Offline Queue: $pendingCount unsynced record${pendingCount > 1 ? 's' : ''}',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ),
+                  BouncingButton(
+                    onTap: isSyncing ? null : onSyncPressed,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF451A03) : AppColors.warning,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isSyncing)
+                            const SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.8,
+                                color: Colors.white,
+                              ),
+                            )
+                          else
+                            const Icon(
+                              Icons.sync_rounded,
+                              size: 13,
+                              color: Colors.white,
+                            ),
+                          const SizedBox(width: 6),
+                          Text(
+                            isSyncing ? 'Syncing...' : 'Sync Cloud',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : const SizedBox(width: double.infinity, height: 0),
     );
   }
 }

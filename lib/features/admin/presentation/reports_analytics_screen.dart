@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../database/local_database_service.dart';
 import '../../../core/constants/app_colors.dart';
@@ -10,6 +11,7 @@ import '../../../core/services/pdf_export_service.dart';
 import '../../../core/services/location_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/utils/timesheet_calculator.dart';
+import '../../../core/widgets/animated_widgets.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../attendance/domain/attendance_record.dart';
 
@@ -338,6 +340,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                       .length;
 
                   return Card(
+                    clipBehavior: Clip.antiAlias,
                     margin: const EdgeInsets.only(bottom: 12),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
@@ -635,6 +638,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                 final dayOt = dayHrs > 8.0 ? (dayHrs - 8.0) : 0.0;
 
                 return Card(
+                  clipBehavior: Clip.antiAlias,
                   margin: const EdgeInsets.only(bottom: 12),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14)),

@@ -22,7 +22,6 @@ class Authenticated extends AuthState {
   Authenticated(this.user);
 
   @override
-  @override
   List<Object?> get props => [user];
 }
 

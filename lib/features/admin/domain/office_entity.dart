@@ -17,6 +17,8 @@ class OfficeEntity {
     this.isDefault = false,
   });
 
+  String get displayName => name;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,

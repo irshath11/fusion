@@ -175,21 +175,21 @@ class AdminCubit extends Cubit<AdminState> {
   // Save / Update Work Site
   void saveWorkSite({
     required String? id,
-    required String name,
+    required String siteName,
     required String clientName,
     required String address,
     required double latitude,
     required double longitude,
-    required double radius,
+    required double radiusMeters,
   }) {
     final site = WorkSiteEntity(
       id: id ?? _uuid.v4(),
-      siteName: name.trim(),
+      siteName: siteName.trim(),
       clientName: clientName.trim(),
       address: address.trim(),
       latitude: latitude,
       longitude: longitude,
-      radiusMeters: radius,
+      radiusMeters: radiusMeters,
       assignedEmployeeIds: [],
     );
 

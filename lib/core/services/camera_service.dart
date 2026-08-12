@@ -8,6 +8,9 @@ class CameraCaptureResult {
   final String base64Image;
   final int compressedSizeBytes;
 
+  /// Alias for imagePath
+  String get filePath => imagePath;
+
   CameraCaptureResult({
     required this.imagePath,
     required this.base64Image,

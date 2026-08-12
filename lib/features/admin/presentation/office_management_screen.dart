@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'admin_cubit.dart';
 import '../domain/office_entity.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/location_service.dart';
+import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/custom_text_field.dart';
+import '../../../core/widgets/animated_widgets.dart';
+import '../../../core/widgets/status_badge.dart';
 
 class OfficeManagementScreen extends StatelessWidget {
   const OfficeManagementScreen({super.key});
@@ -19,19 +23,22 @@ class OfficeManagementScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
             Icon(
-              isError ? Icons.warning_amber_rounded : Icons.check_circle_rounded,
-              color: isError ? Colors.orange : Colors.green,
-              size: 28,
+              isError
+                  ? Icons.warning_amber_rounded
+                  : Icons.check_circle_rounded,
+              color: isError ? AppColors.warning : AppColors.success,
+              size: 24,
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                isError ? 'GPS Signal Warning' : 'GPS Captured Successfully',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                isError ? 'GPS Signal Notice' : 'GPS Telemetry Acquired',
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 16, fontWeight: FontWeight.w700),
               ),
             ),
           ],
@@ -43,32 +50,38 @@ class OfficeManagementScreen extends StatelessWidget {
             if (isError) ...[
               Text(
                 loc.address,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
+                style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.error,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Please turn on GPS/Location services on your device and ensure location permission is allowed.',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
+              Text(
+                'Please ensure location services are enabled on this handset.',
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12, color: AppColors.textSecondaryLight),
               ),
             ] else ...[
-              Text('Latitude: ${loc.latitude.toStringAsFixed(6)}'),
+              Text('Latitude: ${loc.latitude.toStringAsFixed(6)}',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 13)),
               const SizedBox(height: 4),
-              Text('Longitude: ${loc.longitude.toStringAsFixed(6)}'),
+              Text('Longitude: ${loc.longitude.toStringAsFixed(6)}',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 13)),
               const SizedBox(height: 4),
-              Text('Accuracy: ±${loc.accuracy.toStringAsFixed(1)}m'),
+              Text('Accuracy: ±${loc.accuracy.toStringAsFixed(1)}m',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 13)),
               const Divider(height: 16),
               Text(
-                'Address:\n${loc.address}',
-                style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                'Geocoded Address:\n${loc.address}',
+                style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w600, fontSize: 12.5),
               ),
             ],
           ],
         ),
         actions: [
           if (isError)
-            OutlinedButton.icon(
-              icon: const Icon(Icons.location_on_rounded, size: 18),
-              label: Text(loc.address.contains('Permission') ? 'Open App Settings' : 'Turn On Location'),
+            TextButton(
               onPressed: () {
                 Navigator.pop(dialogCtx);
                 if (loc.address.contains('Permission')) {
@@ -77,13 +90,19 @@ class OfficeManagementScreen extends StatelessWidget {
                   Geolocator.openLocationSettings();
                 }
               },
+              child: Text(
+                loc.address.contains('Permission')
+                    ? 'App Settings'
+                    : 'Turn On GPS',
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
+              ),
             ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isError ? Colors.orange : AppColors.primary,
-            ),
+          AppButton(
+            text: 'Dismiss',
+            width: 100,
+            height: 38,
+            borderRadius: 8,
             onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('OK', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -91,6 +110,7 @@ class OfficeManagementScreen extends StatelessWidget {
   }
 
   void _showOfficeForm(BuildContext context, [OfficeEntity? office]) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final nameController =
         TextEditingController(text: office?.name ?? 'Store - 12');
     final addressController = TextEditingController(
@@ -108,31 +128,43 @@ class OfficeManagementScreen extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: isDark ? AppColors.surfaceDark : Colors.white,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (modalCtx) {
         return StatefulBuilder(
           builder: (modalCtx, setModalState) {
             return Padding(
               padding: EdgeInsets.only(
-                top: 20,
-                left: 20,
-                right: 20,
-                bottom: MediaQuery.of(modalCtx).viewInsets.bottom + 20,
+                top: 22,
+                left: 22,
+                right: 22,
+                bottom: MediaQuery.of(modalCtx).viewInsets.bottom + 22,
               ),
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      office == null
-                          ? 'Add Office Station'
-                          : 'Edit Office Details',
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          office == null
+                              ? 'Add Office Station'
+                              : 'Edit Office Details',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 20),
+                          onPressed: () => Navigator.pop(modalCtx),
+                        ),
+                      ],
                     ),
-                    const Divider(height: 20),
+                    const Divider(height: 16),
                     CustomTextField(
                         controller: nameController,
                         label: 'Office Station Name'),
@@ -142,12 +174,16 @@ class OfficeManagementScreen extends StatelessWidget {
                         label: 'Physical Address'),
                     const SizedBox(height: 16),
 
-                    // "Use Current Location" Button for Live GPS Capture
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.secondary,
-                        foregroundColor: Colors.white,
-                      ),
+                    // Live GPS Capture Action
+                    AppButton(
+                      text: isLocating
+                          ? 'Acquiring Satellite GPS...'
+                          : 'Capture Live GPS Coordinates',
+                      variant: AppButtonVariant.secondary,
+                      isLoading: isLocating,
+                      icon: Icons.my_location_rounded,
+                      height: 46,
+                      borderRadius: 12,
                       onPressed: isLocating
                           ? null
                           : () async {
@@ -163,31 +199,20 @@ class OfficeManagementScreen extends StatelessWidget {
                                     lngController.text =
                                         loc.longitude.toStringAsFixed(6);
                                     if (loc.address.isNotEmpty &&
-                                        !loc.address.contains('Permission Denied') &&
+                                        !loc.address
+                                            .contains('Permission Denied') &&
                                         !loc.address.contains('GPS Error')) {
                                       addressController.text = loc.address;
                                     }
                                   });
                                   _showGpsResultDialog(modalCtx, loc);
                                 }
-                              } catch (e) {
-                                debugPrint('Error capturing location for office: $e');
                               } finally {
                                 if (modalCtx.mounted) {
                                   setModalState(() => isLocating = false);
                                 }
                               }
                             },
-                      icon: isLocating
-                          ? const SizedBox(
-                              height: 16,
-                              width: 16,
-                              child: CircularProgressIndicator(
-                                  color: Colors.white, strokeWidth: 2))
-                          : const Icon(Icons.my_location_rounded),
-                      label: Text(isLocating
-                          ? 'Acquiring GPS Signal...'
-                          : 'Use Current Location'),
                     ),
                     const SizedBox(height: 16),
 
@@ -213,31 +238,28 @@ class OfficeManagementScreen extends StatelessWidget {
                       hint: 'Default 200m',
                       keyboardType: TextInputType.number,
                     ),
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary),
-                        onPressed: () {
-                          context.read<AdminCubit>().saveOffice(
-                                id: office?.id,
-                                name: nameController.text,
-                                address: addressController.text,
-                                latitude: double.tryParse(latController.text) ??
-                                    25.2048,
-                                longitude:
-                                    double.tryParse(lngController.text) ??
-                                        55.2708,
-                                radiusMeters:
-                                    double.tryParse(radiusController.text) ??
-                                        200.0,
-                                isDefault: office?.isDefault ?? false,
-                              );
-                          Navigator.pop(modalCtx);
-                        },
-                        child: const Text('Save Office Station'),
-                      ),
+                    const SizedBox(height: 22),
+                    AppButton(
+                      text: 'Save Office Station',
+                      icon: Icons.check_rounded,
+                      onPressed: () {
+                        context.read<AdminCubit>().saveOffice(
+                              id: office?.id,
+                              name: nameController.text,
+                              address: addressController.text,
+                              latitude:
+                                  double.tryParse(latController.text) ??
+                                      25.2048,
+                              longitude:
+                                  double.tryParse(lngController.text) ??
+                                      55.2708,
+                              radiusMeters:
+                                  double.tryParse(radiusController.text) ??
+                                      200.0,
+                              isDefault: office?.isDefault ?? false,
+                            );
+                        Navigator.pop(modalCtx);
+                      },
                     ),
                   ],
                 ),
@@ -251,64 +273,121 @@ class OfficeManagementScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return BlocBuilder<AdminCubit, AdminState>(
       builder: (context, state) {
         if (state is AdminDataLoaded) {
           return Scaffold(
+            backgroundColor:
+                isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
             floatingActionButton: FloatingActionButton.extended(
               heroTag: 'add_office_fab',
               onPressed: () => _showOfficeForm(context),
               backgroundColor: AppColors.primary,
               icon: const Icon(Icons.add_location_alt_rounded,
                   color: Colors.white),
-              label: const Text('Add Office',
-                  style: TextStyle(color: Colors.white)),
+              label: Text(
+                'Add Office Hub',
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
             ),
             body: ListView.builder(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               itemCount: state.offices.length,
               itemBuilder: (context, index) {
                 final off = state.offices[index];
-                return Card(
+                return GlassSurfaceCard(
                   margin: const EdgeInsets.only(bottom: 12),
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: off.isDefault
-                          ? AppColors.primary
-                          : AppColors.secondary,
-                      child: const Icon(Icons.business_rounded,
-                          color: Colors.white),
-                    ),
-                    title: Row(
-                      children: [
-                        Text(off.name,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.bold)),
-                        if (off.isDefault) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                                color:
-                                    AppColors.primary.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8)),
-                            child: const Text('MAIN OFFICE',
-                                style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.primary)),
-                          )
-                        ]
-                      ],
-                    ),
-                    subtitle: Text(
-                        '${off.address}\nGPS: ${off.latitude.toStringAsFixed(4)}, ${off.longitude.toStringAsFixed(4)} | Geofence: ${off.geofenceRadiusMeters}m'),
-                    isThreeLine: true,
-                    trailing: IconButton(
-                      icon: const Icon(Icons.edit_rounded),
-                      onPressed: () => _showOfficeForm(context, off),
-                    ),
+                  padding: const EdgeInsets.all(16),
+                  borderRadius: 18,
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: (off.isDefault
+                                  ? AppColors.primary
+                                  : AppColors.secondary)
+                              .withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(
+                          Icons.domain_rounded,
+                          color: off.isDefault
+                              ? AppColors.primary
+                              : AppColors.secondary,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    off.name,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15,
+                                      color: isDark
+                                          ? AppColors.textPrimaryDark
+                                          : AppColors.textPrimaryLight,
+                                    ),
+                                  ),
+                                ),
+                                if (off.isDefault)
+                                  const StatusBadge(
+                                    label: 'PRIMARY HQ',
+                                    color: AppColors.primary,
+                                    fontSize: 9.5,
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              off.address,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12,
+                                color: isDark
+                                    ? AppColors.textTertiaryDark
+                                    : AppColors.textSecondaryLight,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                const Icon(Icons.radar_rounded,
+                                    size: 13, color: AppColors.success),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Radius: ${off.geofenceRadiusMeters}m Geofence',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark
+                                        ? AppColors.textSecondaryDark
+                                        : AppColors.textSecondaryLight,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        onPressed: () => _showOfficeForm(context, off),
+                      ),
+                    ],
                   ),
                 );
               },

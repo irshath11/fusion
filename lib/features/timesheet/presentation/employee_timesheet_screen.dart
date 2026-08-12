@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/pdf_export_service.dart';
+import '../../../core/widgets/animated_widgets.dart';
+import '../../../core/widgets/status_badge.dart';
 import '../../../database/local_database_service.dart';
 import '../../admin/domain/employee_entity.dart';
 import 'timesheet_cubit.dart';
@@ -24,39 +27,58 @@ class EmployeeTimesheetScreen extends StatefulWidget {
 }
 
 class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
-  String _activeFilter = 'all'; // 'all', 'regular', 'overtime'
+  String _activeFilter = 'all';
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return BlocProvider(
       create: (context) => TimesheetCubit()
         ..fetchEmployeeTimesheet(employeeId: widget.employeeId),
       child: BlocBuilder<TimesheetCubit, TimesheetState>(
         builder: (context, state) {
           return Scaffold(
+            backgroundColor:
+                isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
             appBar: AppBar(
-              title: Text(widget.employeeName != null
-                  ? '${widget.employeeName} - Timesheet'
-                  : 'My Work Timesheet'),
+              title: Text(
+                widget.employeeName != null
+                    ? '${widget.employeeName} - Timesheet'
+                    : 'Work Timesheets',
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
+              ),
               actions: [
                 if (state is TimesheetLoaded)
                   Padding(
                     padding: const EdgeInsets.only(right: 12.0),
-                    child: ElevatedButton.icon(
-                      onPressed: () => _downloadPdf(context, state),
-                      icon: const Icon(Icons.picture_as_pdf_rounded, size: 14),
-                      label: const Text('Download PDF',
-                          style: TextStyle(
-                              fontSize: 11, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red.shade700,
-                        foregroundColor: Colors.white,
+                    child: BouncingButton(
+                      onTap: () => _downloadPdf(context, state),
+                      child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        shape: RoundedRectangleBorder(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade700,
                           borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.picture_as_pdf_rounded,
+                                size: 14, color: Colors.white),
+                            const SizedBox(width: 5),
+                            Text(
+                              'PDF Report',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -71,8 +93,8 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                   return Center(
                     child: Text(
                       state.message,
-                      style:
-                          const TextStyle(color: AppColors.error, fontSize: 16),
+                      style: GoogleFonts.plusJakartaSans(
+                          color: AppColors.error, fontSize: 15),
                     ),
                   );
                 } else if (state is TimesheetLoaded) {
@@ -82,158 +104,154 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                     return true;
                   }).toList();
 
-                  return SafeArea(
-                    child: RefreshIndicator(
-                      onRefresh: () => context
-                          .read<TimesheetCubit>()
-                          .fetchEmployeeTimesheet(
-                              employeeId: widget.employeeId),
-                      child: SingleChildScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Interactive Executive Timesheet KPI Cards
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildSummaryCard(
-                                    title: 'Regular Hrs',
-                                    value:
-                                        '${state.totalRegularHours.toStringAsFixed(1)} hrs',
-                                    subtitle: 'Max 8h/day (Tap)',
-                                    icon: Icons.access_time_rounded,
-                                    color: AppColors.primary,
-                                    isSelected: _activeFilter == 'regular',
-                                    onTap: () {
-                                      setState(() {
-                                        _activeFilter =
-                                            _activeFilter == 'regular'
-                                                ? 'all'
-                                                : 'regular';
-                                      });
-                                    },
-                                  ),
+                  return RefreshIndicator(
+                    onRefresh: () => context
+                        .read<TimesheetCubit>()
+                        .fetchEmployeeTimesheet(
+                            employeeId: widget.employeeId),
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Interactive Executive KPI Grid
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildMetricTile(
+                                  title: 'Regular Time',
+                                  value:
+                                      '${state.totalRegularHours.toStringAsFixed(1)}h',
+                                  subtitle: 'Max 8h / Shift',
+                                  icon: Icons.access_time_rounded,
+                                  color: AppColors.primary,
+                                  isSelected: _activeFilter == 'regular',
+                                  isDark: isDark,
+                                  onTap: () {
+                                    setState(() {
+                                      _activeFilter = _activeFilter == 'regular'
+                                          ? 'all'
+                                          : 'regular';
+                                    });
+                                  },
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _buildSummaryCard(
-                                    title: 'Overtime (OT)',
-                                    value:
-                                        '${state.totalOvertimeHours.toStringAsFixed(1)} hrs',
-                                    subtitle: 'Beyond 8.0h (Tap)',
-                                    icon: Icons.more_time_rounded,
-                                    color: Colors.orange.shade800,
-                                    isSelected: _activeFilter == 'overtime',
-                                    onTap: () {
-                                      setState(() {
-                                        _activeFilter =
-                                            _activeFilter == 'overtime'
-                                                ? 'all'
-                                                : 'overtime';
-                                      });
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildSummaryCard(
-                                    title: 'Total Hours',
-                                    value:
-                                        '${state.totalCombinedHours.toStringAsFixed(1)} hrs',
-                                    subtitle: 'Reg + OT Combined',
-                                    icon: Icons.timer_rounded,
-                                    color: AppColors.success,
-                                    isSelected: _activeFilter == 'all',
-                                    onTap: () {
-                                      setState(() {
-                                        _activeFilter = 'all';
-                                      });
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _buildSummaryCard(
-                                    title: 'Days Worked',
-                                    value: '${state.totalDaysWorked} Days',
-                                    subtitle: 'Logged Shifts',
-                                    icon: Icons.calendar_month_rounded,
-                                    color: Colors.indigo,
-                                    isSelected: false,
-                                    onTap: () {
-                                      setState(() {
-                                        _activeFilter = 'all';
-                                      });
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 24),
-
-                            // Filter Label Header
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  _activeFilter == 'overtime'
-                                      ? 'Date-Wise Overtime (OT) Log'
-                                      : _activeFilter == 'regular'
-                                          ? 'Date-Wise Regular Hours Log'
-                                          : 'Date-Wise Work Timesheet Log',
-                                  style: const TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.bold),
-                                ),
-                                if (_activeFilter != 'all')
-                                  TextButton.icon(
-                                    onPressed: () =>
-                                        setState(() => _activeFilter = 'all'),
-                                    icon: const Icon(
-                                        Icons.filter_alt_off_rounded,
-                                        size: 14),
-                                    label: const Text('Clear Filter',
-                                        style: TextStyle(fontSize: 12)),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-
-                            if (filteredEntries.isEmpty)
-                              Card(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(32.0),
-                                  child: Center(
-                                    child: Text(
-                                      _activeFilter == 'overtime'
-                                          ? 'No overtime (OT) hours logged yet.'
-                                          : 'No timesheet entries recorded yet.',
-                                      style: const TextStyle(
-                                          color: AppColors.textSecondaryLight,
-                                          fontSize: 14),
-                                    ),
-                                  ),
-                                ),
-                              )
-                            else
-                              ListView.builder(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: filteredEntries.length,
-                                itemBuilder: (context, index) {
-                                  final entry = filteredEntries[index];
-                                  return _buildDailyTimesheetCard(
-                                      context, entry);
-                                },
                               ),
-                          ],
-                        ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _buildMetricTile(
+                                  title: 'Overtime (OT)',
+                                  value:
+                                      '+${state.totalOvertimeHours.toStringAsFixed(1)}h',
+                                  subtitle: 'Hours Beyond 8.0h',
+                                  icon: Icons.more_time_rounded,
+                                  color: Colors.amber.shade700,
+                                  isSelected: _activeFilter == 'overtime',
+                                  isDark: isDark,
+                                  onTap: () {
+                                    setState(() {
+                                      _activeFilter =
+                                          _activeFilter == 'overtime'
+                                              ? 'all'
+                                              : 'overtime';
+                                    });
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildMetricTile(
+                                  title: 'Total Hours',
+                                  value:
+                                      '${state.totalCombinedHours.toStringAsFixed(1)}h',
+                                  subtitle: 'Reg + OT Combined',
+                                  icon: Icons.timer_rounded,
+                                  color: AppColors.success,
+                                  isSelected: _activeFilter == 'all',
+                                  isDark: isDark,
+                                  onTap: () =>
+                                      setState(() => _activeFilter = 'all'),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _buildMetricTile(
+                                  title: 'Days Worked',
+                                  value: '${state.totalDaysWorked}',
+                                  subtitle: 'Logged Sessions',
+                                  icon: Icons.calendar_month_rounded,
+                                  color: AppColors.secondary,
+                                  isSelected: false,
+                                  isDark: isDark,
+                                  onTap: () =>
+                                      setState(() => _activeFilter = 'all'),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Header with filter toggle
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                _activeFilter == 'overtime'
+                                    ? 'Overtime Sessions'
+                                    : _activeFilter == 'regular'
+                                        ? 'Regular Shift Sessions'
+                                        : 'Timesheet History',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: isDark
+                                      ? AppColors.textPrimaryDark
+                                      : AppColors.textPrimaryLight,
+                                ),
+                              ),
+                              if (_activeFilter != 'all')
+                                TextButton.icon(
+                                  onPressed: () =>
+                                      setState(() => _activeFilter = 'all'),
+                                  icon: const Icon(
+                                      Icons.filter_alt_off_rounded,
+                                      size: 14),
+                                  label: Text(
+                                    'Clear Filter',
+                                    style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 12),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+
+                          if (filteredEntries.isEmpty)
+                            GlassSurfaceCard(
+                              padding: const EdgeInsets.all(32.0),
+                              child: Center(
+                                child: Text(
+                                  _activeFilter == 'overtime'
+                                      ? 'No overtime (OT) hours logged.'
+                                      : 'No timesheet entries recorded.',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: isDark
+                                        ? AppColors.textTertiaryDark
+                                        : AppColors.textSecondaryLight,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            )
+                          else
+                            ...filteredEntries.map((entry) =>
+                                _buildDailyTimesheetCard(
+                                    context, entry, isDark)),
+                        ],
                       ),
                     ),
                   );
@@ -277,18 +295,23 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
       );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Timesheet PDF report ready for download/saving!'),
+          SnackBar(
+            content: Text(
+              'Timesheet PDF report ready for download/saving!',
+              style: GoogleFonts.plusJakartaSans(fontSize: 13),
+            ),
             backgroundColor: AppColors.primary,
           ),
         );
       }
     } catch (e) {
-      debugPrint('Error downloading timesheet PDF: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Could not generate PDF: $e'),
+            content: Text(
+              'Could not generate PDF: $e',
+              style: GoogleFonts.plusJakartaSans(fontSize: 13),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -296,26 +319,32 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
     }
   }
 
-  Widget _buildSummaryCard({
+  Widget _buildMetricTile({
     required String title,
     required String value,
     required String subtitle,
     required IconData icon,
     required Color color,
     required bool isSelected,
+    required bool isDark,
     required VoidCallback onTap,
   }) {
-    return InkWell(
+    return BouncingButton(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isSelected ? color.withValues(alpha: 0.18) : color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(14),
+          color: isSelected
+              ? color.withValues(alpha: isDark ? 0.2 : 0.12)
+              : (isDark ? AppColors.surfaceDark : AppColors.surfaceLight),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? color : color.withValues(alpha: 0.2),
-            width: isSelected ? 2 : 1,
+            color: isSelected
+                ? color
+                : (isDark
+                    ? AppColors.cardBorderDark
+                    : AppColors.cardBorderLight),
+            width: isSelected ? 1.5 : 0.8,
           ),
         ),
         child: Column(
@@ -323,38 +352,42 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
           children: [
             Row(
               children: [
-                Icon(icon, color: color, size: 20),
+                Icon(icon, color: color, size: 18),
                 const SizedBox(width: 6),
                 Expanded(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      title,
-                      style: TextStyle(
-                          color: color,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600),
+                  child: Text(
+                    title,
+                    style: GoogleFonts.plusJakartaSans(
+                      color: color,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                value,
-                style: TextStyle(
-                    fontSize: 20, fontWeight: FontWeight.bold, color: color),
+            Text(
+              value,
+              style: GoogleFonts.outfit(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: isDark
+                    ? AppColors.textPrimaryDark
+                    : AppColors.textPrimaryLight,
               ),
             ),
             const SizedBox(height: 2),
             Text(
               subtitle,
-              style: const TextStyle(
-                  fontSize: 11, color: AppColors.textSecondaryLight),
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 11,
+                color: isDark
+                    ? AppColors.textTertiaryDark
+                    : AppColors.textSecondaryLight,
+              ),
             ),
           ],
         ),
@@ -363,7 +396,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
   }
 
   Widget _buildDailyTimesheetCard(
-      BuildContext context, DailyTimesheetEntry entry) {
+      BuildContext context, DailyTimesheetEntry entry, bool isDark) {
     final dateFormat = DateFormat('EEE, dd MMM yyyy');
     final timeFormat = DateFormat('hh:mm a');
 
@@ -374,159 +407,158 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
         ? timeFormat.format(entry.checkOutTime!.toLocal())
         : '--:--';
 
-    return InkWell(
+    return GlassSurfaceCard(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      borderRadius: 16,
       onTap: () => _showDateDetailModal(context, entry),
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.cardBorderLight),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Date & Completion Status
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.calendar_today_rounded,
+                      size: 15, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    dateFormat.format(entry.date),
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14.5,
+                      color: isDark
+                          ? AppColors.textPrimaryDark
+                          : AppColors.textPrimaryLight,
+                    ),
+                  ),
+                ],
+              ),
+              StatusBadge(
+                label: entry.isAutoCompleted
+                    ? 'Auto Checked-Out (8h)'
+                    : (entry.isCompleted ? 'Shift Done' : 'In Progress'),
+                color: entry.isAutoCompleted
+                    ? AppColors.primary
+                    : (entry.isCompleted
+                        ? AppColors.success
+                        : AppColors.warning),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.calendar_today_rounded,
-                        size: 16, color: AppColors.primary),
-                    const SizedBox(width: 8),
                     Text(
-                      dateFormat.format(entry.date),
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 15),
+                      'Session Span',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        color: isDark
+                            ? AppColors.textTertiaryDark
+                            : AppColors.textSecondaryLight,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$checkInStr - $checkOutStr',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        color: isDark
+                            ? AppColors.textPrimaryDark
+                            : AppColors.textPrimaryLight,
+                      ),
                     ),
                   ],
                 ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: entry.isAutoCompleted
-                        ? Colors.blue.withValues(alpha: 0.1)
-                        : (entry.isCompleted
-                            ? AppColors.success.withValues(alpha: 0.1)
-                            : Colors.grey.shade200),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    entry.isAutoCompleted
-                        ? 'Auto Checked-Out (8h)'
-                        : (entry.isCompleted ? 'Shift Complete' : 'In Progress'),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: entry.isAutoCompleted
-                          ? Colors.blue.shade800
-                          : (entry.isCompleted
-                              ? AppColors.success
-                              : Colors.grey.shade700),
+              ),
+              // Regular Pill
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      'Regular',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 9.5,
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                )
-              ],
-            ),
-            const Divider(height: 20),
-
-            // Timestamps & Working Hour Pills
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('In / Out Time',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textSecondaryLight)),
-                      const SizedBox(height: 2),
-                      Text(
-                        '$checkInStr - $checkOutStr',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 13),
+                    Text(
+                      '${entry.regularHours.toStringAsFixed(1)}h',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13.5,
+                        color: AppColors.primary,
                       ),
-                    ],
-                  ),
-                ),
-                // Regular Hours Pill
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    children: [
-                      const Text('Regular',
-                          style: TextStyle(
-                              fontSize: 10, color: AppColors.primary)),
-                      Text(
-                        '${entry.regularHours.toStringAsFixed(1)}h',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: AppColors.primary),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Overtime (OT) Hours Pill
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: entry.overtimeHours > 0
-                        ? Colors.orange.shade100
-                        : Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: entry.overtimeHours > 0
-                          ? Colors.orange.shade400
-                          : Colors.grey.shade300,
                     ),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        'OT',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: entry.overtimeHours > 0
-                              ? Colors.orange.shade900
-                              : Colors.grey.shade600,
-                        ),
-                      ),
-                      Text(
-                        '+${entry.overtimeHours.toStringAsFixed(1)}h',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: entry.overtimeHours > 0
-                              ? Colors.orange.shade900
-                              : Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+              const SizedBox(width: 8),
+              // Overtime Pill
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: entry.overtimeHours > 0
+                      ? Colors.amber.withValues(alpha: 0.12)
+                      : (isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFF1F5F9)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      'OT',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: entry.overtimeHours > 0
+                            ? Colors.amber.shade700
+                            : (isDark
+                                ? AppColors.textTertiaryDark
+                                : AppColors.textSecondaryLight),
+                      ),
+                    ),
+                    Text(
+                      '+${entry.overtimeHours.toStringAsFixed(1)}h',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13.5,
+                        color: entry.overtimeHours > 0
+                            ? Colors.amber.shade700
+                            : (isDark
+                                ? AppColors.textTertiaryDark
+                                : AppColors.textSecondaryLight),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
   void _showDateDetailModal(BuildContext context, DailyTimesheetEntry entry) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final fullFormat = DateFormat('EEEE, dd MMMM yyyy');
     final timeFormat = DateFormat('hh:mm a');
     final checkInStr = entry.checkInTime != null
@@ -539,168 +571,146 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor:
+          isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) => SafeArea(
-        child: Container(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.85,
-          ),
-          child: SingleChildScrollView(
-            padding: EdgeInsets.only(
-              left: 20.0,
-              right: 20.0,
-              top: 20.0,
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20.0,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(22.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      fullFormat.format(entry.date),
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: isDark
+                            ? AppColors.textPrimaryDark
+                            : AppColors.textPrimaryLight,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: () => Navigator.pop(ctx),
+                  )
+                ],
+              ),
+              const Divider(),
+              const SizedBox(height: 12),
+              _buildModalRow(
+                  'Check-In Time:', checkInStr, Icons.login_rounded, isDark),
+              const SizedBox(height: 10),
+              _buildModalRow(
+                'Check-Out Time:',
+                entry.isAutoCompleted
+                    ? '$checkOutStr (Auto 8h Cap)'
+                    : checkOutStr,
+                Icons.logout_rounded,
+                isDark,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildBreakdownBox(
+                      'Regular Time',
+                      '${entry.regularHours.toStringAsFixed(1)} hrs',
+                      'Max 8.0h / Day',
+                      AppColors.primary,
+                      isDark,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildBreakdownBox(
+                      'Overtime (OT)',
+                      '+${entry.overtimeHours.toStringAsFixed(1)} hrs',
+                      'Beyond 8.0h',
+                      Colors.amber.shade700,
+                      isDark,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: AppColors.success.withValues(alpha: 0.3)),
+                ),
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Expanded(
-                      child: Text(
-                        fullFormat.format(entry.date),
-                        style: const TextStyle(
-                            fontSize: 17, fontWeight: FontWeight.bold),
+                    Text(
+                      'Total Shift Working Time:',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.success,
+                        fontSize: 13,
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(ctx),
-                    )
-                  ],
-                ),
-                const Divider(),
-                const SizedBox(height: 8),
-                _buildModalDetailRow('Check-In Time:', checkInStr,
-                    Icons.login_rounded, AppColors.success),
-                const SizedBox(height: 10),
-                _buildModalDetailRow(
-                    'Check-Out / Leaving Time:',
-                    entry.isAutoCompleted
-                        ? '$checkOutStr (Auto Check-Out - 8h Regular Shift)'
-                        : checkOutStr,
-                    Icons.logout_rounded,
-                    entry.isAutoCompleted ? Colors.blue.shade700 : AppColors.primary),
-                const SizedBox(height: 16),
-                const Divider(),
-                const SizedBox(height: 8),
-                const Text('Date-Wise Working Hours Breakdown',
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildBreakdownBox(
-                        'Regular Time',
-                        '${entry.regularHours.toStringAsFixed(1)} hrs',
-                        'Max 8.0h / day',
-                        AppColors.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _buildBreakdownBox(
-                        'Overtime (OT)',
-                        '+${entry.overtimeHours.toStringAsFixed(1)} hrs',
-                        'Beyond 8.0h',
-                        Colors.orange.shade800,
+                    Text(
+                      '${entry.totalHours.toStringAsFixed(1)} hrs',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 17,
+                        color: AppColors.success,
                       ),
                     ),
                   ],
                 ),
-                if (entry.siteVisits.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  const Text('Job Sites Visited Today:',
-                      style:
-                          TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  const SizedBox(height: 6),
-                  ...entry.siteVisits.map((sv) {
-                    final sIn = timeFormat.format(sv.checkInTime.toLocal());
-                    final sOut = sv.checkOutTime != null
-                        ? timeFormat.format(sv.checkOutTime!.toLocal())
-                        : 'In Progress';
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 4.0),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.place_rounded,
-                              size: 14, color: AppColors.primary),
-                          const SizedBox(width: 6),
-                          Expanded(
-                              child: Text(sv.siteName,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13))),
-                          Text('$sIn - $sOut',
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondaryLight)),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-                const SizedBox(height: 10),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.success.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border:
-                        Border.all(color: AppColors.success.withValues(alpha: 0.3)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Combined Working Time:',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.success)),
-                      Text(
-                        '${entry.totalHours.toStringAsFixed(1)} hrs',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: AppColors.success),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildModalDetailRow(
-      String label, String value, IconData icon, Color color) {
+  Widget _buildModalRow(
+      String label, String value, IconData icon, bool isDark) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: color),
+        Icon(icon, size: 16, color: AppColors.primary),
         const SizedBox(width: 8),
-        Text(label,
-            style: const TextStyle(
-                fontSize: 13, color: AppColors.textSecondaryLight)),
+        Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 12.5,
+            color: isDark
+                ? AppColors.textTertiaryDark
+                : AppColors.textSecondaryLight,
+          ),
+        ),
         const Spacer(),
-        Text(value,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+        Text(
+          value,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w700,
+            color:
+                isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+          ),
+        ),
       ],
     );
   }
 
   Widget _buildBreakdownBox(
-      String label, String value, String sub, Color color) {
+      String label, String value, String sub, Color color, bool isDark) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -711,17 +721,33 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: TextStyle(
-                  fontSize: 12, color: color, fontWeight: FontWeight.w600)),
+          Text(
+            label,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 11.5,
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text(value,
-              style: TextStyle(
-                  fontSize: 17, fontWeight: FontWeight.bold, color: color)),
+          Text(
+            value,
+            style: GoogleFonts.outfit(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
           const SizedBox(height: 2),
-          Text(sub,
-              style: const TextStyle(
-                  fontSize: 10, color: AppColors.textSecondaryLight)),
+          Text(
+            sub,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 10,
+              color: isDark
+                  ? AppColors.textTertiaryDark
+                  : AppColors.textSecondaryLight,
+            ),
+          ),
         ],
       ),
     );
