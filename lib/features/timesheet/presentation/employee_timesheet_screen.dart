@@ -408,19 +408,25 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: entry.isCompleted
-                        ? AppColors.success.withValues(alpha: 0.1)
-                        : Colors.grey.shade200,
+                    color: entry.isAutoCompleted
+                        ? Colors.blue.withValues(alpha: 0.1)
+                        : (entry.isCompleted
+                            ? AppColors.success.withValues(alpha: 0.1)
+                            : Colors.grey.shade200),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    entry.isCompleted ? 'Shift Complete' : 'In Progress',
+                    entry.isAutoCompleted
+                        ? 'Auto Checked-Out (8h)'
+                        : (entry.isCompleted ? 'Shift Complete' : 'In Progress'),
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: entry.isCompleted
-                          ? AppColors.success
-                          : Colors.grey.shade700,
+                      color: entry.isAutoCompleted
+                          ? Colors.blue.shade800
+                          : (entry.isCompleted
+                              ? AppColors.success
+                              : Colors.grey.shade700),
                     ),
                   ),
                 )
@@ -574,8 +580,13 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                 _buildModalDetailRow('Check-In Time:', checkInStr,
                     Icons.login_rounded, AppColors.success),
                 const SizedBox(height: 10),
-                _buildModalDetailRow('Check-Out / Leaving Time:', checkOutStr,
-                    Icons.logout_rounded, AppColors.primary),
+                _buildModalDetailRow(
+                    'Check-Out / Leaving Time:',
+                    entry.isAutoCompleted
+                        ? '$checkOutStr (Auto Check-Out - 8h Regular Shift)'
+                        : checkOutStr,
+                    Icons.logout_rounded,
+                    entry.isAutoCompleted ? Colors.blue.shade700 : AppColors.primary),
                 const SizedBox(height: 16),
                 const Divider(),
                 const SizedBox(height: 8),

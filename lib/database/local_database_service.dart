@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../core/constants/app_enums.dart';
 import '../core/services/supabase_service.dart';
 import '../features/setup/domain/organization_setup.dart';
@@ -15,6 +16,8 @@ class LocalDatabaseService {
       LocalDatabaseService._internal();
   factory LocalDatabaseService() => _instance;
   LocalDatabaseService._internal();
+
+  final Uuid _uuid = const Uuid();
 
   bool _isSetupCompleted = false;
   OrganizationSetup? _organization;
@@ -118,6 +121,9 @@ class LocalDatabaseService {
     _workSites.removeWhere((w) => w.id == 'site-musaffah-001');
     _offices.removeWhere((o) => o.id == 'office-musaffah-m12-001' || o.id == 'office-main-001');
     _attendanceRecords.removeWhere((r) => r.id.startsWith('rec-001-') || r.id.startsWith('rec-002-'));
+
+    // Automatically resolve any dangling check-ins older than 24 hours
+    autoResolveExpiredCheckIns();
 
     _persistOffices();
     _persistEmployees();
@@ -314,8 +320,96 @@ class LocalDatabaseService {
     }
   }
 
+  /// Scans all attendance records for unclosed sessions (officeCheckIn with no subsequent officeCheckOut).
+  /// If elapsed time crosses 24 hours from the check-in time:
+  /// - Automatically creates and captures an officeCheckOut record after exactly 8 hours from check-in.
+  /// - Completes only the 8.0 regular hours shift and checks out.
+  /// - Saves locally in Hive and flags for cloud synchronization.
+  int autoResolveExpiredCheckIns() {
+    final now = DateTime.now();
+    int resolvedCount = 0;
+
+    // Group records by employeeId
+    final Map<String, List<AttendanceRecord>> employeeRecordsMap = {};
+    for (final record in _attendanceRecords) {
+      employeeRecordsMap.putIfAbsent(record.employeeId, () => []).add(record);
+    }
+
+    final List<AttendanceRecord> newAutoCheckOuts = [];
+
+    employeeRecordsMap.forEach((empId, records) {
+      // Sort ascending by event timestamp
+      records.sort((a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
+
+      for (int i = 0; i < records.length; i++) {
+        final rec = records[i];
+        if (rec.workflowStep == WorkflowStep.officeCheckIn) {
+          final checkInTime = rec.eventTimestamp;
+          final elapsed = now.difference(checkInTime);
+
+          if (elapsed >= const Duration(hours: 24)) {
+            // Check if there is an officeCheckOut occurring after this checkIn and before any subsequent officeCheckIn
+            bool hasMatchingCheckOut = false;
+            for (int j = i + 1; j < records.length; j++) {
+              final nextRec = records[j];
+              if (nextRec.workflowStep == WorkflowStep.officeCheckOut) {
+                hasMatchingCheckOut = true;
+                break;
+              } else if (nextRec.workflowStep == WorkflowStep.officeCheckIn) {
+                // Next checkIn session started
+                break;
+              }
+            }
+
+            if (!hasMatchingCheckOut) {
+              // Auto-generate officeCheckOut after 8 hours from check-in time
+              final autoCheckOutTime = checkInTime.add(const Duration(hours: 8));
+
+              // Avoid duplicate if already exists with same timestamp
+              final duplicateExists = records.any((r) =>
+                  r.workflowStep == WorkflowStep.officeCheckOut &&
+                  r.eventTimestamp.isAtSameMomentAs(autoCheckOutTime));
+
+              if (!duplicateExists) {
+                final autoRecord = AttendanceRecord(
+                  id: _uuid.v4(),
+                  employeeId: rec.employeeId,
+                  employeeName: rec.employeeName,
+                  workflowStep: WorkflowStep.officeCheckOut,
+                  eventTimestamp: autoCheckOutTime,
+                  latitude: rec.latitude,
+                  longitude: rec.longitude,
+                  gpsAccuracy: rec.gpsAccuracy,
+                  address: 'Auto Check-Out (24h Exceeded - 8h Regular Shift Capped)',
+                  deviceId: rec.deviceId.isNotEmpty ? rec.deviceId : 'device-auto-system',
+                  photoBase64: '',
+                  isGeofenceValid: true,
+                  officeId: rec.officeId,
+                  siteName: rec.siteName ?? 'Main Office',
+                  syncStatus: SyncStatus.pending,
+                );
+
+                newAutoCheckOuts.add(autoRecord);
+                resolvedCount++;
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (newAutoCheckOuts.isNotEmpty) {
+      _attendanceRecords.addAll(newAutoCheckOuts);
+      _persistAttendanceRecords();
+    }
+
+    return resolvedCount;
+  }
+
   /// Fetches today's attendance records for a specific employee
   List<AttendanceRecord> getTodayAttendanceRecords([String? employeeId]) {
+    autoResolveExpiredCheckIns();
+
     final targetId = employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
     if (targetId == null || targetId.isEmpty) return [];
 
@@ -335,6 +429,8 @@ class LocalDatabaseService {
 
   /// Dynamically computes current workflow step for a specific employee for today
   WorkflowStep getWorkflowStepForEmployee([String? employeeId]) {
+    autoResolveExpiredCheckIns();
+
     final todayUserRecords = getTodayAttendanceRecords(employeeId);
 
     if (todayUserRecords.isEmpty) {
@@ -370,6 +466,8 @@ class LocalDatabaseService {
   WorkflowStep get currentWorkflowStep => getWorkflowStepForEmployee();
 
   List<AttendanceRecord> getPendingSyncRecords([String? employeeId]) {
+    autoResolveExpiredCheckIns();
+
     final targetId = employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
     return _attendanceRecords.where((r) {
       if (r.syncStatus != SyncStatus.pending) return false;
@@ -383,6 +481,8 @@ class LocalDatabaseService {
   }
 
   List<AttendanceRecord> getAllPendingSyncRecords() {
+    autoResolveExpiredCheckIns();
+
     return _attendanceRecords
         .where((r) => r.syncStatus == SyncStatus.pending)
         .toList();

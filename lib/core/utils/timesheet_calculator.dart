@@ -140,28 +140,52 @@ class TimesheetCalculator {
       }
 
       final DateTime? checkInTimestamp = checkInRecord.eventTimestamp;
-      final DateTime effectiveEnd = checkOutTimestamp ?? DateTime.now();
+      final bool hasExplicitOfficeCheckOut = officeOutMatches.isNotEmpty;
+      final bool isPreviouslyAutoCompleted = officeOutMatches.any((r) =>
+          r.address.contains('Auto Check-Out') ||
+          (r.siteName != null && r.siteName!.contains('Auto Completed')));
+
+      bool isAutoCompleted = isPreviouslyAutoCompleted;
+      bool isCompleted = hasExplicitOfficeCheckOut;
 
       Duration totalWorkedDuration = Duration.zero;
-      if (checkInTimestamp != null && effectiveEnd.isAfter(checkInTimestamp)) {
-        totalWorkedDuration = effectiveEnd.difference(checkInTimestamp);
-      }
-
-      final totalHours = totalWorkedDuration.inMinutes / 60.0;
       double regularHours = 0.0;
       double overtimeHours = 0.0;
 
-      if (totalHours > 0) {
-        if (totalHours <= standardRegularHoursPerDay) {
-          regularHours = totalHours;
-          overtimeHours = 0.0;
-        } else {
+      if (checkInTimestamp != null) {
+        final now = DateTime.now();
+        final elapsedSinceCheckIn = now.difference(checkInTimestamp);
+
+        // If no explicit office check-out and elapsed time crosses 24 hours:
+        // Automatically capture data after 8 hrs from check-in time, complete only regular time (8h), and check out.
+        if (!hasExplicitOfficeCheckOut && elapsedSinceCheckIn >= const Duration(hours: 24)) {
+          checkOutTimestamp = checkInTimestamp.add(const Duration(hours: 8));
+          totalWorkedDuration = const Duration(hours: 8);
           regularHours = standardRegularHoursPerDay;
-          overtimeHours = totalHours - standardRegularHoursPerDay;
+          overtimeHours = 0.0;
+          isCompleted = true;
+          isAutoCompleted = true;
+        } else {
+          final DateTime effectiveEnd = checkOutTimestamp ?? now;
+          if (effectiveEnd.isAfter(checkInTimestamp)) {
+            totalWorkedDuration = effectiveEnd.difference(checkInTimestamp);
+          }
+
+          final totalHours = totalWorkedDuration.inMinutes / 60.0;
+          if (totalHours > 0) {
+            if (isPreviouslyAutoCompleted) {
+              regularHours = standardRegularHoursPerDay;
+              overtimeHours = 0.0;
+            } else if (totalHours <= standardRegularHoursPerDay) {
+              regularHours = totalHours;
+              overtimeHours = 0.0;
+            } else {
+              regularHours = standardRegularHoursPerDay;
+              overtimeHours = totalHours - standardRegularHoursPerDay;
+            }
+          }
         }
       }
-
-      final bool isCompleted = dayRecords.any((r) => r.workflowStep == WorkflowStep.officeCheckOut);
 
       entries.add(
         DailyTimesheetEntry(
@@ -175,6 +199,7 @@ class TimesheetCalculator {
           overtimeHours: overtimeHours,
           stepCount: dayRecords.length,
           isCompleted: isCompleted,
+          isAutoCompleted: isAutoCompleted,
           siteVisits: siteVisits,
         ),
       );

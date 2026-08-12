@@ -54,6 +54,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     _workingTimeTimer?.cancel();
     _workingTimeTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (mounted) {
+        _db.autoResolveExpiredCheckIns();
         setState(() {});
       }
     });
@@ -426,8 +427,14 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
         final lastRecord = userTodayRecords.last;
 
         DateTime endTime;
+        bool isAutoCompleted = false;
+
         if (lastRecord.workflowStep == WorkflowStep.officeCheckOut) {
           endTime = lastRecord.eventTimestamp;
+          isAutoCompleted = lastRecord.address.contains('Auto Check-Out');
+        } else if (now.difference(checkInTime) >= const Duration(hours: 24)) {
+          endTime = checkInTime.add(const Duration(hours: 8));
+          isAutoCompleted = true;
         } else if (lastRecord.workflowStep == WorkflowStep.siteCheckOut) {
           endTime = lastRecord.eventTimestamp;
         } else {
@@ -435,12 +442,16 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
           endTime = now;
         }
 
-        final diff = endTime.isAfter(checkInTime)
-            ? endTime.difference(checkInTime)
-            : Duration.zero;
-        final hrs = diff.inHours.toString().padLeft(2, '0');
-        final mins = (diff.inMinutes % 60).toString().padLeft(2, '0');
-        workingTime = '${hrs}h ${mins}m';
+        if (isAutoCompleted) {
+          workingTime = '08h 00m (Auto)';
+        } else {
+          final diff = endTime.isAfter(checkInTime)
+              ? endTime.difference(checkInTime)
+              : Duration.zero;
+          final hrs = diff.inHours.toString().padLeft(2, '0');
+          final mins = (diff.inMinutes % 60).toString().padLeft(2, '0');
+          workingTime = '${hrs}h ${mins}m';
+        }
       }
     }
 
@@ -605,8 +616,8 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                               const SizedBox(height: 10),
                               const Text(
                                 'Attendance log cannot be saved without valid GPS location. Please turn on Location (GPS) services on your device and try logging again.',
-                                style: TextStyle(
-                                    fontSize: 12, color: Colors.grey),
+                                style:
+                                    TextStyle(fontSize: 12, color: Colors.grey),
                               ),
                             ],
                           ),
@@ -1104,8 +1115,10 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                           const SizedBox(height: 3),
                                           Text(
                                             (record.address.isNotEmpty &&
-                                                    !record.address.contains('Live Field Location (GPS Active)') &&
-                                                    !record.address.contains('Live Field Operations (GPS Active)'))
+                                                    !record.address.contains(
+                                                        'Live Field Location (GPS Active)') &&
+                                                    !record.address.contains(
+                                                        'Live Field Operations (GPS Active)'))
                                                 ? record.address
                                                 : '${LocationService.resolvePlaceName(record.latitude, record.longitude)} (GPS: ${record.latitude.toStringAsFixed(6)}, ${record.longitude.toStringAsFixed(6)})',
                                             style: TextStyle(

@@ -31,6 +31,7 @@ class DailyTimesheetEntry extends Equatable {
   final double overtimeHours;
   final int stepCount;
   final bool isCompleted;
+  final bool isAutoCompleted;
   final List<SiteVisitSummary> siteVisits;
 
   const DailyTimesheetEntry({
@@ -44,6 +45,7 @@ class DailyTimesheetEntry extends Equatable {
     required this.overtimeHours,
     this.stepCount = 0,
     this.isCompleted = false,
+    this.isAutoCompleted = false,
     this.siteVisits = const [],
   });
 
@@ -61,6 +63,7 @@ class DailyTimesheetEntry extends Equatable {
         overtimeHours,
         stepCount,
         isCompleted,
+        isAutoCompleted,
         siteVisits,
       ];
 }
