@@ -865,16 +865,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                 final lastTime = DateFormat('hh:mm a')
                     .format(dateRecords.last.eventTimestamp);
 
-                final siteOutRecs = dateRecords
-                    .where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
-                final officeOutRecs = dateRecords.where(
-                    (r) => r.workflowStep == WorkflowStep.officeCheckOut);
-                final endRecordTime = officeOutRecs.isNotEmpty
-                    ? officeOutRecs.last.eventTimestamp
-                    : (siteOutRecs.isNotEmpty
-                        ? siteOutRecs.last.eventTimestamp
-                        : dateRecords.last.eventTimestamp);
-
                 final siteCheckIns = dateRecords
                     .where((r) => r.workflowStep == WorkflowStep.siteCheckIn);
                 final siteNamesStr = siteCheckIns.isNotEmpty
@@ -884,13 +874,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         .join(', ')
                     : null;
 
-                final diff = endRecordTime
-                        .isAfter(dateRecords.first.eventTimestamp)
-                    ? endRecordTime.difference(dateRecords.first.eventTimestamp)
-                    : Duration.zero;
-                final dayHrs = diff.inMinutes / 60.0;
-                final dayReg = dayHrs <= 8.0 ? dayHrs : 8.0;
-                final dayOt = dayHrs > 8.0 ? (dayHrs - 8.0) : 0.0;
+                final dayTimesheets =
+                    TimesheetCalculator.calculateDailyTimesheets(dateRecords);
+                final dayEntry =
+                    dayTimesheets.isNotEmpty ? dayTimesheets.first : null;
+                final dayReg = dayEntry?.regularHours ?? 0.0;
+                final dayOt = dayEntry?.overtimeHours ?? 0.0;
+                final dayBreakMin = dayEntry?.breakDuration.inMinutes ?? 0;
 
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -954,7 +944,25 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                       color: Colors.orange.shade900),
                                 ),
                               ),
-                            ]
+                            ],
+                            if (dayBreakMin > 0) ...[
+                              const SizedBox(width: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.shade100,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '☕ ${dayBreakMin}m Break',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.amber.shade900),
+                                ),
+                              ),
+                            ],
                           ],
                         )
                       ],
@@ -1143,12 +1151,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     double totalHrs = 0.0;
     double regHrs = 0.0;
     double otHrs = 0.0;
+    int breakMin = 0;
 
     if (dayTimesheets.isNotEmpty) {
       final tEntry = dayTimesheets.first;
       regHrs = tEntry.regularHours;
       otHrs = tEntry.overtimeHours;
       totalHrs = tEntry.totalHours;
+      breakMin = tEntry.breakDuration.inMinutes;
     }
 
     return SingleChildScrollView(
@@ -1190,7 +1200,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           ),
           const Divider(height: 20),
 
-          // Daily Timesheet Breakdown Card (Regular, OT, Combined)
+          // Daily Timesheet Breakdown Card (Regular, OT, Break, Combined)
           Container(
             margin: const EdgeInsets.only(bottom: 16),
             padding: const EdgeInsets.all(14),
@@ -1223,7 +1233,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     Expanded(
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 8),
+                            horizontal: 8, vertical: 8),
                         decoration: BoxDecoration(
                           color: AppColors.primary.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
@@ -1231,29 +1241,29 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Regular Time',
+                            const Text('Regular',
                                 style: TextStyle(
                                     fontSize: 10,
                                     color: AppColors.primary,
                                     fontWeight: FontWeight.w600)),
                             const SizedBox(height: 2),
-                            Text('${regHrs.toStringAsFixed(1)} hrs',
+                            Text('${regHrs.toStringAsFixed(1)}h',
                                 style: const TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 15,
+                                    fontSize: 14,
                                     color: AppColors.primary)),
-                            const Text('Max 8.0h/day',
+                            const Text('Max 8.0h',
                                 style:
-                                    TextStyle(fontSize: 9, color: Colors.grey)),
+                                    TextStyle(fontSize: 8.5, color: Colors.grey)),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 8),
+                            horizontal: 8, vertical: 8),
                         decoration: BoxDecoration(
                           color: otHrs > 0
                               ? Colors.orange.shade100
@@ -1263,7 +1273,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Overtime (OT)',
+                            Text('Overtime',
                                 style: TextStyle(
                                     fontSize: 10,
                                     color: otHrs > 0
@@ -1271,25 +1281,58 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                         : Colors.grey.shade700,
                                     fontWeight: FontWeight.w600)),
                             const SizedBox(height: 2),
-                            Text('+${otHrs.toStringAsFixed(1)} hrs',
+                            Text('+${otHrs.toStringAsFixed(1)}h',
                                 style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 15,
+                                    fontSize: 14,
                                     color: otHrs > 0
                                         ? Colors.orange.shade900
                                         : Colors.grey.shade700)),
                             const Text('Beyond 8.0h',
                                 style:
-                                    TextStyle(fontSize: 9, color: Colors.grey)),
+                                    TextStyle(fontSize: 8.5, color: Colors.grey)),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    if (breakMin > 0) ...[
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.amber.shade200),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Break',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.amber.shade900,
+                                      fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 2),
+                              Text('${breakMin}m',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: Colors.amber.shade900)),
+                              const Text('Excluded',
+                                  style: TextStyle(
+                                      fontSize: 8.5, color: Colors.grey)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 8),
+                            horizontal: 8, vertical: 8),
                         decoration: BoxDecoration(
                           color: AppColors.success.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
@@ -1297,20 +1340,20 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Combined Time',
+                            const Text('Net Time',
                                 style: TextStyle(
                                     fontSize: 10,
                                     color: AppColors.success,
                                     fontWeight: FontWeight.w600)),
                             const SizedBox(height: 2),
-                            Text('${totalHrs.toStringAsFixed(1)} hrs',
+                            Text('${totalHrs.toStringAsFixed(1)}h',
                                 style: const TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 15,
+                                    fontSize: 14,
                                     color: AppColors.success)),
                             const Text('Reg + OT',
                                 style:
-                                    TextStyle(fontSize: 9, color: Colors.grey)),
+                                    TextStyle(fontSize: 8.5, color: Colors.grey)),
                           ],
                         ),
                       ),
@@ -1993,6 +2036,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         return Icons.location_on_rounded;
       case WorkflowStep.siteCheckOut:
         return Icons.directions_run_rounded;
+      case WorkflowStep.breakStart:
+        return Icons.coffee_rounded;
+      case WorkflowStep.breakEnd:
+        return Icons.play_arrow_rounded;
       case WorkflowStep.officeCheckOut:
         return Icons.logout_rounded;
       case WorkflowStep.completed:
@@ -2008,6 +2055,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         return AppColors.primary;
       case WorkflowStep.siteCheckOut:
         return AppColors.warning;
+      case WorkflowStep.breakStart:
+        return Colors.amber.shade800;
+      case WorkflowStep.breakEnd:
+        return Colors.teal.shade700;
       case WorkflowStep.officeCheckOut:
         return Colors.purple;
       case WorkflowStep.completed:

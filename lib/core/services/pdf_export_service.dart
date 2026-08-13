@@ -392,9 +392,11 @@ class PdfExportService {
 
     double totalReg = 0.0;
     double totalOt = 0.0;
+    int totalBreakMinutes = 0;
     for (final t in timesheets) {
       totalReg += t.regularHours;
       totalOt += t.overtimeHours;
+      totalBreakMinutes += t.breakDuration.inMinutes;
     }
 
     final String empName = employee.name ?? 'Employee';
@@ -460,27 +462,33 @@ class PdfExportService {
                   pw.Column(children: [
                     pw.Text('Department', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
                     pw.SizedBox(height: 2),
-                    pw.Text(department, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
+                    pw.Text(department, style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
                   ]),
                   pw.Column(children: [
                     pw.Text('Logged Days', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
                     pw.SizedBox(height: 2),
-                    pw.Text('${timesheets.length} Days', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
+                    pw.Text('${timesheets.length} Days', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
                   ]),
                   pw.Column(children: [
                     pw.Text('Regular Hours', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
                     pw.SizedBox(height: 2),
-                    pw.Text('${totalReg.toStringAsFixed(1)} hrs', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
+                    pw.Text('${totalReg.toStringAsFixed(1)} hrs', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
                   ]),
                   pw.Column(children: [
                     pw.Text('Overtime OT', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
                     pw.SizedBox(height: 2),
-                    pw.Text('+${totalOt.toStringAsFixed(1)} hrs', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.orange900)),
+                    pw.Text('+${totalOt.toStringAsFixed(1)} hrs', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.orange900)),
                   ]),
+                  if (totalBreakMinutes > 0)
+                    pw.Column(children: [
+                      pw.Text('Total Break', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                      pw.SizedBox(height: 2),
+                      pw.Text('${totalBreakMinutes}m', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.amber900)),
+                    ]),
                   pw.Column(children: [
-                    pw.Text('Combined Total', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                    pw.Text('Net Working', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
                     pw.SizedBox(height: 2),
-                    pw.Text('${(totalReg + totalOt).toStringAsFixed(1)} hrs', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
+                    pw.Text('${(totalReg + totalOt).toStringAsFixed(1)} hrs', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.green900)),
                   ]),
                 ],
               ),
@@ -489,7 +497,7 @@ class PdfExportService {
 
             // Daily Timesheet Logs Table
             pw.TableHelper.fromTextArray(
-              headers: ['Date', 'In Time', 'Out Time', 'Regular', 'OT', 'Site / Job Visits', 'Status'],
+              headers: ['Date', 'In Time', 'Out Time', 'Regular', 'OT', 'Break', 'Site / Job Visits', 'Status'],
               data: timesheets.map((entry) {
                 final dateStr = DateFormat('yyyy-MM-dd').format(entry.date);
                 final inTime = entry.checkInTime != null
@@ -500,6 +508,9 @@ class PdfExportService {
                     : '--:--';
                 final reg = '${entry.regularHours.toStringAsFixed(1)} h';
                 final ot = '+${entry.overtimeHours.toStringAsFixed(1)} h';
+                final breakStr = entry.breakDuration > Duration.zero
+                    ? '${entry.breakDuration.inMinutes}m'
+                    : '--';
                 final dayRecs = records.where((r) {
                   final rDate = DateFormat('yyyy-MM-dd').format(r.eventTimestamp);
                   return rDate == dateStr;
@@ -513,12 +524,12 @@ class PdfExportService {
                     ? entry.siteVisits.map((sv) => sv.siteName).join(', ')
                     : (resolvedSites.isNotEmpty ? resolvedSites : 'Main Office');
                 final status = entry.isCompleted ? 'Complete' : 'In Progress';
-                return [dateStr, inTime, outTime, reg, ot, sitesStr, status];
+                return [dateStr, inTime, outTime, reg, ot, breakStr, sitesStr, status];
               }).toList(),
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 9),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 8.5),
               headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo900),
-              cellStyle: const pw.TextStyle(fontSize: 8.5),
-              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+              cellStyle: const pw.TextStyle(fontSize: 8),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4.5),
               cellAlignment: pw.Alignment.centerLeft,
             ),
 

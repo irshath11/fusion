@@ -634,6 +634,34 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                     ],
                   ),
                 ),
+                if (entry.breakDuration > Duration.zero) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.amber.shade300),
+                    ),
+                    child: Column(
+                      children: [
+                        Text('Break',
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.amber.shade900)),
+                        Text(
+                          '${entry.breakDuration.inMinutes}m',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: Colors.amber.shade900),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ],
@@ -720,7 +748,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                         AppColors.primary,
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: _buildBreakdownBox(
                         'Overtime (OT)',
@@ -729,6 +757,17 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                         Colors.orange.shade800,
                       ),
                     ),
+                    if (entry.breakDuration > Duration.zero) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildBreakdownBox(
+                          'Break Time',
+                          '${entry.breakDuration.inMinutes}m',
+                          'Excluded',
+                          Colors.amber.shade800,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 if (entry.siteVisits.isNotEmpty) ...[
@@ -776,10 +815,22 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Combined Working Time:',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.success)),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Net Working Time:',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.success)),
+                          if (entry.breakDuration > Duration.zero)
+                            Text(
+                              'Gross: ${(entry.grossDuration.inMinutes / 60.0).toStringAsFixed(1)}h (incl. ${entry.breakDuration.inMinutes}m break)',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondaryLight),
+                            ),
+                        ],
+                      ),
                       Text(
                         '${entry.totalHours.toStringAsFixed(1)} hrs',
                         style: const TextStyle(

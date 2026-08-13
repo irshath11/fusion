@@ -11,6 +11,7 @@ import '../../../core/widgets/offline_banner.dart';
 import '../../attendance/presentation/attendance_cubit.dart';
 import '../../attendance/presentation/camera_capture_modal.dart';
 import '../../attendance/presentation/site_name_dialog.dart';
+import '../../attendance/presentation/break_type_dialog.dart';
 import '../../../core/services/location_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../sync/data/sync_engine.dart';
@@ -192,6 +193,21 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
       context.read<AttendanceCubit>().executeAttendanceStep(
             step: step,
             siteName: sName,
+          );
+    } else if (step == WorkflowStep.breakStart) {
+      final breakReason = await BreakTypeDialog.show(context);
+      if (breakReason == null || breakReason.isEmpty) return;
+      if (!mounted) return;
+      context.read<AttendanceCubit>().executeAttendanceStep(
+            step: step,
+            siteName: breakReason,
+          );
+    } else if (step == WorkflowStep.breakEnd) {
+      final activeBreak = _db.getActiveBreakToday(empId);
+      final bName = activeBreak?.siteName ?? 'Break';
+      context.read<AttendanceCubit>().executeAttendanceStep(
+            step: step,
+            siteName: '$bName Ended',
           );
     } else if (step == WorkflowStep.officeCheckOut) {
       _openCameraModal(step);
@@ -419,6 +435,13 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     final userTodayRecords = _db.getTodayAttendanceRecords(empId);
 
     String workingTime = '00h 00m';
+    final bool isOnBreak =
+        _db.isEmployeeOnBreakToday(user?.id ?? user?.firebaseUid);
+    final activeBreak =
+        _db.getActiveBreakToday(user?.id ?? user?.firebaseUid);
+    final Duration totalBreakToday =
+        _db.getTodayBreakDuration(user?.id ?? user?.firebaseUid);
+
     if (userTodayRecords.isNotEmpty) {
       final checkInMatches = userTodayRecords
           .where((r) => r.workflowStep == WorkflowStep.officeCheckIn);
@@ -438,18 +461,21 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
         } else if (lastRecord.workflowStep == WorkflowStep.siteCheckOut) {
           endTime = lastRecord.eventTimestamp;
         } else {
-          // officeCheckIn or siteCheckIn: Duty is currently active!
+          // officeCheckIn, siteCheckIn, or break: Duty is currently active!
           endTime = now;
         }
 
         if (isAutoCompleted) {
           workingTime = '08h 00m (Auto)';
         } else {
-          final diff = endTime.isAfter(checkInTime)
+          final grossDiff = endTime.isAfter(checkInTime)
               ? endTime.difference(checkInTime)
               : Duration.zero;
-          final hrs = diff.inHours.toString().padLeft(2, '0');
-          final mins = (diff.inMinutes % 60).toString().padLeft(2, '0');
+          final netDiff = grossDiff > totalBreakToday
+              ? (grossDiff - totalBreakToday)
+              : Duration.zero;
+          final hrs = netDiff.inHours.toString().padLeft(2, '0');
+          final mins = (netDiff.inMinutes % 60).toString().padLeft(2, '0');
           workingTime = '${hrs}h ${mins}m';
         }
       }
@@ -704,11 +730,15 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                       label:
                                           currentStep == WorkflowStep.completed
                                               ? 'Shift Complete'
-                                              : 'On Duty',
+                                              : (isOnBreak
+                                                  ? '☕ On Break'
+                                                  : 'On Duty'),
                                       color:
                                           currentStep == WorkflowStep.completed
                                               ? Colors.grey
-                                              : AppColors.success,
+                                              : (isOnBreak
+                                                  ? Colors.amber.shade800
+                                                  : AppColors.success),
                                     )
                                   ],
                                 ),
@@ -718,13 +748,15 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                       MainAxisAlignment.spaceAround,
                                   children: [
                                     _buildInfoMetric(
-                                      'Duty Step',
+                                      'Duty Status',
                                       currentStep == WorkflowStep.completed
-                                          ? '4/4'
-                                          : '${currentStep.index + 1}/4',
+                                          ? 'Completed'
+                                          : (isOnBreak
+                                              ? '☕ On Break'
+                                              : 'Active Duty'),
                                     ),
                                     _buildInfoMetric(
-                                        'Working Time', workingTime),
+                                        'Net Working', workingTime),
                                     _buildInfoMetric(
                                         'Pending Sync', '$_pendingSyncCount'),
                                   ],
@@ -749,11 +781,86 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                           switchInCurve: Curves.easeOutCubic,
                           switchOutCurve: Curves.easeInCubic,
                           child: KeyedSubtree(
-                            key: ValueKey('workflow_step_$currentStep'),
+                            key: ValueKey('workflow_step_${currentStep}_${isOnBreak}'),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (currentStep ==
+                                if (currentStep == WorkflowStep.breakEnd || isOnBreak) ...[
+                                  Card(
+                                    color: isDark ? const Color(0xFF2C2416) : Colors.amber.shade50,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      side: BorderSide(
+                                        color: isDark ? Colors.amber.shade700 : Colors.amber.shade400,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16.0),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Container(
+                                                padding: const EdgeInsets.all(8),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.amber.shade700.withValues(alpha: 0.18),
+                                                  borderRadius: BorderRadius.circular(10),
+                                                ),
+                                                child: Icon(Icons.coffee_rounded,
+                                                    color: Colors.amber.shade800, size: 24),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      'Currently On Break',
+                                                      style: TextStyle(
+                                                        fontSize: 16,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: isDark ? Colors.amber.shade200 : Colors.amber.shade900,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      activeBreak != null
+                                                          ? '${activeBreak.siteName ?? "Break"} • Started ${DateFormat("hh:mm a").format(activeBreak.eventTimestamp.toLocal())}'
+                                                          : 'Break In Progress',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'Break time is automatically excluded from your work hour calculation. Tap below to resume duty.',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 14),
+                                          AppButton(
+                                            text: state is AttendanceProcessing
+                                                ? 'Acquiring GPS & Resuming...'
+                                                : 'End Break & Resume Work',
+                                            isLoading: state is AttendanceProcessing,
+                                            icon: Icons.play_arrow_rounded,
+                                            onPressed: () =>
+                                                _handleAttendanceStep(WorkflowStep.breakEnd),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ] else if (currentStep ==
                                     WorkflowStep.officeCheckIn) ...[
                                   Card(
                                     color: isDark
@@ -859,16 +966,49 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                             ),
                                           ),
                                           const SizedBox(height: 16),
-                                          AppButton(
-                                            text: state is AttendanceProcessing
-                                                ? 'Acquiring GPS & Logging...'
-                                                : 'Check-Out from Site',
-                                            isLoading:
-                                                state is AttendanceProcessing,
-                                            icon: Icons.logout_rounded,
-                                            onPressed: () =>
-                                                _handleAttendanceStep(
-                                                    WorkflowStep.siteCheckOut),
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                flex: 6,
+                                                child: AppButton(
+                                                  text: state is AttendanceProcessing
+                                                      ? 'Logging...'
+                                                      : 'Check-Out Site',
+                                                  isLoading:
+                                                      state is AttendanceProcessing,
+                                                  icon: Icons.logout_rounded,
+                                                  onPressed: () =>
+                                                      _handleAttendanceStep(
+                                                          WorkflowStep.siteCheckOut),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                flex: 5,
+                                                child: OutlinedButton.icon(
+                                                  onPressed: state is AttendanceProcessing
+                                                      ? null
+                                                      : () => _handleAttendanceStep(
+                                                          WorkflowStep.breakStart),
+                                                  icon: const Icon(Icons.coffee_rounded, size: 18),
+                                                  label: const FittedBox(
+                                                    fit: BoxFit.scaleDown,
+                                                    child: Text(
+                                                      'Take Break',
+                                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                                    ),
+                                                  ),
+                                                  style: OutlinedButton.styleFrom(
+                                                    foregroundColor: Colors.amber.shade800,
+                                                    side: BorderSide(color: Colors.amber.shade600),
+                                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius: BorderRadius.circular(10),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ],
                                       ),
@@ -895,7 +1035,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                           ),
                                           const SizedBox(height: 6),
                                           const Text(
-                                            'Check in to your next job site or perform Final Office Check-Out to end your workday.',
+                                            'Check in to your next job site, take a break, or perform Final Office Check-Out.',
                                             style: TextStyle(
                                                 fontSize: 13,
                                                 color: AppColors
@@ -980,6 +1120,27 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                               ),
                                             ],
                                           ),
+                                          const SizedBox(height: 10),
+                                          OutlinedButton.icon(
+                                            onPressed: state is AttendanceProcessing
+                                                ? null
+                                                : () => _handleAttendanceStep(
+                                                    WorkflowStep.breakStart),
+                                            icon: const Icon(Icons.coffee_rounded, size: 18),
+                                            label: const Text(
+                                              'Take a Break',
+                                              style: TextStyle(fontWeight: FontWeight.bold),
+                                            ),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: Colors.amber.shade800,
+                                              side: BorderSide(color: Colors.amber.shade600),
+                                              padding: const EdgeInsets.symmetric(vertical: 12),
+                                              minimumSize: const Size(double.infinity, 44),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(10),
+                                              ),
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -1052,9 +1213,35 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                           WorkflowStep.siteCheckOut) &&
                                   record.siteName != null &&
                                   record.siteName!.trim().isNotEmpty;
-                              final stepTitle = hasSite
-                                  ? '${record.workflowStep.displayName} (${record.siteName!.trim()})'
-                                  : record.workflowStep.displayName;
+                              
+                              final isBreakStart = record.workflowStep == WorkflowStep.breakStart;
+                              final isBreakEnd = record.workflowStep == WorkflowStep.breakEnd;
+                              final isBreak = isBreakStart || isBreakEnd;
+
+                              final Color stepColor = isBreak
+                                  ? Colors.amber.shade700
+                                  : AppColors.success;
+                              final IconData stepIcon = isBreakStart
+                                  ? Icons.coffee_rounded
+                                  : (isBreakEnd
+                                      ? Icons.play_arrow_rounded
+                                      : Icons.check);
+
+                              String stepTitle;
+                              if (isBreakStart) {
+                                final sName = record.siteName?.trim();
+                                if (sName != null && sName.isNotEmpty && sName != 'Break') {
+                                  stepTitle = '☕ Break Started ($sName)';
+                                } else {
+                                  stepTitle = '☕ Break Started';
+                                }
+                              } else if (isBreakEnd) {
+                                stepTitle = '🟢 Break Ended (Resumed Work)';
+                              } else if (hasSite) {
+                                stepTitle = '${record.workflowStep.displayName} (${record.siteName!.trim()})';
+                              } else {
+                                stepTitle = record.workflowStep.displayName;
+                              }
 
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 10),
@@ -1062,14 +1249,14 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                 decoration: BoxDecoration(
                                   color: Theme.of(context).cardColor,
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: AppColors.success),
+                                  border: Border.all(color: stepColor.withValues(alpha: 0.6)),
                                 ),
                                 child: Row(
                                   children: [
-                                    const CircleAvatar(
+                                    CircleAvatar(
                                       radius: 14,
-                                      backgroundColor: AppColors.success,
-                                      child: Icon(Icons.check,
+                                      backgroundColor: stepColor,
+                                      child: Icon(stepIcon,
                                           size: 14, color: Colors.white),
                                     ),
                                     const SizedBox(width: 12),
@@ -1085,9 +1272,12 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                               Expanded(
                                                 child: Text(
                                                   stepTitle,
-                                                  style: const TextStyle(
+                                                  style: TextStyle(
                                                       fontWeight:
-                                                          FontWeight.bold),
+                                                          FontWeight.bold,
+                                                      color: isBreak
+                                                          ? (isDark ? Colors.amber.shade200 : Colors.amber.shade900)
+                                                          : null),
                                                 ),
                                               ),
                                               Container(
@@ -1096,17 +1286,21 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                                         horizontal: 8,
                                                         vertical: 2),
                                                 decoration: BoxDecoration(
-                                                  color: AppColors.primary
-                                                      .withValues(alpha: 0.1),
+                                                  color: isBreak
+                                                      ? Colors.amber.shade700.withValues(alpha: 0.15)
+                                                      : AppColors.primary
+                                                          .withValues(alpha: 0.1),
                                                   borderRadius:
                                                       BorderRadius.circular(6),
                                                 ),
                                                 child: Text(
                                                   formattedTime,
-                                                  style: const TextStyle(
+                                                  style: TextStyle(
                                                     fontSize: 12,
                                                     fontWeight: FontWeight.bold,
-                                                    color: Colors.greenAccent,
+                                                    color: isBreak
+                                                        ? Colors.amber.shade800
+                                                        : Colors.greenAccent,
                                                   ),
                                                 ),
                                               ),

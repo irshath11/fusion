@@ -111,7 +111,35 @@ class TimesheetCalculator {
         }
       }
 
-      // 3. Build Site Visits List
+      // 3. Calculate Total Break Duration for this day
+      Duration totalBreakDuration = Duration.zero;
+      for (int i = 0; i < dayRecords.length; i++) {
+        final r = dayRecords[i];
+        if (r.workflowStep == WorkflowStep.breakStart) {
+          DateTime bStart = r.eventTimestamp;
+          DateTime? bEnd;
+          for (int j = i + 1; j < dayRecords.length; j++) {
+            final nextStep = dayRecords[j].workflowStep;
+            if (nextStep == WorkflowStep.breakEnd ||
+                nextStep == WorkflowStep.officeCheckOut) {
+              bEnd = dayRecords[j].eventTimestamp;
+              break;
+            }
+          }
+          if (bEnd == null) {
+            if (checkOutTimestamp != null && checkOutTimestamp.isAfter(bStart)) {
+              bEnd = checkOutTimestamp;
+            } else if (DateTime.now().difference(bStart).inHours < 24) {
+              bEnd = DateTime.now();
+            }
+          }
+          if (bEnd != null && bEnd.isAfter(bStart)) {
+            totalBreakDuration += bEnd.difference(bStart);
+          }
+        }
+      }
+
+      // 4. Build Site Visits List (excluding any breaks during site visits)
       final List<SiteVisitSummary> siteVisits = [];
       for (int i = 0; i < dayRecords.length; i++) {
         final r = dayRecords[i];
@@ -156,7 +184,7 @@ class TimesheetCalculator {
       bool isAutoCompleted = isPreviouslyAutoCompleted;
       bool isCompleted = hasExplicitOfficeCheckOut;
 
-      Duration totalWorkedDuration = Duration.zero;
+      Duration netWorkedDuration = Duration.zero;
       double regularHours = 0.0;
       double overtimeHours = 0.0;
 
@@ -168,28 +196,36 @@ class TimesheetCalculator {
         // Automatically capture data after 8 hrs from check-in time, complete only regular time (8h), and check out.
         if (!hasExplicitOfficeCheckOut && elapsedSinceCheckIn >= const Duration(hours: 24)) {
           checkOutTimestamp = checkInTimestamp.add(const Duration(hours: 8));
-          totalWorkedDuration = const Duration(hours: 8);
+          netWorkedDuration = const Duration(hours: 8);
           regularHours = standardRegularHoursPerDay;
           overtimeHours = 0.0;
           isCompleted = true;
           isAutoCompleted = true;
         } else {
           final DateTime effectiveEnd = checkOutTimestamp ?? now;
+          Duration grossDuration = Duration.zero;
           if (effectiveEnd.isAfter(checkInTimestamp)) {
-            totalWorkedDuration = effectiveEnd.difference(checkInTimestamp);
+            grossDuration = effectiveEnd.difference(checkInTimestamp);
           }
 
-          final totalHours = totalWorkedDuration.inMinutes / 60.0;
-          if (totalHours > 0) {
+          // Net Worked Duration = Gross Duration - Total Break Duration
+          if (grossDuration > totalBreakDuration) {
+            netWorkedDuration = grossDuration - totalBreakDuration;
+          } else {
+            netWorkedDuration = Duration.zero;
+          }
+
+          final totalNetHours = netWorkedDuration.inMinutes / 60.0;
+          if (totalNetHours > 0) {
             if (isPreviouslyAutoCompleted) {
               regularHours = standardRegularHoursPerDay;
               overtimeHours = 0.0;
-            } else if (totalHours <= standardRegularHoursPerDay) {
-              regularHours = totalHours;
+            } else if (totalNetHours <= standardRegularHoursPerDay) {
+              regularHours = totalNetHours;
               overtimeHours = 0.0;
             } else {
               regularHours = standardRegularHoursPerDay;
-              overtimeHours = totalHours - standardRegularHoursPerDay;
+              overtimeHours = totalNetHours - standardRegularHoursPerDay;
             }
           }
         }
@@ -202,7 +238,8 @@ class TimesheetCalculator {
           employeeName: empName,
           checkInTime: checkInTimestamp,
           checkOutTime: checkOutTimestamp,
-          totalDuration: totalWorkedDuration,
+          totalDuration: netWorkedDuration,
+          breakDuration: totalBreakDuration,
           regularHours: regularHours,
           overtimeHours: overtimeHours,
           stepCount: dayRecords.length,
@@ -350,8 +387,33 @@ class TimesheetCalculator {
             }
           }
 
+          // Calculate any breaks that occurred during this site session
+          Duration siteBreak = Duration.zero;
+          for (int b = 0; b < dayRecords.length; b++) {
+            if (dayRecords[b].workflowStep == WorkflowStep.breakStart) {
+              DateTime bStart = dayRecords[b].eventTimestamp;
+              DateTime? bEnd;
+              for (int k = b + 1; k < dayRecords.length; k++) {
+                final nextStep = dayRecords[k].workflowStep;
+                if (nextStep == WorkflowStep.breakEnd ||
+                    nextStep == WorkflowStep.siteCheckOut ||
+                    nextStep == WorkflowStep.officeCheckOut) {
+                  bEnd = dayRecords[k].eventTimestamp;
+                  break;
+                }
+              }
+              bEnd ??= sOut;
+              final overlapStart = bStart.isAfter(sIn) ? bStart : sIn;
+              final overlapEnd = bEnd.isBefore(sOut) ? bEnd : sOut;
+              if (overlapEnd.isAfter(overlapStart)) {
+                siteBreak += overlapEnd.difference(overlapStart);
+              }
+            }
+          }
+
           final diff = sOut.difference(sIn);
-          final durationHours = (diff.inMinutes / 60.0).clamp(0.0, 24.0);
+          final netSiteDuration = diff > siteBreak ? (diff - siteBreak) : Duration.zero;
+          final durationHours = (netSiteDuration.inMinutes / 60.0).clamp(0.0, 24.0);
 
           final acc = accMap.putIfAbsent(
             key,

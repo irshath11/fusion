@@ -427,6 +427,18 @@ class LocalDatabaseService {
     }).toList();
   }
 
+  /// Checks if employee is currently checked into a site without having checked out
+  bool isCurrentlyAtSite([String? employeeId]) {
+    final todayRecords = getTodayAttendanceRecords(employeeId);
+    if (todayRecords.isEmpty) return false;
+    for (int i = todayRecords.length - 1; i >= 0; i--) {
+      final step = todayRecords[i].workflowStep;
+      if (step == WorkflowStep.siteCheckIn) return true;
+      if (step == WorkflowStep.siteCheckOut || step == WorkflowStep.officeCheckOut) return false;
+    }
+    return false;
+  }
+
   /// Dynamically computes current workflow step for a specific employee for today
   WorkflowStep getWorkflowStepForEmployee([String? employeeId]) {
     autoResolveExpiredCheckIns();
@@ -440,12 +452,55 @@ class LocalDatabaseService {
     final lastRecord = todayUserRecords.last;
     if (lastRecord.workflowStep == WorkflowStep.officeCheckOut) {
       return WorkflowStep.completed;
-    } else if (lastRecord.workflowStep == WorkflowStep.siteCheckIn) {
+    } else if (lastRecord.workflowStep == WorkflowStep.breakStart) {
+      return WorkflowStep.breakEnd;
+    } else if (isCurrentlyAtSite(employeeId)) {
       return WorkflowStep.siteCheckOut;
     } else {
-      // Last record was officeCheckIn or siteCheckOut: user can do siteCheckIn or officeCheckOut
+      // Last record was officeCheckIn, siteCheckOut, or breakEnd: user can do siteCheckIn or officeCheckOut
       return WorkflowStep.siteCheckIn;
     }
+  }
+
+  /// Checks if the employee is currently on break
+  bool isEmployeeOnBreakToday([String? employeeId]) {
+    final todayRecords = getTodayAttendanceRecords(employeeId);
+    if (todayRecords.isEmpty) return false;
+    return todayRecords.last.workflowStep == WorkflowStep.breakStart;
+  }
+
+  /// Gets the active break record for today (if on break)
+  AttendanceRecord? getActiveBreakToday([String? employeeId]) {
+    final todayRecords = getTodayAttendanceRecords(employeeId);
+    if (todayRecords.isNotEmpty && todayRecords.last.workflowStep == WorkflowStep.breakStart) {
+      return todayRecords.last;
+    }
+    return null;
+  }
+
+  /// Calculates total break duration taken today
+  Duration getTodayBreakDuration([String? employeeId]) {
+    final todayRecords = getTodayAttendanceRecords(employeeId);
+    Duration totalBreak = Duration.zero;
+    for (int i = 0; i < todayRecords.length; i++) {
+      if (todayRecords[i].workflowStep == WorkflowStep.breakStart) {
+        DateTime bStart = todayRecords[i].eventTimestamp;
+        DateTime? bEnd;
+        for (int j = i + 1; j < todayRecords.length; j++) {
+          final nextStep = todayRecords[j].workflowStep;
+          if (nextStep == WorkflowStep.breakEnd ||
+              nextStep == WorkflowStep.officeCheckOut) {
+            bEnd = todayRecords[j].eventTimestamp;
+            break;
+          }
+        }
+        bEnd ??= DateTime.now();
+        if (bEnd.isAfter(bStart)) {
+          totalBreak += bEnd.difference(bStart);
+        }
+      }
+    }
+    return totalBreak;
   }
 
   /// Checks if the employee has already completed at least one site check-in today
@@ -457,8 +512,15 @@ class LocalDatabaseService {
   /// Gets the site name of the currently active site check-in (if checked in)
   String? getActiveSiteNameToday([String? employeeId]) {
     final todayRecords = getTodayAttendanceRecords(employeeId);
-    if (todayRecords.isNotEmpty && todayRecords.last.workflowStep == WorkflowStep.siteCheckIn) {
-      return todayRecords.last.siteName ?? 'Current Site';
+    if (todayRecords.isEmpty) return null;
+    for (int i = todayRecords.length - 1; i >= 0; i--) {
+      final step = todayRecords[i].workflowStep;
+      if (step == WorkflowStep.siteCheckIn) {
+        return todayRecords[i].siteName ?? 'Current Site';
+      }
+      if (step == WorkflowStep.siteCheckOut || step == WorkflowStep.officeCheckOut) {
+        return null;
+      }
     }
     return null;
   }
