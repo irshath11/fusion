@@ -27,7 +27,12 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   DateTime? _selectedDate;
   String _searchQuery = '';
   bool _isLoadingCloud = false;
-  int _activeTab = 0; // 0 = Directory, 1 = Cumulative Summary
+  int _activeTab =
+      0; // 0 = Directory, 1 = Cumulative Summary, 2 = Site / Client Man-Hours
+  String _siteDateFilter = 'all'; // 'all', 'month', 'week', 'today'
+  bool _siteGroupByClient =
+      false; // true = Group by Client, false = Specific Site
+  final Set<String> _expandedSiteKeys = {};
 
   @override
   void initState() {
@@ -155,7 +160,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
+                    icon: const Icon(Icons.refresh_rounded,
+                        color: AppColors.primary),
                     tooltip: 'Refresh Cloud Logs',
                     onPressed: _loadCloudAttendanceRecords,
                   ),
@@ -170,7 +176,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             ),
           const SizedBox(height: 12),
 
-          // Tab Bar Switcher (Directory vs Cumulative Record)
+          // Tab Bar Switcher (Directory vs Cumulative Record vs Site Man-Hours)
           Container(
             decoration: BoxDecoration(
               color: Colors.grey.shade200,
@@ -186,7 +192,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                       duration: const Duration(milliseconds: 200),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       decoration: BoxDecoration(
-                        color: _activeTab == 0 ? Colors.white : Colors.transparent,
+                        color:
+                            _activeTab == 0 ? Colors.white : Colors.transparent,
                         borderRadius: BorderRadius.circular(10),
                         boxShadow: _activeTab == 0
                             ? [
@@ -203,16 +210,16 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         children: [
                           Icon(
                             Icons.people_alt_rounded,
-                            size: 18,
+                            size: 16,
                             color: _activeTab == 0
                                 ? AppColors.primary
                                 : Colors.grey.shade700,
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 5),
                           Text(
-                            'Employee Directory',
+                            'Directory',
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: 12,
                               fontWeight: FontWeight.bold,
                               color: _activeTab == 0
                                   ? AppColors.primary
@@ -231,7 +238,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                       duration: const Duration(milliseconds: 200),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       decoration: BoxDecoration(
-                        color: _activeTab == 1 ? Colors.white : Colors.transparent,
+                        color:
+                            _activeTab == 1 ? Colors.white : Colors.transparent,
                         borderRadius: BorderRadius.circular(10),
                         boxShadow: _activeTab == 1
                             ? [
@@ -248,18 +256,64 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         children: [
                           Icon(
                             Icons.analytics_rounded,
-                            size: 18,
+                            size: 16,
                             color: _activeTab == 1
                                 ? AppColors.primary
                                 : Colors.grey.shade700,
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 5),
                           Text(
-                            'Cumulative Hours',
+                            'Cumulative',
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: 12,
                               fontWeight: FontWeight.bold,
                               color: _activeTab == 1
+                                  ? AppColors.primary
+                                  : Colors.grey.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _activeTab = 2),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color:
+                            _activeTab == 2 ? Colors.white : Colors.transparent,
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: _activeTab == 2
+                            ? [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.05),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                )
+                              ]
+                            : [],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.location_city_rounded,
+                            size: 16,
+                            color: _activeTab == 2
+                                ? AppColors.primary
+                                : Colors.grey.shade700,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Site Hours',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: _activeTab == 2
                                   ? AppColors.primary
                                   : Colors.grey.shade700,
                             ),
@@ -277,11 +331,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           // Search Bar
           TextField(
             onChanged: (val) => setState(() => _searchQuery = val),
-            style: const TextStyle(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w500),
+            style: const TextStyle(
+                fontSize: 14,
+                color: Colors.black87,
+                fontWeight: FontWeight.w500),
             decoration: InputDecoration(
               hintText: 'Search employee name, code, department...',
               hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-              prefixIcon: const Icon(Icons.search_rounded, color: AppColors.primary),
+              prefixIcon:
+                  const Icon(Icons.search_rounded, color: AppColors.primary),
               suffixIcon: _searchQuery.isNotEmpty
                   ? IconButton(
                       icon: const Icon(Icons.clear_rounded, size: 18),
@@ -300,7 +358,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                borderSide:
+                    const BorderSide(color: AppColors.primary, width: 1.5),
               ),
               filled: true,
               fillColor: Colors.white,
@@ -328,12 +387,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   final empRecords = allRecords
                       .where((r) =>
                           r.employeeId == emp.id ||
-                          r.employeeName.toLowerCase() == emp.name.toLowerCase())
+                          r.employeeName.toLowerCase() ==
+                              emp.name.toLowerCase())
                       .toList();
 
                   // Distinct dates count
                   final datesCount = empRecords
-                      .map((r) => DateFormat('yyyy-MM-dd').format(r.eventTimestamp))
+                      .map((r) =>
+                          DateFormat('yyyy-MM-dd').format(r.eventTimestamp))
                       .toSet()
                       .length;
 
@@ -404,8 +465,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   );
                 },
               ),
-          ] else ...[
+          ] else if (_activeTab == 1) ...[
             _buildCumulativeSummaryView(filteredEmployees, allRecords),
+          ] else ...[
+            _buildSiteManHoursView(allRecords),
           ],
         ],
       ),
@@ -492,13 +555,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               ),
               ElevatedButton.icon(
                 onPressed: () => _exportPdfForEmployee(emp, empRecords),
-                icon: const Icon(Icons.picture_as_pdf_rounded,
-                    size: 14),
-                label: const Text('Download PDF', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                icon: const Icon(Icons.picture_as_pdf_rounded, size: 14),
+                label: const Text('Download PDF',
+                    style:
+                        TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red.shade700,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   shape: RoundedRectangleBorder(
@@ -519,14 +584,26 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   decoration: BoxDecoration(
                     color: AppColors.primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                    border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.2)),
                   ),
                   child: Column(
                     children: [
-                      const Text('Regular', style: TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.bold)),
+                      const Text('Regular',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.bold)),
                       const SizedBox(height: 2),
-                      Text('${totalRegHours.toStringAsFixed(1)} hrs', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                      const Text('Max 8.0h/day', style: TextStyle(fontSize: 10, color: AppColors.textSecondaryLight)),
+                      Text('${totalRegHours.toStringAsFixed(1)} hrs',
+                          style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary)),
+                      const Text('Max 8.0h/day',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: AppColors.textSecondaryLight)),
                     ],
                   ),
                 ),
@@ -542,10 +619,21 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   ),
                   child: Column(
                     children: [
-                      Text('Overtime (OT)', style: TextStyle(fontSize: 11, color: Colors.orange.shade900, fontWeight: FontWeight.bold)),
+                      Text('Overtime (OT)',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.orange.shade900,
+                              fontWeight: FontWeight.bold)),
                       const SizedBox(height: 2),
-                      Text('${totalOtHours.toStringAsFixed(1)} hrs', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
-                      const Text('Beyond 8.0h/day', style: TextStyle(fontSize: 10, color: AppColors.textSecondaryLight)),
+                      Text('${totalOtHours.toStringAsFixed(1)} hrs',
+                          style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange.shade900)),
+                      const Text('Beyond 8.0h/day',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: AppColors.textSecondaryLight)),
                     ],
                   ),
                 ),
@@ -557,21 +645,160 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   decoration: BoxDecoration(
                     color: AppColors.success.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.success.withValues(alpha: 0.2)),
+                    border: Border.all(
+                        color: AppColors.success.withValues(alpha: 0.2)),
                   ),
                   child: Column(
                     children: [
-                      const Text('Combined', style: TextStyle(fontSize: 11, color: AppColors.success, fontWeight: FontWeight.bold)),
+                      const Text('Combined',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.success,
+                              fontWeight: FontWeight.bold)),
                       const SizedBox(height: 2),
-                      Text('${(totalRegHours + totalOtHours).toStringAsFixed(1)} hrs', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.success)),
-                      Text('${sortedDateKeys.length} Days Worked', style: const TextStyle(fontSize: 10, color: AppColors.textSecondaryLight)),
+                      Text(
+                          '${(totalRegHours + totalOtHours).toStringAsFixed(1)} hrs',
+                          style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.success)),
+                      Text('${sortedDateKeys.length} Days Worked',
+                          style: const TextStyle(
+                              fontSize: 10,
+                              color: AppColors.textSecondaryLight)),
                     ],
                   ),
                 ),
               ),
             ],
           ),
-          const Divider(height: 24),
+          const SizedBox(height: 12),
+
+          // Individual Employee Site Breakdown Card
+          () {
+            final empSiteBreakdown =
+                TimesheetCalculator.calculateEmployeeSiteHours(
+                    emp.id, empRecords);
+            if (empSiteBreakdown.isEmpty) return const SizedBox.shrink();
+
+            final totalSiteHrs =
+                empSiteBreakdown.values.fold(0.0, (a, b) => a + b);
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.grey.shade200),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.02),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.location_city_rounded,
+                              color: AppColors.primary, size: 18),
+                          SizedBox(width: 6),
+                          Text(
+                            'Site / Client Man-Hours Spent',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: AppColors.textPrimaryLight),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '${totalSiteHrs.toStringAsFixed(1)} Site Hrs',
+                          style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ...empSiteBreakdown.entries.map((entry) {
+                    final clientColor = _getClientColor(entry.key);
+                    final pct = totalSiteHrs > 0
+                        ? (entry.value / totalSiteHrs).clamp(0.0, 1.0)
+                        : 0.0;
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: clientColor,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    entry.key,
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                '${entry.value.toStringAsFixed(1)} hrs (${(pct * 100).toStringAsFixed(0)}%)',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: clientColor),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(3),
+                            child: LinearProgressIndicator(
+                              value: pct,
+                              minHeight: 4,
+                              backgroundColor: Colors.grey.shade100,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(clientColor),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            );
+          }(),
+          const Divider(height: 20),
 
           if (sortedDateKeys.isEmpty)
             Card(
@@ -602,8 +829,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               itemBuilder: (context, index) {
                 final dateKey = sortedDateKeys[index];
                 final dateRecords = groupedByDate[dateKey]!;
-                dateRecords.sort((a, b) =>
-                    a.eventTimestamp.compareTo(b.eventTimestamp));
+                dateRecords.sort(
+                    (a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
 
                 final parsedDate = DateTime.parse(dateKey);
                 final formattedDateStr =
@@ -616,18 +843,27 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                 final lastTime = DateFormat('hh:mm a')
                     .format(dateRecords.last.eventTimestamp);
 
-                final siteOutRecs = dateRecords.where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
-                final officeOutRecs = dateRecords.where((r) => r.workflowStep == WorkflowStep.officeCheckOut);
+                final siteOutRecs = dateRecords
+                    .where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
+                final officeOutRecs = dateRecords.where(
+                    (r) => r.workflowStep == WorkflowStep.officeCheckOut);
                 final endRecordTime = officeOutRecs.isNotEmpty
                     ? officeOutRecs.last.eventTimestamp
-                    : (siteOutRecs.isNotEmpty ? siteOutRecs.last.eventTimestamp : dateRecords.last.eventTimestamp);
+                    : (siteOutRecs.isNotEmpty
+                        ? siteOutRecs.last.eventTimestamp
+                        : dateRecords.last.eventTimestamp);
 
-                final siteCheckIns = dateRecords.where((r) => r.workflowStep == WorkflowStep.siteCheckIn);
+                final siteCheckIns = dateRecords
+                    .where((r) => r.workflowStep == WorkflowStep.siteCheckIn);
                 final siteNamesStr = siteCheckIns.isNotEmpty
-                    ? siteCheckIns.map((r) => TimesheetCalculator.resolveSiteName(r)).toSet().join(', ')
+                    ? siteCheckIns
+                        .map((r) => TimesheetCalculator.resolveSiteName(r))
+                        .toSet()
+                        .join(', ')
                     : null;
 
-                final diff = endRecordTime.isAfter(dateRecords.first.eventTimestamp)
+                final diff = endRecordTime
+                        .isAfter(dateRecords.first.eventTimestamp)
                     ? endRecordTime.difference(dateRecords.first.eventTimestamp)
                     : Duration.zero;
                 final dayHrs = diff.inMinutes / 60.0;
@@ -665,27 +901,35 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
                                 color: AppColors.primary.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
                                 '${dayReg.toStringAsFixed(1)}h Reg',
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primary),
                               ),
                             ),
                             if (dayOt > 0) ...[
                               const SizedBox(width: 4),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: Colors.orange.shade100,
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
                                   '+${dayOt.toStringAsFixed(1)}h OT',
-                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange.shade900),
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.orange.shade900),
                                 ),
                               ),
                             ]
@@ -719,7 +963,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 Expanded(
                                   child: Text(
                                     'Sites: $siteNamesStr',
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.primary),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -812,7 +1059,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     final formattedDateTitle =
         DateFormat('EEEE, dd MMMM yyyy').format(_selectedDate!);
 
-    final dayTimesheets = TimesheetCalculator.calculateDailyTimesheets(dateRecords);
+    final dayTimesheets =
+        TimesheetCalculator.calculateDailyTimesheets(dateRecords);
     double totalHrs = 0.0;
     double regHrs = 0.0;
     double otHrs = 0.0;
@@ -870,18 +1118,23 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             decoration: BoxDecoration(
               color: AppColors.primary.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+              border:
+                  Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Row(
                   children: [
-                    Icon(Icons.timer_rounded, color: AppColors.primary, size: 20),
+                    Icon(Icons.timer_rounded,
+                        color: AppColors.primary, size: 20),
                     SizedBox(width: 8),
                     Text(
                       'Daily Timesheet Hours Summary',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.primary),
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: AppColors.primary),
                     ),
                   ],
                 ),
@@ -890,7 +1143,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   children: [
                     Expanded(
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 8),
                         decoration: BoxDecoration(
                           color: AppColors.primary.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
@@ -898,10 +1152,20 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Regular Time', style: TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.w600)),
+                            const Text('Regular Time',
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w600)),
                             const SizedBox(height: 2),
-                            Text('${regHrs.toStringAsFixed(1)} hrs', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.primary)),
-                            const Text('Max 8.0h/day', style: TextStyle(fontSize: 9, color: Colors.grey)),
+                            Text('${regHrs.toStringAsFixed(1)} hrs',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                    color: AppColors.primary)),
+                            const Text('Max 8.0h/day',
+                                style:
+                                    TextStyle(fontSize: 9, color: Colors.grey)),
                           ],
                         ),
                       ),
@@ -909,18 +1173,35 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 8),
                         decoration: BoxDecoration(
-                          color: otHrs > 0 ? Colors.orange.shade100 : Colors.grey.shade100,
+                          color: otHrs > 0
+                              ? Colors.orange.shade100
+                              : Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Overtime (OT)', style: TextStyle(fontSize: 10, color: otHrs > 0 ? Colors.orange.shade900 : Colors.grey.shade700, fontWeight: FontWeight.w600)),
+                            Text('Overtime (OT)',
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    color: otHrs > 0
+                                        ? Colors.orange.shade900
+                                        : Colors.grey.shade700,
+                                    fontWeight: FontWeight.w600)),
                             const SizedBox(height: 2),
-                            Text('+${otHrs.toStringAsFixed(1)} hrs', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: otHrs > 0 ? Colors.orange.shade900 : Colors.grey.shade700)),
-                            const Text('Beyond 8.0h', style: TextStyle(fontSize: 9, color: Colors.grey)),
+                            Text('+${otHrs.toStringAsFixed(1)} hrs',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                    color: otHrs > 0
+                                        ? Colors.orange.shade900
+                                        : Colors.grey.shade700)),
+                            const Text('Beyond 8.0h',
+                                style:
+                                    TextStyle(fontSize: 9, color: Colors.grey)),
                           ],
                         ),
                       ),
@@ -928,7 +1209,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 8),
                         decoration: BoxDecoration(
                           color: AppColors.success.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
@@ -936,10 +1218,20 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Combined Time', style: TextStyle(fontSize: 10, color: AppColors.success, fontWeight: FontWeight.w600)),
+                            const Text('Combined Time',
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    color: AppColors.success,
+                                    fontWeight: FontWeight.w600)),
                             const SizedBox(height: 2),
-                            Text('${totalHrs.toStringAsFixed(1)} hrs', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.success)),
-                            const Text('Reg + OT', style: TextStyle(fontSize: 9, color: Colors.grey)),
+                            Text('${totalHrs.toStringAsFixed(1)} hrs',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                    color: AppColors.success)),
+                            const Text('Reg + OT',
+                                style:
+                                    TextStyle(fontSize: 9, color: Colors.grey)),
                           ],
                         ),
                       ),
@@ -1010,7 +1302,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               itemCount: dateRecords.length,
               itemBuilder: (context, index) {
                 final r = dateRecords[index];
-                final timeStr = DateFormat('hh:mm:ss a').format(r.eventTimestamp);
+                final timeStr =
+                    DateFormat('hh:mm:ss a').format(r.eventTimestamp);
 
                 return Card(
                   margin: const EdgeInsets.only(bottom: 16),
@@ -1099,11 +1392,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 children: [
                                   Text(
                                     (r.address.trim().isNotEmpty &&
-                                            !r.address.contains('Live Field Location') &&
+                                            !r.address.contains(
+                                                'Live Field Location') &&
                                             !r.address.contains('Timeout') &&
                                             !r.address.contains('Error'))
                                         ? r.address.trim()
-                                        : LocationService.resolvePlaceName(r.latitude, r.longitude),
+                                        : LocationService.resolvePlaceName(
+                                            r.latitude, r.longitude),
                                     style: const TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.bold),
@@ -1124,7 +1419,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
                         // Site Name & Photo Section
                         () {
-                          final String siteNameText = TimesheetCalculator.resolveSiteName(r);
+                          final String siteNameText =
+                              TimesheetCalculator.resolveSiteName(r);
 
                           final hasPhoto = r.photoBase64.trim().isNotEmpty;
 
@@ -1166,7 +1462,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             const Icon(Icons.place_rounded,
-                                                size: 12, color: AppColors.primary),
+                                                size: 12,
+                                                color: AppColors.primary),
                                             const SizedBox(width: 3),
                                             Text(
                                               siteNameText,
@@ -1190,7 +1487,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                         clipBehavior: Clip.antiAlias,
                                         decoration: BoxDecoration(
                                           color: Colors.black12,
-                                          borderRadius: BorderRadius.circular(12),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
                                           border: Border.all(
                                               color: AppColors.primaryLight),
                                         ),
@@ -1218,10 +1516,12 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                             return Container(
                               width: double.infinity,
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(alpha: 0.05),
+                                color:
+                                    AppColors.primary.withValues(alpha: 0.05),
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                    color: AppColors.primary.withValues(alpha: 0.15)),
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.15)),
                               ),
                               padding: const EdgeInsets.all(12),
                               child: Row(
@@ -1229,7 +1529,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                   Container(
                                     padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
-                                      color: AppColors.primary.withValues(alpha: 0.15),
+                                      color: AppColors.primary
+                                          .withValues(alpha: 0.15),
                                       shape: BoxShape.circle,
                                     ),
                                     child: const Icon(
@@ -1241,7 +1542,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         const Text(
                                           'Job Site / Location',
@@ -1337,7 +1639,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
 
     try {
-      if (cleanPhoto.startsWith('http://') || cleanPhoto.startsWith('https://')) {
+      if (cleanPhoto.startsWith('http://') ||
+          cleanPhoto.startsWith('https://')) {
         return Image.network(
           cleanPhoto,
           fit: BoxFit.cover,
@@ -1345,7 +1648,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             return Container(
               color: Colors.blueGrey.shade800,
               child: const Center(
-                child: Icon(Icons.broken_image_rounded, size: 50, color: Colors.white70),
+                child: Icon(Icons.broken_image_rounded,
+                    size: 50, color: Colors.white70),
               ),
             );
           },
@@ -1354,7 +1658,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             return Container(
               color: Colors.blueGrey.shade900,
               child: const Center(
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white70),
               ),
             );
           },
@@ -1604,7 +1909,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         Expanded(
                           child: Text(
                             'Workforce Cumulative Summary',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
                                   fontWeight: FontWeight.bold,
                                   color: AppColors.textPrimaryLight,
                                   fontSize: 14,
@@ -1618,14 +1926,17 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   ),
                   const SizedBox(width: 6),
                   ElevatedButton.icon(
-                    onPressed: () => _exportCumulativePdf(employees, allRecords),
+                    onPressed: () =>
+                        _exportCumulativePdf(employees, allRecords),
                     icon: const Icon(Icons.picture_as_pdf_rounded, size: 14),
                     label: const Text('Download PDF',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        style: TextStyle(
+                            fontSize: 11, fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red.shade700,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 6),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       shape: RoundedRectangleBorder(
@@ -1772,7 +2083,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                           children: [
                             _buildEmpMetricItem(
                               title: 'Regular Hours',
-                              value: '${item.regularHours.toStringAsFixed(1)} hrs',
+                              value:
+                                  '${item.regularHours.toStringAsFixed(1)} hrs',
                               color: AppColors.primary,
                             ),
                             Container(
@@ -1781,7 +2093,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 color: Colors.grey.shade300),
                             _buildEmpMetricItem(
                               title: 'OT Hours',
-                              value: '+${item.overtimeHours.toStringAsFixed(1)} hrs',
+                              value:
+                                  '+${item.overtimeHours.toStringAsFixed(1)} hrs',
                               color: Colors.orange.shade800,
                             ),
                             Container(
@@ -1790,7 +2103,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 color: Colors.grey.shade300),
                             _buildEmpMetricItem(
                               title: 'Combined Total',
-                              value: '${item.combinedHours.toStringAsFixed(1)} hrs',
+                              value:
+                                  '${item.combinedHours.toStringAsFixed(1)} hrs',
                               color: Colors.indigo.shade900,
                               isBold: true,
                             ),
@@ -1941,6 +2255,712 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         ],
       ),
     );
+  }
+
+  // ==========================================
+  // LEVEL 1 TAB 3: SITE / CLIENT MAN-HOURS VIEW
+  // ==========================================
+  Widget _buildSiteManHoursView(List<AttendanceRecord> allRecords) {
+    DateTime? startDate;
+    DateTime? endDate;
+    final now = DateTime.now();
+
+    if (_siteDateFilter == 'today') {
+      startDate = DateTime(now.year, now.month, now.day);
+      endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    } else if (_siteDateFilter == 'week') {
+      startDate = now.subtract(const Duration(days: 7));
+      endDate = now;
+    } else if (_siteDateFilter == 'month') {
+      startDate = DateTime(now.year, now.month, 1);
+      endDate = now;
+    }
+
+    final siteSummaries = TimesheetCalculator.calculateSiteManHours(
+      allRecords,
+      startDate: startDate,
+      endDate: endDate,
+      groupByClient: _siteGroupByClient,
+    );
+
+    final filteredSummaries = siteSummaries.where((s) {
+      final q = _searchQuery.trim().toLowerCase();
+      if (q.isEmpty) return true;
+      return s.siteName.toLowerCase().contains(q) ||
+          s.clientGroup.toLowerCase().contains(q) ||
+          s.employeeContributions
+              .any((e) => e.employeeName.toLowerCase().contains(q));
+    }).toList();
+
+    final grandTotalHours =
+        filteredSummaries.fold(0.0, (acc, s) => acc + s.totalHours);
+    final grandTotalVisits =
+        filteredSummaries.fold(0, (acc, s) => acc + s.totalVisits);
+    final totalPersonnel = filteredSummaries
+        .expand((s) => s.employeeContributions.map((e) => e.employeeId))
+        .toSet()
+        .length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Executive Summary KPI Box
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        const Icon(Icons.apartment_rounded,
+                            size: 18, color: AppColors.primary),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _siteGroupByClient
+                                ? 'Client Man-Hours Overview'
+                                : 'Site & Project Man-Hours Overview',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimaryLight,
+                                  fontSize: 14,
+                                ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  ElevatedButton.icon(
+                    onPressed: () => _exportSiteManHoursPdf(
+                      allRecords,
+                      startDate: startDate,
+                      endDate: endDate,
+                      groupByClient: _siteGroupByClient,
+                    ),
+                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 14),
+                    label: const Text('Download PDF',
+                        style: TextStyle(
+                            fontSize: 11, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildSummaryMetricBadge(
+                      label: 'Total Man-Hours',
+                      value: '${grandTotalHours.toStringAsFixed(1)}h',
+                      color: AppColors.primary,
+                      icon: Icons.timer_rounded,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildSummaryMetricBadge(
+                      label: _siteGroupByClient ? 'Clients' : 'Sites/Projects',
+                      value: '${filteredSummaries.length}',
+                      color: Colors.teal.shade800,
+                      icon: Icons.location_city_rounded,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildSummaryMetricBadge(
+                      label: 'Total Visits',
+                      value: '$grandTotalVisits',
+                      color: Colors.orange.shade800,
+                      icon: Icons.pin_drop_rounded,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildSummaryMetricBadge(
+                      label: 'Field Staff',
+                      value: '$totalPersonnel',
+                      color: Colors.indigo.shade800,
+                      icon: Icons.groups_rounded,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Controls: Date Filter Pills & Grouping Toggle
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Column(
+            children: [
+              // Date Filter Row
+              Row(
+                children: [
+                  const Icon(Icons.date_range_rounded,
+                      size: 16, color: AppColors.textSecondaryLight),
+                  const SizedBox(width: 6),
+                  const Text('Period:',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textSecondaryLight)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildDateFilterChip('All Time', 'all'),
+                          const SizedBox(width: 6),
+                          _buildDateFilterChip('This Month', 'month'),
+                          const SizedBox(width: 6),
+                          _buildDateFilterChip('This Week', 'week'),
+                          const SizedBox(width: 6),
+                          _buildDateFilterChip('Today', 'today'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 12),
+
+              // Grouping Toggle Row
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                          _siteGroupByClient
+                              ? Icons.category_rounded
+                              : Icons.list_alt_rounded,
+                          size: 16,
+                          color: AppColors.primary),
+                      const SizedBox(width: 6),
+                      Text(
+                        _siteGroupByClient
+                            ? 'Mode: Grouped by Client'
+                            : 'Mode: Detailed Sites',
+                        style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      const Text('Detailed',
+                          style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      Switch.adaptive(
+                        value: _siteGroupByClient,
+                        activeTrackColor: AppColors.primary,
+                        activeThumbColor: Colors.white,
+                        onChanged: (val) {
+                          setState(() => _siteGroupByClient = val);
+                        },
+                      ),
+                      const Text('By Client',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary)),
+                    ],
+                  )
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Visual Proportion Split Distribution
+        if (grandTotalHours > 0 && filteredSummaries.isNotEmpty) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Man-Hours Share Distribution',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: AppColors.textPrimaryLight),
+                    ),
+                    Text(
+                      'Total ${grandTotalHours.toStringAsFixed(1)} hrs',
+                      style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    height: 10,
+                    child: Row(
+                      children: filteredSummaries.map((s) {
+                        final ratio = s.totalHours / grandTotalHours;
+                        final color = _getClientColor(s.clientGroup);
+                        return Expanded(
+                          flex: (ratio * 1000).toInt().clamp(1, 1000),
+                          child: Container(color: color),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 4,
+                  children: filteredSummaries.take(6).map((s) {
+                    final color = _getClientColor(s.clientGroup);
+                    final pct = (s.totalHours / grandTotalHours * 100)
+                        .toStringAsFixed(0);
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                                color: color, shape: BoxShape.circle)),
+                        const SizedBox(width: 4),
+                        Text('${s.siteName}: $pct%',
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey.shade700,
+                                fontWeight: FontWeight.w500)),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        // List of Site Man-Hour Cards
+        if (filteredSummaries.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Center(
+                child: Text(
+                    'No site check-in logs or man-hours recorded for this period.'),
+              ),
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: filteredSummaries.length,
+            itemBuilder: (context, index) {
+              final item = filteredSummaries[index];
+              final clientColor = _getClientColor(item.clientGroup);
+              final pctOfTotal = grandTotalHours > 0
+                  ? (item.totalHours / grandTotalHours).clamp(0.0, 1.0)
+                  : 0.0;
+              final isExpanded = _expandedSiteKeys.contains(item.siteName);
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+                elevation: 1.5,
+                child: Padding(
+                  padding: const EdgeInsets.all(14.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header Row
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: clientColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(Icons.business_center_rounded,
+                                color: clientColor, size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        item.siteName,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 15),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 7, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            clientColor.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                            color: clientColor.withValues(
+                                                alpha: 0.2)),
+                                      ),
+                                      child: Text(
+                                        item.clientGroup,
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: clientColor),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${item.totalVisits} Visit(s) • ${item.distinctEmployeesCount} Staff Member(s)',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade600),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Metrics Row
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.schedule_rounded,
+                                    size: 16, color: AppColors.primary),
+                                const SizedBox(width: 6),
+                                const Text('Total Time:',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500)),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${item.totalHours.toStringAsFixed(1)} hrs',
+                                  style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primary),
+                                ),
+                              ],
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: clientColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '${(pctOfTotal * 100).toStringAsFixed(1)}% of all field hours',
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: clientColor),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Progress Bar
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(3),
+                        child: LinearProgressIndicator(
+                          value: pctOfTotal,
+                          minHeight: 5,
+                          backgroundColor: Colors.grey.shade100,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(clientColor),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Expand / Collapse Staff Breakdown
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            if (isExpanded) {
+                              _expandedSiteKeys.remove(item.siteName);
+                            } else {
+                              _expandedSiteKeys.add(item.siteName);
+                            }
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                isExpanded
+                                    ? 'Hide Staff Details'
+                                    : 'View Contributing Personnel (${item.employeeContributions.length})',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: clientColor),
+                              ),
+                              Icon(
+                                isExpanded
+                                    ? Icons.keyboard_arrow_up_rounded
+                                    : Icons.keyboard_arrow_down_rounded,
+                                size: 18,
+                                color: clientColor,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      if (isExpanded) ...[
+                        const Divider(height: 16),
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: item.employeeContributions.length,
+                          itemBuilder: (ctx, eIdx) {
+                            final emp = item.employeeContributions[eIdx];
+                            final empPct = item.totalHours > 0
+                                ? (emp.totalHours / item.totalHours)
+                                    .clamp(0.0, 1.0)
+                                : 0.0;
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey.shade200),
+                              ),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 14,
+                                    backgroundColor: clientColor,
+                                    child: Text(
+                                      emp.employeeName.isNotEmpty
+                                          ? emp.employeeName
+                                              .substring(0, 1)
+                                              .toUpperCase()
+                                          : 'E',
+                                      style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          emp.employeeName,
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold),
+                                        ),
+                                        Text(
+                                          '${emp.employeeCode} • ${emp.department} • ${emp.visitCount} visit(s)',
+                                          style: TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.grey.shade600),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        '${emp.totalHours.toStringAsFixed(1)} hrs',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: clientColor),
+                                      ),
+                                      Text(
+                                        '${(empPct * 100).toStringAsFixed(0)}% of site',
+                                        style: TextStyle(
+                                            fontSize: 9,
+                                            color: Colors.grey.shade600),
+                                      ),
+                                    ],
+                                  )
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildDateFilterChip(String label, String value) {
+    final isSelected = _siteDateFilter == value;
+    return GestureDetector(
+      onTap: () => setState(() => _siteDateFilter = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            color: isSelected ? Colors.white : Colors.grey.shade800,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _getClientColor(String clientGroup) {
+    final upper = clientGroup.toUpperCase();
+    if (upper.contains('REELAM') || upper.contains('RELAAM')) {
+      return const Color(0xFF00897B); // Teal
+    } else if (upper.contains('CARRIER')) {
+      return const Color(0xFF1E88E5); // Blue
+    } else if (upper.contains('MOPA')) {
+      return const Color(0xFF5E35B1); // Deep Purple
+    } else if (upper.contains('MPM')) {
+      return const Color(0xFFFB8C00); // Amber / Dark Orange
+    } else if (upper.contains('ELV')) {
+      return const Color(0xFF8E24AA); // Purple
+    } else if (upper.contains('OTHERS')) {
+      return const Color(0xFF546E7A); // Blue Grey
+    }
+    return AppColors.primary;
+  }
+
+  Future<void> _exportSiteManHoursPdf(
+    List<AttendanceRecord> records, {
+    DateTime? startDate,
+    DateTime? endDate,
+    bool groupByClient = false,
+  }) async {
+    try {
+      await PdfExportService.downloadSiteManHoursPdfFile(
+        organizationName: _db.organization?.name ?? 'Fusion Enterprise',
+        records: records,
+        startDate: startDate,
+        endDate: endDate,
+        groupByClient: groupByClient,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Site & Client Man-Hours PDF report ready for download/saving!'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error downloading Site PDF: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not generate PDF: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
 

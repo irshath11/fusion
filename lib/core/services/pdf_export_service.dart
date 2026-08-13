@@ -148,12 +148,219 @@ class PdfExportService {
               cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
               cellAlignment: pw.Alignment.centerLeft,
             ),
+            pw.SizedBox(height: 16),
+
+            // Site / Client Man-Hours Breakdown in Cumulative Report
+            () {
+              final siteSummaries = TimesheetCalculator.calculateSiteManHours(records);
+              final totalSiteHours = siteSummaries.fold(0.0, (acc, s) => acc + s.totalHours);
+
+              if (siteSummaries.isEmpty) return pw.SizedBox.shrink();
+
+              return pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'SITE & CLIENT MAN-HOURS BREAKDOWN',
+                    style: pw.TextStyle(
+                      fontSize: 11,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.indigo900,
+                    ),
+                  ),
+                  pw.SizedBox(height: 6),
+                  pw.TableHelper.fromTextArray(
+                    headers: ['Site / Client Name', 'Category', 'Total Man-Hours', '% Share', 'Visits', 'Personnel Count'],
+                    data: siteSummaries.map((s) {
+                      final pct = totalSiteHours > 0 ? (s.totalHours / totalSiteHours * 100).toStringAsFixed(1) : '0.0';
+                      return [
+                        s.siteName,
+                        s.clientGroup,
+                        '${s.totalHours.toStringAsFixed(1)} hrs',
+                        '$pct%',
+                        '${s.totalVisits}',
+                        '${s.distinctEmployeesCount} Staff',
+                      ];
+                    }).toList(),
+                    headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 8.5),
+                    headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
+                    cellStyle: const pw.TextStyle(fontSize: 8.5),
+                    cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    cellAlignment: pw.Alignment.centerLeft,
+                  ),
+                ],
+              );
+            }(),
           ];
         },
       ),
     );
 
     return pdf.save();
+  }
+
+  /// Generates a dedicated binary PDF document for Site & Client Man-Hours Report
+  static Future<Uint8List> buildSiteManHoursPdfBytes({
+    required String organizationName,
+    required List<AttendanceRecord> records,
+    DateTime? startDate,
+    DateTime? endDate,
+    bool groupByClient = false,
+  }) async {
+    final pdf = pw.Document();
+
+    final summaries = TimesheetCalculator.calculateSiteManHours(
+      records,
+      startDate: startDate,
+      endDate: endDate,
+      groupByClient: groupByClient,
+    );
+
+    final totalManHours = summaries.fold(0.0, (acc, s) => acc + s.totalHours);
+    final totalVisits = summaries.fold(0, (acc, s) => acc + s.totalVisits);
+    final topSite = summaries.isNotEmpty ? summaries.first.siteName : 'None';
+
+    String periodStr = 'All Recorded Time';
+    if (startDate != null && endDate != null) {
+      periodStr = '${DateFormat('dd MMM yyyy').format(startDate)} - ${DateFormat('dd MMM yyyy').format(endDate)}';
+    } else if (startDate != null) {
+      periodStr = 'From ${DateFormat('dd MMM yyyy').format(startDate)}';
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(24),
+        build: (pw.Context context) {
+          return [
+            // Title Header
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      groupByClient
+                          ? 'CLIENT MAN-HOURS EXECUTIVE REPORT'
+                          : 'SITE & CLIENT MAN-HOURS DETAILED REPORT',
+                      style: pw.TextStyle(
+                        fontSize: 14,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.indigo900,
+                      ),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      '$organizationName • Period: $periodStr',
+                      style: pw.TextStyle(
+                        fontSize: 11,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  ],
+                ),
+                pw.Text(
+                  DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now()),
+                  style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 10),
+            pw.Divider(thickness: 1, color: PdfColors.grey300),
+            pw.SizedBox(height: 10),
+
+            // Summary Header Box
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.blueGrey50,
+                borderRadius: pw.BorderRadius.circular(6),
+                border: pw.Border.all(color: PdfColors.blueGrey200),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+                children: [
+                  pw.Column(children: [
+                    pw.Text('Total Site Man-Hours', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                    pw.SizedBox(height: 2),
+                    pw.Text('${totalManHours.toStringAsFixed(1)} hrs', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
+                  ]),
+                  pw.Column(children: [
+                    pw.Text('Active Sites/Clients', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                    pw.SizedBox(height: 2),
+                    pw.Text('${summaries.length}', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
+                  ]),
+                  pw.Column(children: [
+                    pw.Text('Total Site Visits', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                    pw.SizedBox(height: 2),
+                    pw.Text('$totalVisits', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.orange900)),
+                  ]),
+                  pw.Column(children: [
+                    pw.Text('Top Client / Site', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                    pw.SizedBox(height: 2),
+                    pw.Text(topSite, style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
+                  ]),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 14),
+
+            // Site & Client Table
+            pw.TableHelper.fromTextArray(
+              headers: ['Site / Client Name', 'Category', 'Total Man-Hours', '% Share', 'Visits', 'Staff Count', 'Top Contributing Personnel'],
+              data: summaries.map((s) {
+                final pct = totalManHours > 0 ? (s.totalHours / totalManHours * 100).toStringAsFixed(1) : '0.0';
+                final topStaff = s.employeeContributions
+                    .take(2)
+                    .map((e) => '${e.employeeName} (${e.totalHours.toStringAsFixed(1)}h)')
+                    .join(', ');
+
+                return [
+                  s.siteName,
+                  s.clientGroup,
+                  '${s.totalHours.toStringAsFixed(1)} hrs',
+                  '$pct%',
+                  '${s.totalVisits}',
+                  '${s.distinctEmployeesCount}',
+                  topStaff.isNotEmpty ? topStaff : '--',
+                ];
+              }).toList(),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 8.5),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo900),
+              cellStyle: const pw.TextStyle(fontSize: 8),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4.5),
+              cellAlignment: pw.Alignment.centerLeft,
+            ),
+          ];
+        },
+      ),
+    );
+
+    return pdf.save();
+  }
+
+  /// Triggers native download / print / share dialog for Site Man-Hours PDF
+  static Future<void> downloadSiteManHoursPdfFile({
+    required String organizationName,
+    required List<AttendanceRecord> records,
+    DateTime? startDate,
+    DateTime? endDate,
+    bool groupByClient = false,
+  }) async {
+    final pdfBytes = await buildSiteManHoursPdfBytes(
+      organizationName: organizationName,
+      records: records,
+      startDate: startDate,
+      endDate: endDate,
+      groupByClient: groupByClient,
+    );
+
+    await Printing.sharePdf(
+      bytes: pdfBytes,
+      filename: 'Site_and_Client_Man_Hours_Report.pdf',
+    );
   }
 
   /// Triggers native download / print / share dialog for Cumulative PDF File
@@ -193,6 +400,9 @@ class PdfExportService {
     final String empName = employee.name ?? 'Employee';
     final String empCode = employee.employeeCode ?? 'EMP';
     final String department = employee.department ?? 'General';
+    final String empId = employee.id ?? '';
+
+    final employeeSiteHours = TimesheetCalculator.calculateEmployeeSiteHours(empId, records);
 
     pdf.addPage(
       pw.MultiPage(
@@ -311,6 +521,30 @@ class PdfExportService {
               cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 5),
               cellAlignment: pw.Alignment.centerLeft,
             ),
+
+            if (employeeSiteHours.isNotEmpty) ...[
+              pw.SizedBox(height: 16),
+              pw.Text(
+                'SITE & CLIENT HOURS SUMMARY FOR ${empName.toUpperCase()}',
+                style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900),
+              ),
+              pw.SizedBox(height: 6),
+              pw.TableHelper.fromTextArray(
+                headers: ['Site / Client Name', 'Category', 'Logged Hours'],
+                data: employeeSiteHours.entries.map((e) {
+                  return [
+                    e.key,
+                    TimesheetCalculator.resolveClientGroup(e.key),
+                    '${e.value.toStringAsFixed(1)} hrs',
+                  ];
+                }).toList(),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 8.5),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
+                cellStyle: const pw.TextStyle(fontSize: 8.5),
+                cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                cellAlignment: pw.Alignment.centerLeft,
+              ),
+            ],
           ];
         },
       ),
@@ -357,3 +591,4 @@ class PdfExportService {
     return 'Cumulative PDF report downloaded.';
   }
 }
+

@@ -67,3 +67,60 @@ class DailyTimesheetEntry extends Equatable {
         siteVisits,
       ];
 }
+
+class SiteEmployeeContribution extends Equatable {
+  final String employeeId;
+  final String employeeName;
+  final String employeeCode;
+  final String department;
+  final double totalHours;
+  final int visitCount;
+
+  const SiteEmployeeContribution({
+    required this.employeeId,
+    required this.employeeName,
+    this.employeeCode = 'EMP',
+    this.department = 'Operations',
+    required this.totalHours,
+    required this.visitCount,
+  });
+
+  @override
+  List<Object?> get props => [
+        employeeId,
+        employeeName,
+        employeeCode,
+        department,
+        totalHours,
+        visitCount,
+      ];
+}
+
+class SiteManHourSummary extends Equatable {
+  final String siteName;
+  final String clientGroup;
+  final double totalHours;
+  final int totalVisits;
+  final int distinctEmployeesCount;
+  final List<SiteEmployeeContribution> employeeContributions;
+
+  const SiteManHourSummary({
+    required this.siteName,
+    required this.clientGroup,
+    required this.totalHours,
+    required this.totalVisits,
+    required this.distinctEmployeesCount,
+    required this.employeeContributions,
+  });
+
+  @override
+  List<Object?> get props => [
+        siteName,
+        clientGroup,
+        totalHours,
+        totalVisits,
+        distinctEmployeesCount,
+        employeeContributions,
+      ];
+}
+

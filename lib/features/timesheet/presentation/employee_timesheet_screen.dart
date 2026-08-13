@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/pdf_export_service.dart';
+import '../../../core/utils/timesheet_calculator.dart';
 import '../../../database/local_database_service.dart';
 import '../../admin/domain/employee_entity.dart';
 import 'timesheet_cubit.dart';
@@ -175,7 +176,122 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 14),
+
+                            // Site / Client Man-Hours Breakdown Card
+                            () {
+                              final allRecords = LocalDatabaseService().getAttendanceRecords();
+                              final targetId = widget.employeeId ?? LocalDatabaseService().currentUser?.id;
+                              if (targetId == null) return const SizedBox.shrink();
+
+                              final siteBreakdown = TimesheetCalculator.calculateEmployeeSiteHours(targetId, allRecords);
+                              if (siteBreakdown.isEmpty) return const SizedBox.shrink();
+
+                              final totalSiteHrs = siteBreakdown.values.fold(0.0, (a, b) => a + b);
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 14),
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: Colors.grey.shade200),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.02),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Row(
+                                          children: [
+                                            Icon(Icons.location_city_rounded, color: AppColors.primary, size: 18),
+                                            SizedBox(width: 6),
+                                            Text(
+                                              'Site & Client Man-Hours Logged',
+                                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                            ),
+                                          ],
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primary.withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            '${totalSiteHrs.toStringAsFixed(1)} Site Hrs',
+                                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                    ...siteBreakdown.entries.map((entry) {
+                                      final cGroup = TimesheetCalculator.resolveClientGroup(entry.key);
+                                      Color color = AppColors.primary;
+                                      if (cGroup.contains('REELAM') || cGroup.contains('RELAAM')) {
+                                        color = const Color(0xFF00897B);
+                                      } else if (cGroup.contains('CARRIER')) {
+                                        color = const Color(0xFF1E88E5);
+                                      } else if (cGroup.contains('MOPA')) {
+                                        color = const Color(0xFF5E35B1);
+                                      } else if (cGroup.contains('MPM')) {
+                                        color = const Color(0xFFFB8C00);
+                                      } else if (cGroup.contains('ELV')) {
+                                        color = const Color(0xFF8E24AA);
+                                      } else if (cGroup.contains('OTHERS')) {
+                                        color = const Color(0xFF546E7A);
+                                      }
+                                      final pct = totalSiteHrs > 0 ? (entry.value / totalSiteHrs).clamp(0.0, 1.0) : 0.0;
+
+                                      return Padding(
+                                        padding: const EdgeInsets.only(bottom: 8.0),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                                                    const SizedBox(width: 6),
+                                                    Text(entry.key, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                                  ],
+                                                ),
+                                                Text(
+                                                  '${entry.value.toStringAsFixed(1)} hrs (${(pct * 100).toStringAsFixed(0)}%)',
+                                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            ClipRRect(
+                                              borderRadius: BorderRadius.circular(3),
+                                              child: LinearProgressIndicator(
+                                                value: pct,
+                                                minHeight: 4,
+                                                backgroundColor: Colors.grey.shade100,
+                                                valueColor: AlwaysStoppedAnimation<Color>(color),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }),
+                                  ],
+                                ),
+                              );
+                            }(),
+                            const SizedBox(height: 10),
 
                             // Filter Label Header
                             Row(
