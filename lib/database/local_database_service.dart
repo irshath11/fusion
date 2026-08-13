@@ -570,4 +570,30 @@ class LocalDatabaseService {
       debugPrint('Error persisting attendance records to Hive: $e');
     }
   }
+
+  // Theme Persistence
+  String getSavedThemePresetName() {
+    return _settingsBox?.get('theme_preset', defaultValue: 'slateIndigo') ??
+        'slateIndigo';
+  }
+
+  Future<void> saveThemePresetName(String presetName) async {
+    try {
+      await _settingsBox?.put('theme_preset', presetName);
+    } catch (e) {
+      debugPrint('Error saving theme preset to Hive: $e');
+    }
+  }
+
+  String getSavedThemeModeName() {
+    return _settingsBox?.get('theme_mode', defaultValue: 'system') ?? 'system';
+  }
+
+  Future<void> saveThemeModeName(String modeName) async {
+    try {
+      await _settingsBox?.put('theme_mode', modeName);
+    } catch (e) {
+      debugPrint('Error saving theme mode to Hive: $e');
+    }
+  }
 }

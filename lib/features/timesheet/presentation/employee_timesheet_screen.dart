@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_theme.dart';
 import '../../../core/services/pdf_export_service.dart';
 import '../../../core/utils/timesheet_calculator.dart';
 import '../../../database/local_database_service.dart';
@@ -73,12 +74,15 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                     child: Text(
                       state.message,
                       style:
-                          const TextStyle(color: AppColors.error, fontSize: 16),
+                          TextStyle(color: AppColors.error, fontSize: 16),
                     ),
                   );
                 } else if (state is TimesheetLoaded) {
                   final isDark =
                       Theme.of(context).brightness == Brightness.dark;
+                  final palette = AppTheme.currentColors;
+                  final activePrimary = palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
+
                   final filteredEntries = state.entries.where((e) {
                     if (_activeFilter == 'overtime') return e.overtimeHours > 0;
                     if (_activeFilter == 'regular') return e.regularHours > 0;
@@ -107,9 +111,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                         '${state.totalRegularHours.toStringAsFixed(1)} hrs',
                                     subtitle: 'Max 8h/day (Tap)',
                                     icon: Icons.access_time_rounded,
-                                    color: isDark
-                                        ? AppColors.primaryLight
-                                        : AppColors.primary,
+                                    color: AppColors.activePrimary,
                                     isSelected: _activeFilter == 'regular',
                                     onTap: () {
                                       setState(() {
@@ -153,7 +155,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                         '${state.totalCombinedHours.toStringAsFixed(1)} hrs',
                                     subtitle: 'Reg + OT Combined',
                                     icon: Icons.timer_rounded,
-                                    color: AppColors.success,
+                                    color: palette.success,
                                     isSelected: _activeFilter == 'all',
                                     onTap: () {
                                       setState(() {
@@ -169,9 +171,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                     value: '${state.totalDaysWorked} Days',
                                     subtitle: 'Logged Shifts',
                                     icon: Icons.calendar_month_rounded,
-                                    color: isDark
-                                        ? Colors.indigo.shade300
-                                        : Colors.indigo,
+                                    color: AppColors.activeSecondary,
                                     isSelected: false,
                                     onTap: () {
                                       setState(() {
@@ -199,11 +199,11 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                 margin: const EdgeInsets.only(bottom: 14),
                                 padding: const EdgeInsets.all(14),
                                 decoration: BoxDecoration(
-                                  color: isDark ? AppColors.surfaceDark : Colors.white,
+                                  color: isDark ? palette.surfaceDark : Colors.white,
                                   borderRadius: BorderRadius.circular(14),
                                   border: Border.all(
                                     color: isDark
-                                        ? AppColors.cardBorderDark
+                                        ? palette.cardBorderDark
                                         : Colors.grey.shade200,
                                   ),
                                   boxShadow: [
@@ -224,9 +224,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                         Row(
                                           children: [
                                             Icon(Icons.location_city_rounded,
-                                                color: isDark
-                                                    ? AppColors.primaryLight
-                                                    : AppColors.primary,
+                                                color: activePrimary,
                                                 size: 18),
                                             const SizedBox(width: 6),
                                             Text(
@@ -235,8 +233,8 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                                 fontWeight: FontWeight.bold,
                                                 fontSize: 13,
                                                 color: isDark
-                                                    ? AppColors.textPrimaryDark
-                                                    : AppColors.textPrimaryLight,
+                                                    ? palette.textPrimaryDark
+                                                    : palette.textPrimaryLight,
                                               ),
                                             ),
                                           ],
@@ -244,10 +242,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: (isDark
-                                                    ? AppColors.primaryLight
-                                                    : AppColors.primary)
-                                                .withValues(alpha: isDark ? 0.2 : 0.1),
+                                            color: activePrimary.withValues(alpha: isDark ? 0.2 : 0.1),
                                             borderRadius: BorderRadius.circular(6),
                                           ),
                                           child: Text(
@@ -255,9 +250,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                             style: TextStyle(
                                               fontSize: 11,
                                               fontWeight: FontWeight.bold,
-                                              color: isDark
-                                                  ? AppColors.primaryLight
-                                                  : AppColors.primary,
+                                              color: activePrimary,
                                             ),
                                           ),
                                         ),
@@ -266,7 +259,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                     const SizedBox(height: 10),
                                     ...siteBreakdown.entries.map((entry) {
                                       final cGroup = TimesheetCalculator.resolveClientGroup(entry.key);
-                                      Color color = AppColors.primary;
+                                      Color color = activePrimary;
                                       if (cGroup.contains('REELAM') || cGroup.contains('RELAAM')) {
                                         color = const Color(0xFF00897B);
                                       } else if (cGroup.contains('CARRIER')) {
@@ -423,9 +416,9 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
       );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Timesheet PDF report ready for download/saving!'),
-            backgroundColor: AppColors.primary,
+          SnackBar(
+            content: const Text('Timesheet PDF report ready for download/saving!'),
+            backgroundColor: AppTheme.currentColors.primaryFor(Theme.of(context).brightness),
           ),
         );
       }
@@ -511,6 +504,8 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
   Widget _buildDailyTimesheetCard(
       BuildContext context, DailyTimesheetEntry entry) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = AppTheme.currentColors;
+    final activePrimary = palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
     final dateFormat = DateFormat('EEE, dd MMM yyyy');
     final timeFormat = DateFormat('hh:mm a');
 
@@ -531,7 +526,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
           color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isDark ? AppColors.cardBorderDark : AppColors.cardBorderLight,
+            color: isDark ? palette.cardBorderDark : palette.cardBorderLight,
           ),
         ),
         child: Column(
@@ -545,9 +540,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                   children: [
                     Icon(Icons.calendar_today_rounded,
                         size: 16,
-                        color: isDark
-                            ? AppColors.primaryLight
-                            : AppColors.primary),
+                        color: activePrimary),
                     const SizedBox(width: 8),
                     Text(
                       dateFormat.format(entry.date),
@@ -561,11 +554,11 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: entry.isAutoCompleted
-                        ? Colors.blue.withValues(alpha: 0.1)
+                        ? activePrimary.withValues(alpha: isDark ? 0.2 : 0.1)
                         : (entry.isCompleted
-                            ? AppColors.success.withValues(alpha: 0.1)
+                            ? palette.success.withValues(alpha: 0.1)
                             : (isDark
-                                ? AppColors.surfaceDark
+                                ? palette.surfaceDark
                                 : Colors.grey.shade200)),
                     borderRadius: BorderRadius.circular(6),
                   ),
@@ -577,11 +570,11 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                       color: entry.isAutoCompleted
-                          ? (isDark ? Colors.lightBlueAccent : Colors.blue.shade800)
+                          ? activePrimary
                           : (entry.isCompleted
-                              ? AppColors.success
+                              ? palette.success
                               : (isDark
-                                  ? AppColors.textSecondaryDark
+                                  ? palette.textSecondaryDark
                                   : Colors.grey.shade700)),
                     ),
                   ),
@@ -601,8 +594,8 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                           style: TextStyle(
                               fontSize: 11,
                               color: isDark
-                                  ? AppColors.textSecondaryDark
-                                  : AppColors.textSecondaryLight)),
+                                  ? palette.textSecondaryDark
+                                  : palette.textSecondaryLight)),
                       const SizedBox(height: 2),
                       Text(
                         '$checkInStr - $checkOutStr',
@@ -617,10 +610,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: (isDark
-                            ? AppColors.primaryLight
-                            : AppColors.primary)
-                        .withValues(alpha: isDark ? 0.2 : 0.1),
+                    color: activePrimary.withValues(alpha: isDark ? 0.2 : 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Column(
@@ -628,17 +618,13 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                       Text('Regular',
                           style: TextStyle(
                               fontSize: 10,
-                              color: isDark
-                                  ? AppColors.primaryLight
-                                  : AppColors.primary)),
+                              color: activePrimary)),
                       Text(
                         '${entry.regularHours.toStringAsFixed(1)}h',
                         style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
-                            color: isDark
-                                ? AppColors.primaryLight
-                                : AppColors.primary),
+                            color: activePrimary),
                       ),
                     ],
                   ),
@@ -737,166 +723,175 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => SafeArea(
-        child: Container(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.85,
-          ),
-          child: SingleChildScrollView(
-            padding: EdgeInsets.only(
-              left: 20.0,
-              right: 20.0,
-              top: 20.0,
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20.0,
+      builder: (ctx) {
+        final isDarkModal = Theme.of(ctx).brightness == Brightness.dark;
+        final paletteModal = AppTheme.currentColors;
+        final activePrimaryModal = paletteModal.primaryFor(isDarkModal ? Brightness.dark : Brightness.light);
+
+        return SafeArea(
+          child: Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.85,
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        fullFormat.format(entry.date),
-                        style: const TextStyle(
-                            fontSize: 17, fontWeight: FontWeight.bold),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.only(
+                left: 20.0,
+                right: 20.0,
+                top: 20.0,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 20.0,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          fullFormat.format(entry.date),
+                          style: const TextStyle(
+                              fontSize: 17, fontWeight: FontWeight.bold),
+                        ),
                       ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(ctx),
-                    )
-                  ],
-                ),
-                const Divider(),
-                const SizedBox(height: 8),
-                _buildModalDetailRow('Check-In Time:', checkInStr,
-                    Icons.login_rounded, AppColors.success),
-                const SizedBox(height: 10),
-                _buildModalDetailRow(
-                    'Check-Out / Leaving Time:',
-                    entry.isAutoCompleted
-                        ? '$checkOutStr (Auto Check-Out - 8h Regular Shift)'
-                        : checkOutStr,
-                    Icons.logout_rounded,
-                    entry.isAutoCompleted ? Colors.blue.shade700 : AppColors.primary),
-                const SizedBox(height: 16),
-                const Divider(),
-                const SizedBox(height: 8),
-                const Text('Date-Wise Working Hours Breakdown',
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildBreakdownBox(
-                        'Regular Time',
-                        '${entry.regularHours.toStringAsFixed(1)} hrs',
-                        'Max 8.0h / day',
-                        AppColors.primary,
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      )
+                    ],
+                  ),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  _buildModalDetailRow('Check-In Time:', checkInStr,
+                      Icons.login_rounded, paletteModal.success),
+                  const SizedBox(height: 10),
+                  _buildModalDetailRow(
+                      'Check-Out / Leaving Time:',
+                      entry.isAutoCompleted
+                          ? '$checkOutStr (Auto Check-Out - 8h Regular Shift)'
+                          : checkOutStr,
+                      Icons.logout_rounded,
+                      activePrimaryModal),
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  const Text('Date-Wise Working Hours Breakdown',
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildBreakdownBox(
+                          'Regular Time',
+                          '${entry.regularHours.toStringAsFixed(1)} hrs',
+                          'Max 8.0h / day',
+                          activePrimaryModal,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildBreakdownBox(
-                        'Overtime (OT)',
-                        '+${entry.overtimeHours.toStringAsFixed(1)} hrs',
-                        'Beyond 8.0h',
-                        Colors.orange.shade800,
-                      ),
-                    ),
-                    if (entry.breakDuration > Duration.zero) ...[
                       const SizedBox(width: 8),
                       Expanded(
                         child: _buildBreakdownBox(
-                          'Break Time',
-                          '${entry.breakDuration.inMinutes}m',
-                          'Excluded',
-                          Colors.amber.shade800,
+                          'Overtime (OT)',
+                          '+${entry.overtimeHours.toStringAsFixed(1)} hrs',
+                          'Beyond 8.0h',
+                          Colors.orange.shade800,
                         ),
                       ),
+                      if (entry.breakDuration > Duration.zero) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildBreakdownBox(
+                            'Break Time',
+                            '${entry.breakDuration.inMinutes}m',
+                            'Excluded',
+                            Colors.amber.shade800,
+                          ),
+                        ),
+                      ],
                     ],
+                  ),
+                  if (entry.siteVisits.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    const Text('Job Sites Visited Today:',
+                        style:
+                            TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    ...entry.siteVisits.map((sv) {
+                      final sIn = timeFormat.format(sv.checkInTime.toLocal());
+                      final sOut = sv.checkOutTime != null
+                          ? timeFormat.format(sv.checkOutTime!.toLocal())
+                          : 'In Progress';
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4.0),
+                        child: Row(
+                          children: [
+                            Icon(Icons.place_rounded,
+                                size: 14, color: activePrimaryModal),
+                            const SizedBox(width: 6),
+                            Expanded(
+                                child: Text(sv.siteName,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13))),
+                            Text('$sIn - $sOut',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDarkModal
+                                        ? paletteModal.textSecondaryDark
+                                        : paletteModal.textSecondaryLight)),
+                          ],
+                        ),
+                      );
+                    }),
                   ],
-                ),
-                if (entry.siteVisits.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  const Text('Job Sites Visited Today:',
-                      style:
-                          TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  const SizedBox(height: 6),
-                  ...entry.siteVisits.map((sv) {
-                    final sIn = timeFormat.format(sv.checkInTime.toLocal());
-                    final sOut = sv.checkOutTime != null
-                        ? timeFormat.format(sv.checkOutTime!.toLocal())
-                        : 'In Progress';
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 4.0),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.place_rounded,
-                              size: 14, color: AppColors.primary),
-                          const SizedBox(width: 6),
-                          Expanded(
-                              child: Text(sv.siteName,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13))),
-                          Text('$sIn - $sOut',
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondaryLight)),
-                        ],
-                      ),
-                    );
-                  }),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border:
+                          Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Net Working Time:',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.success)),
+                            if (entry.breakDuration > Duration.zero)
+                              Text(
+                                'Gross: ${(entry.grossDuration.inMinutes / 60.0).toStringAsFixed(1)}h (incl. ${entry.breakDuration.inMinutes}m break)',
+                                style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textSecondaryLight),
+                              ),
+                          ],
+                        ),
+                        Text(
+                          '${entry.totalHours.toStringAsFixed(1)} hrs',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: AppColors.success),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                 ],
-                const SizedBox(height: 10),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.success.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border:
-                        Border.all(color: AppColors.success.withValues(alpha: 0.3)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Net Working Time:',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.success)),
-                          if (entry.breakDuration > Duration.zero)
-                            Text(
-                              'Gross: ${(entry.grossDuration.inMinutes / 60.0).toStringAsFixed(1)}h (incl. ${entry.breakDuration.inMinutes}m break)',
-                              style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.textSecondaryLight),
-                            ),
-                        ],
-                      ),
-                      Text(
-                        '${entry.totalHours.toStringAsFixed(1)} hrs',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: AppColors.success),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 

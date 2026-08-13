@@ -87,9 +87,9 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                         setState(() {});
                       }
                     },
-                    icon: const Icon(Icons.workspace_premium_rounded,
+                    icon: Icon(Icons.workspace_premium_rounded,
                         color: AppColors.warning, size: 18),
-                    label: const Text(
+                    label: Text(
                       'Transfer Ownership',
                       style: TextStyle(
                         color: AppColors.warning,
@@ -191,7 +191,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                     child: Center(child: CircularProgressIndicator()),
                   )
                 else if (filteredUsers.isEmpty)
-                  const Expanded(
+                  Expanded(
                     child: Center(
                       child: Text(
                         'No user records found matching criteria.',

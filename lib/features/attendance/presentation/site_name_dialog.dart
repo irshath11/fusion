@@ -67,7 +67,10 @@ class _SiteNameDialogState extends State<SiteNameDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Row(
         children: [
-          const Icon(Icons.location_city_rounded, color: AppColors.primary),
+          Icon(
+            Icons.location_city_rounded,
+            color: isDark ? AppColors.primaryLight : AppColors.primary,
+          ),
           const SizedBox(width: 10),
           Text(
             'Select Site Name',
@@ -108,7 +111,10 @@ class _SiteNameDialogState extends State<SiteNameDialog> {
                   labelStyle: TextStyle(
                     color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                   ),
-                  prefixIcon: const Icon(Icons.business_center_rounded, color: AppColors.primary),
+                  prefixIcon: Icon(
+                    Icons.business_center_rounded,
+                    color: isDark ? AppColors.primaryLight : AppColors.primary,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(color: borderColor),
@@ -119,7 +125,10 @@ class _SiteNameDialogState extends State<SiteNameDialog> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                    borderSide: BorderSide(
+                      color: isDark ? AppColors.primaryLight : AppColors.primary,
+                      width: 2,
+                    ),
                   ),
                   filled: true,
                   fillColor: fieldBgColor,
@@ -160,7 +169,10 @@ class _SiteNameDialogState extends State<SiteNameDialog> {
                     hintStyle: TextStyle(
                       color: isDark ? AppColors.textSecondaryDark.withValues(alpha: 0.6) : Colors.grey.shade400,
                     ),
-                    prefixIcon: const Icon(Icons.edit_location_alt_rounded, color: AppColors.primary),
+                    prefixIcon: Icon(
+                      Icons.edit_location_alt_rounded,
+                      color: isDark ? AppColors.primaryLight : AppColors.primary,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide(color: borderColor),
@@ -171,7 +183,10 @@ class _SiteNameDialogState extends State<SiteNameDialog> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                      borderSide: BorderSide(
+                        color: isDark ? AppColors.primaryLight : AppColors.primary,
+                        width: 2,
+                      ),
                     ),
                     filled: true,
                     fillColor: fieldBgColor,

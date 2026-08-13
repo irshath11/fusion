@@ -18,6 +18,8 @@ import '../../sync/data/sync_engine.dart';
 import '../../auth/presentation/auth_cubit.dart';
 import '../../auth/presentation/login_screen.dart';
 import '../../timesheet/presentation/employee_timesheet_screen.dart';
+import '../../../core/constants/app_theme.dart';
+import '../../../core/theme/theme_selector_modal.dart';
 import 'package:intl/intl.dart';
 
 class EmployeeDashboardScreen extends StatefulWidget {
@@ -94,12 +96,12 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
           builder: (ctx) => AlertDialog(
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Row(
+            title: Row(
               children: [
                 Icon(Icons.wifi_off_rounded,
                     color: AppColors.warning, size: 24),
-                SizedBox(width: 10),
-                Expanded(
+                const SizedBox(width: 10),
+                const Expanded(
                   child: Text(
                     'No Internet Connection',
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
@@ -122,7 +124,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
               ),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
+                  backgroundColor: AppTheme.currentColors.primaryFor(Theme.of(ctx).brightness),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8)),
@@ -251,11 +253,12 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
           return AlertDialog(
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Row(
+            title: Row(
               children: [
-                Icon(Icons.lock_reset_rounded, color: AppColors.primary),
-                SizedBox(width: 10),
-                Text('Change Password'),
+                Icon(Icons.lock_reset_rounded,
+                    color: AppTheme.currentColors.primaryFor(Theme.of(context).brightness)),
+                const SizedBox(width: 10),
+                const Text('Change Password'),
               ],
             ),
             content: SingleChildScrollView(
@@ -372,7 +375,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
+                  backgroundColor: AppTheme.currentColors.primaryFor(Theme.of(ctx).brightness),
                   foregroundColor: Colors.white,
                 ),
                 onPressed: isLoading
@@ -491,7 +494,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(user?.fullName ?? 'Field Employee'),
-            const Text(
+            Text(
               'Field Workforce Duty Portal',
               style:
                   TextStyle(fontSize: 12, color: AppColors.textSecondaryLight),
@@ -499,6 +502,11 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.palette_rounded),
+            tooltip: 'Theme & Appearance',
+            onPressed: () => ThemeSelectorModal.show(context),
+          ),
           IconButton(
             icon: const Icon(Icons.date_range_rounded),
             tooltip: 'My Timesheet',
@@ -682,11 +690,35 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                   builder: (context, state) {
                     final isDark =
                         Theme.of(context).brightness == Brightness.dark;
+                    final palette = AppTheme.currentColors;
+                    final activePrimary = palette
+                        .primaryFor(isDark ? Brightness.dark : Brightness.light);
+
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Status & Assignment Card
-                        Card(
+                        Container(
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? palette.surfaceDark
+                                : palette.surfaceLight,
+                            borderRadius:
+                                BorderRadius.circular(palette.cardRadius),
+                            border: Border.all(
+                              color: isDark
+                                  ? palette.cardBorderDark
+                                  : palette.cardBorderLight,
+                              width: isDark ? 1.2 : 1.0,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: palette.accentGlow,
+                                blurRadius: isDark ? 8 : 12,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
                           child: Padding(
                             padding: const EdgeInsets.all(16.0),
                             child: Column(
@@ -696,13 +728,13 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                     Container(
                                       padding: const EdgeInsets.all(12),
                                       decoration: BoxDecoration(
-                                        color: AppColors.primary
-                                            .withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(12),
+                                        color: activePrimary
+                                            .withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(
+                                            palette.cardRadius * 0.7),
                                       ),
-                                      child: const Icon(
-                                          Icons.location_on_rounded,
-                                          color: AppColors.primary),
+                                      child: Icon(Icons.location_on_rounded,
+                                          color: activePrimary),
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(
@@ -710,18 +742,24 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          const Text(
+                                          Text(
                                             'Assigned Office Station',
                                             style: TextStyle(
                                                 fontSize: 12,
-                                                color: AppColors
-                                                    .textSecondaryLight),
+                                                color: isDark
+                                                    ? palette.textSecondaryDark
+                                                    : palette
+                                                        .textSecondaryLight),
                                           ),
                                           Text(
                                             assignedOffice,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                                 fontWeight: FontWeight.bold,
-                                                fontSize: 16),
+                                                fontSize: 16,
+                                                color: isDark
+                                                    ? palette.textPrimaryDark
+                                                    : palette
+                                                        .textPrimaryLight),
                                           ),
                                         ],
                                       ),
@@ -738,7 +776,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                               ? Colors.grey
                                               : (isOnBreak
                                                   ? Colors.amber.shade800
-                                                  : AppColors.success),
+                                                  : palette.success),
                                     )
                                   ],
                                 ),
@@ -748,17 +786,31 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                       MainAxisAlignment.spaceAround,
                                   children: [
                                     _buildInfoMetric(
+                                      context,
                                       'Duty Status',
                                       currentStep == WorkflowStep.completed
                                           ? 'Completed'
                                           : (isOnBreak
                                               ? '☕ On Break'
                                               : 'Active Duty'),
+                                      color: activePrimary,
                                     ),
                                     _buildInfoMetric(
-                                        'Net Working', workingTime),
+                                      context,
+                                      'Net Working',
+                                      workingTime,
+                                      color: palette.success,
+                                    ),
                                     _buildInfoMetric(
-                                        'Pending Sync', '$_pendingSyncCount'),
+                                      context,
+                                      'Pending Sync',
+                                      '$_pendingSyncCount',
+                                      color: _pendingSyncCount > 0
+                                          ? palette.warning
+                                          : (isDark
+                                              ? palette.textPrimaryDark
+                                              : palette.textPrimaryLight),
+                                    ),
                                   ],
                                 )
                               ],
@@ -864,21 +916,20 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                     WorkflowStep.officeCheckIn) ...[
                                   Card(
                                     color: isDark
-                                        ? AppColors.surfaceDark
-                                        : AppColors.primary
-                                            .withValues(alpha: 0.05),
+                                        ? palette.surfaceDark
+                                        : activePrimary.withValues(alpha: 0.06),
                                     child: Padding(
                                       padding: const EdgeInsets.all(16.0),
                                       child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          const Row(
+                                          Row(
                                             children: [
                                               Icon(Icons.business_rounded,
-                                                  color: AppColors.primary),
-                                              SizedBox(width: 10),
-                                              Expanded(
+                                                  color: activePrimary),
+                                              const SizedBox(width: 10),
+                                              const Expanded(
                                                 child: Text(
                                                   'Start Work Day - Office Check-In',
                                                   style: TextStyle(
@@ -1018,9 +1069,8 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                     WorkflowStep.siteCheckIn) ...[
                                   Card(
                                     color: isDark
-                                        ? AppColors.surfaceDark
-                                        : AppColors.primary
-                                            .withValues(alpha: 0.05),
+                                        ? palette.surfaceDark
+                                        : activePrimary.withValues(alpha: 0.06),
                                     child: Padding(
                                       padding: const EdgeInsets.all(16.0),
                                       child: Column(
@@ -1153,11 +1203,11 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                           .withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
-                                    child: const Row(
+                                    child: Row(
                                       children: [
                                         Icon(Icons.check_circle_rounded,
                                             color: AppColors.success, size: 28),
-                                        SizedBox(width: 12),
+                                        const SizedBox(width: 12),
                                         Expanded(
                                           child: Text(
                                             'Daily attendance workflow fully completed. Thank you!',
@@ -1186,9 +1236,9 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                         ),
                         const SizedBox(height: 10),
                         if (userTodayRecords.isEmpty)
-                          const Card(
+                          Card(
                             child: Padding(
-                              padding: EdgeInsets.all(20.0),
+                              padding: const EdgeInsets.all(20.0),
                               child: Center(
                                 child: Text(
                                     'No attendance activity logged for today yet.',
@@ -1288,8 +1338,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                                 decoration: BoxDecoration(
                                                   color: isBreak
                                                       ? Colors.amber.shade700.withValues(alpha: 0.15)
-                                                      : AppColors.primary
-                                                          .withValues(alpha: 0.1),
+                                                      : activePrimary.withValues(alpha: 0.1),
                                                   borderRadius:
                                                       BorderRadius.circular(6),
                                                 ),
@@ -1345,21 +1394,37 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     );
   }
 
-  Widget _buildInfoMetric(String title, String value) {
+  Widget _buildInfoMetric(BuildContext context, String title, String value,
+      {Color? color}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = AppTheme.currentColors;
+
     return Column(
       children: [
         FittedBox(
           fit: BoxFit.scaleDown,
-          child: Text(value,
-              style:
-                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          child: Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+              color: color ??
+                  (isDark ? palette.textPrimaryDark : palette.textPrimaryLight),
+            ),
+          ),
         ),
         const SizedBox(height: 2),
         FittedBox(
           fit: BoxFit.scaleDown,
-          child: Text(title,
-              style: const TextStyle(
-                  fontSize: 11, color: AppColors.textSecondaryLight)),
+          child: Text(
+            title,
+            style: TextStyle(
+              fontSize: 11,
+              color: isDark
+                  ? palette.textSecondaryDark
+                  : palette.textSecondaryLight,
+            ),
+          ),
         ),
       ],
     );

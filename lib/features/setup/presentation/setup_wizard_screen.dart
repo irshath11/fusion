@@ -96,7 +96,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                                 fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 8),
-                          const Text(
+                          Text(
                             'Enter your enterprise organization name and primary address to initialize workspace.',
                             style: TextStyle(color: AppColors.textSecondaryLight),
                           ),
@@ -131,7 +131,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                                 fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 8),
-                          const Text(
+                          Text(
                             'This account will be registered with Firebase Auth as master SUPER_ADMIN.',
                             style: TextStyle(color: AppColors.textSecondaryLight),
                           ),

@@ -15,6 +15,8 @@ import 'features/admin/presentation/admin_dashboard_screen.dart';
 import 'features/employee/presentation/employee_dashboard_screen.dart';
 import 'features/security/device_binding_service.dart';
 
+import 'core/theme/theme_cubit.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -41,17 +43,29 @@ class WorkforceApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
+        BlocProvider<ThemeCubit>(
+            create: (context) => ThemeCubit()..loadSavedTheme()),
         BlocProvider<AuthCubit>(
             create: (context) => AuthCubit()..checkAuthStatus()),
         BlocProvider<AttendanceCubit>(create: (context) => AttendanceCubit()),
       ],
-      child: MaterialApp(
-        title: 'Fusion 360',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
-        themeMode: ThemeMode.system,
-        home: const SplashScreen(),
+      child: BlocBuilder<ThemeCubit, ThemeState>(
+        builder: (context, themeState) {
+          return MaterialApp(
+            title: 'Fusion 360',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.getThemeData(
+              preset: themeState.preset,
+              isDark: false,
+            ),
+            darkTheme: AppTheme.getThemeData(
+              preset: themeState.preset,
+              isDark: true,
+            ),
+            themeMode: themeState.themeMode,
+            home: const SplashScreen(),
+          );
+        },
       ),
     );
   }

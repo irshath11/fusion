@@ -305,14 +305,20 @@ class _LiveTrackingMapScreenState extends State<LiveTrackingMapScreen> {
                   heroTag: 'zoom_in',
                   backgroundColor: Theme.of(context).cardColor,
                   onPressed: _zoomIn,
-                  child: const Icon(Icons.add, color: AppColors.primary),
+                  child: Icon(Icons.add,
+                      color: isDark
+                          ? AppColors.primaryLight
+                          : AppColors.primary),
                 ),
                 const SizedBox(height: 8),
                 FloatingActionButton.small(
                   heroTag: 'zoom_out',
                   backgroundColor: Theme.of(context).cardColor,
                   onPressed: _zoomOut,
-                  child: const Icon(Icons.remove, color: AppColors.primary),
+                  child: Icon(Icons.remove,
+                      color: isDark
+                          ? AppColors.primaryLight
+                          : AppColors.primary),
                 ),
               ],
             ),

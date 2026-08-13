@@ -187,11 +187,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   border:
                       Border.all(color: AppColors.info.withValues(alpha: 0.2)),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
                     Icon(Icons.shield_outlined,
                         color: AppColors.info, size: 20),
-                    SizedBox(width: 10),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'Public registration disabled. Contact your Administrator to provision accounts.',
