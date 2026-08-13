@@ -676,13 +676,12 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
           // Individual Employee Site Breakdown Card
           () {
-            final empSiteBreakdown =
-                TimesheetCalculator.calculateEmployeeSiteHours(
-                    emp.id, empRecords);
-            if (empSiteBreakdown.isEmpty) return const SizedBox.shrink();
+            final empSiteSummaries =
+                TimesheetCalculator.calculateSiteManHours(empRecords);
+            if (empSiteSummaries.isEmpty) return const SizedBox.shrink();
 
             final totalSiteHrs =
-                empSiteBreakdown.values.fold(0.0, (a, b) => a + b);
+                empSiteSummaries.fold(0.0, (a, b) => a + b.totalHours);
 
             return Container(
               margin: const EdgeInsets.only(bottom: 4),
@@ -737,10 +736,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  ...empSiteBreakdown.entries.map((entry) {
-                    final clientColor = _getClientColor(entry.key);
+                  ...empSiteSummaries.map((s) {
+                    final clientColor = _getClientColor(s.siteName);
                     final pct = totalSiteHrs > 0
-                        ? (entry.value / totalSiteHrs).clamp(0.0, 1.0)
+                        ? (s.totalHours / totalSiteHrs).clamp(0.0, 1.0)
                         : 0.0;
 
                     return Padding(
@@ -751,27 +750,50 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                      color: clientColor,
-                                      shape: BoxShape.circle,
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: clientColor,
+                                        shape: BoxShape.circle,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    entry.key,
-                                    style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                                ],
+                                    const SizedBox(width: 6),
+                                    Flexible(
+                                      child: Text(
+                                        s.siteName,
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 5, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            clientColor.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        s.clientGroup,
+                                        style: TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                            color: clientColor),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
+                              const SizedBox(width: 8),
                               Text(
-                                '${entry.value.toStringAsFixed(1)} hrs (${(pct * 100).toStringAsFixed(0)}%)',
+                                '${s.totalHours.toStringAsFixed(1)} hrs (${s.totalVisits} visit${s.totalVisits > 1 ? "s" : ""})',
                                 style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,
@@ -953,27 +975,84 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               ),
                             ],
                           ),
-                          if (siteNamesStr != null) ...[
-                            const SizedBox(height: 3),
-                            Row(
-                              children: [
-                                const Icon(Icons.place_rounded,
-                                    size: 14, color: AppColors.primary),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    'Sites: $siteNamesStr',
-                                    style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.primary),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                          // Date-Specific Site Hours Chips
+                          () {
+                            final dateSiteSummaries =
+                                TimesheetCalculator.calculateSiteManHours(
+                                    dateRecords);
+                            if (dateSiteSummaries.isEmpty) {
+                              if (siteNamesStr != null) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 3.0),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.place_rounded,
+                                          size: 14, color: AppColors.primary),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          'Sites: $siteNamesStr',
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.primary),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ),
-                              ],
-                            ),
-                          ],
+                                );
+                              }
+                              return const SizedBox.shrink();
+                            }
+
+                            return Padding(
+                              padding:
+                                  const EdgeInsets.only(top: 5.0, bottom: 2.0),
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                children: dateSiteSummaries.map((s) {
+                                  final col = _getClientColor(s.siteName);
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 7, vertical: 2.5),
+                                    decoration: BoxDecoration(
+                                      color: col.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                          color: col.withValues(alpha: 0.25)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.location_city_rounded,
+                                            size: 12, color: col),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '${s.siteName}: ',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.grey.shade800,
+                                          ),
+                                        ),
+                                        Text(
+                                          '${s.totalHours.toStringAsFixed(1)}h',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: col,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            );
+                          }(),
                           const SizedBox(height: 4),
                           Row(
                             children: [
@@ -1241,6 +1320,167 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               ],
             ),
           ),
+
+          // Daily Site / Client Hours Breakdown Card
+          () {
+            final daySiteSummaries =
+                TimesheetCalculator.calculateSiteManHours(dateRecords);
+            if (daySiteSummaries.isEmpty) return const SizedBox.shrink();
+
+            final totalDaySiteHrs =
+                daySiteSummaries.fold(0.0, (acc, s) => acc + s.totalHours);
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.grey.shade200),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.location_city_rounded,
+                                color: AppColors.primary, size: 16),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Site-Wise Hours Spent on this Date',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: AppColors.textPrimaryLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2.5),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '${totalDaySiteHrs.toStringAsFixed(1)} Site Hrs',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ...daySiteSummaries.map((s) {
+                    final clientColor = _getClientColor(s.siteName);
+                    final pct = totalHrs > 0
+                        ? (s.totalHours / totalHrs).clamp(0.0, 1.0)
+                        : (totalDaySiteHrs > 0
+                            ? (s.totalHours / totalDaySiteHrs).clamp(0.0, 1.0)
+                            : 0.0);
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 9,
+                                      height: 9,
+                                      decoration: BoxDecoration(
+                                        color: clientColor,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        s.siteName,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            clientColor.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        s.clientGroup,
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                          color: clientColor,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                '${s.totalHours.toStringAsFixed(1)} hrs (${(pct * 100).toStringAsFixed(0)}%)',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: clientColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 5),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(3),
+                            child: LinearProgressIndicator(
+                              value: pct,
+                              minHeight: 5,
+                              backgroundColor: Colors.grey.shade100,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(clientColor),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            );
+          }(),
 
           // Date Summary Banner
           Container(
@@ -2146,6 +2386,126 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         ),
                         const SizedBox(height: 8),
                       ],
+
+                      // Site-Wise Hours Spent Section for Employee
+                      () {
+                        final empRecs = allRecords
+                            .where((r) =>
+                                r.employeeId == emp.id ||
+                                r.employeeName.toLowerCase() ==
+                                    emp.name.toLowerCase())
+                            .toList();
+                        final empSiteBreakdown =
+                            TimesheetCalculator.calculateSiteManHours(empRecs);
+                        if (empSiteBreakdown.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+
+                        final totalSiteTime = empSiteBreakdown.fold(
+                            0.0, (acc, s) => acc + s.totalHours);
+
+                        return Container(
+                          margin: const EdgeInsets.only(top: 4, bottom: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.location_city_rounded,
+                                          size: 14, color: AppColors.primary),
+                                      const SizedBox(width: 5),
+                                      const Text(
+                                        'Site Hours Spent:',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.textPrimaryLight,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary
+                                          .withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      '${totalSiteTime.toStringAsFixed(1)} Site Hrs',
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                children: empSiteBreakdown.map((s) {
+                                  final col = _getClientColor(s.siteName);
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 7, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: col.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                          color: col.withValues(alpha: 0.25)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          width: 6,
+                                          height: 6,
+                                          decoration: BoxDecoration(
+                                            color: col,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '${s.siteName}: ',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.grey.shade800,
+                                          ),
+                                        ),
+                                        Text(
+                                          '${s.totalHours.toStringAsFixed(1)}h',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: col,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ),
+                        );
+                      }(),
 
                       // Action Button to Drill Down
                       Align(
