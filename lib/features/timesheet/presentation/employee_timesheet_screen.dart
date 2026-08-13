@@ -77,6 +77,8 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                     ),
                   );
                 } else if (state is TimesheetLoaded) {
+                  final isDark =
+                      Theme.of(context).brightness == Brightness.dark;
                   final filteredEntries = state.entries.where((e) {
                     if (_activeFilter == 'overtime') return e.overtimeHours > 0;
                     if (_activeFilter == 'regular') return e.regularHours > 0;
@@ -105,7 +107,9 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                         '${state.totalRegularHours.toStringAsFixed(1)} hrs',
                                     subtitle: 'Max 8h/day (Tap)',
                                     icon: Icons.access_time_rounded,
-                                    color: AppColors.primary,
+                                    color: isDark
+                                        ? AppColors.primaryLight
+                                        : AppColors.primary,
                                     isSelected: _activeFilter == 'regular',
                                     onTap: () {
                                       setState(() {
@@ -165,7 +169,9 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                     value: '${state.totalDaysWorked} Days',
                                     subtitle: 'Logged Shifts',
                                     icon: Icons.calendar_month_rounded,
-                                    color: Colors.indigo,
+                                    color: isDark
+                                        ? Colors.indigo.shade300
+                                        : Colors.indigo,
                                     isSelected: false,
                                     onTap: () {
                                       setState(() {
@@ -193,12 +199,17 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                 margin: const EdgeInsets.only(bottom: 14),
                                 padding: const EdgeInsets.all(14),
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
+                                  color: isDark ? AppColors.surfaceDark : Colors.white,
                                   borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: Colors.grey.shade200),
+                                  border: Border.all(
+                                    color: isDark
+                                        ? AppColors.cardBorderDark
+                                        : Colors.grey.shade200,
+                                  ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.02),
+                                      color: Colors.black.withValues(
+                                          alpha: isDark ? 0.2 : 0.02),
                                       blurRadius: 4,
                                       offset: const Offset(0, 2),
                                     ),
@@ -210,25 +221,44 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
-                                        const Row(
+                                        Row(
                                           children: [
-                                            Icon(Icons.location_city_rounded, color: AppColors.primary, size: 18),
-                                            SizedBox(width: 6),
+                                            Icon(Icons.location_city_rounded,
+                                                color: isDark
+                                                    ? AppColors.primaryLight
+                                                    : AppColors.primary,
+                                                size: 18),
+                                            const SizedBox(width: 6),
                                             Text(
                                               'Site & Client Man-Hours Logged',
-                                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                                color: isDark
+                                                    ? AppColors.textPrimaryDark
+                                                    : AppColors.textPrimaryLight,
+                                              ),
                                             ),
                                           ],
                                         ),
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: AppColors.primary.withValues(alpha: 0.1),
+                                            color: (isDark
+                                                    ? AppColors.primaryLight
+                                                    : AppColors.primary)
+                                                .withValues(alpha: isDark ? 0.2 : 0.1),
                                             borderRadius: BorderRadius.circular(6),
                                           ),
                                           child: Text(
                                             '${totalSiteHrs.toStringAsFixed(1)} Site Hrs',
-                                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark
+                                                  ? AppColors.primaryLight
+                                                  : AppColors.primary,
+                                            ),
                                           ),
                                         ),
                                       ],
@@ -480,6 +510,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
 
   Widget _buildDailyTimesheetCard(
       BuildContext context, DailyTimesheetEntry entry) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final dateFormat = DateFormat('EEE, dd MMM yyyy');
     final timeFormat = DateFormat('hh:mm a');
 
@@ -499,7 +530,9 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.cardBorderLight),
+          border: Border.all(
+            color: isDark ? AppColors.cardBorderDark : AppColors.cardBorderLight,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -510,8 +543,11 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.calendar_today_rounded,
-                        size: 16, color: AppColors.primary),
+                    Icon(Icons.calendar_today_rounded,
+                        size: 16,
+                        color: isDark
+                            ? AppColors.primaryLight
+                            : AppColors.primary),
                     const SizedBox(width: 8),
                     Text(
                       dateFormat.format(entry.date),
@@ -528,7 +564,9 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                         ? Colors.blue.withValues(alpha: 0.1)
                         : (entry.isCompleted
                             ? AppColors.success.withValues(alpha: 0.1)
-                            : Colors.grey.shade200),
+                            : (isDark
+                                ? AppColors.surfaceDark
+                                : Colors.grey.shade200)),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -539,10 +577,12 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                       color: entry.isAutoCompleted
-                          ? Colors.blue.shade800
+                          ? (isDark ? Colors.lightBlueAccent : Colors.blue.shade800)
                           : (entry.isCompleted
                               ? AppColors.success
-                              : Colors.grey.shade700),
+                              : (isDark
+                                  ? AppColors.textSecondaryDark
+                                  : Colors.grey.shade700)),
                     ),
                   ),
                 )
@@ -557,10 +597,12 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('In / Out Time',
+                      Text('In / Out Time',
                           style: TextStyle(
                               fontSize: 11,
-                              color: AppColors.textSecondaryLight)),
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight)),
                       const SizedBox(height: 2),
                       Text(
                         '$checkInStr - $checkOutStr',
@@ -575,20 +617,28 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.1),
+                    color: (isDark
+                            ? AppColors.primaryLight
+                            : AppColors.primary)
+                        .withValues(alpha: isDark ? 0.2 : 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Column(
                     children: [
-                      const Text('Regular',
+                      Text('Regular',
                           style: TextStyle(
-                              fontSize: 10, color: AppColors.primary)),
+                              fontSize: 10,
+                              color: isDark
+                                  ? AppColors.primaryLight
+                                  : AppColors.primary)),
                       Text(
                         '${entry.regularHours.toStringAsFixed(1)}h',
-                        style: const TextStyle(
+                        style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
-                            color: AppColors.primary),
+                            color: isDark
+                                ? AppColors.primaryLight
+                                : AppColors.primary),
                       ),
                     ],
                   ),

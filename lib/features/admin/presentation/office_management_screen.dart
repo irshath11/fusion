@@ -23,7 +23,9 @@ class OfficeManagementScreen extends StatelessWidget {
         title: Row(
           children: [
             Icon(
-              isError ? Icons.warning_amber_rounded : Icons.check_circle_rounded,
+              isError
+                  ? Icons.warning_amber_rounded
+                  : Icons.check_circle_rounded,
               color: isError ? Colors.orange : Colors.green,
               size: 28,
             ),
@@ -31,7 +33,8 @@ class OfficeManagementScreen extends StatelessWidget {
             Expanded(
               child: Text(
                 isError ? 'GPS Signal Warning' : 'GPS Captured Successfully',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -43,7 +46,10 @@ class OfficeManagementScreen extends StatelessWidget {
             if (isError) ...[
               Text(
                 loc.address,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                    color: Colors.redAccent,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 8),
               const Text(
@@ -59,7 +65,8 @@ class OfficeManagementScreen extends StatelessWidget {
               const Divider(height: 16),
               Text(
                 'Address:\n${loc.address}',
-                style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                style:
+                    const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
               ),
             ],
           ],
@@ -68,7 +75,9 @@ class OfficeManagementScreen extends StatelessWidget {
           if (isError)
             OutlinedButton.icon(
               icon: const Icon(Icons.location_on_rounded, size: 18),
-              label: Text(loc.address.contains('Permission') ? 'Open App Settings' : 'Turn On Location'),
+              label: Text(loc.address.contains('Permission')
+                  ? 'Open App Settings'
+                  : 'Turn On Location'),
               onPressed: () {
                 Navigator.pop(dialogCtx);
                 if (loc.address.contains('Permission')) {
@@ -163,7 +172,8 @@ class OfficeManagementScreen extends StatelessWidget {
                                     lngController.text =
                                         loc.longitude.toStringAsFixed(6);
                                     if (loc.address.isNotEmpty &&
-                                        !loc.address.contains('Permission Denied') &&
+                                        !loc.address
+                                            .contains('Permission Denied') &&
                                         !loc.address.contains('GPS Error')) {
                                       addressController.text = loc.address;
                                     }
@@ -171,7 +181,8 @@ class OfficeManagementScreen extends StatelessWidget {
                                   _showGpsResultDialog(modalCtx, loc);
                                 }
                               } catch (e) {
-                                debugPrint('Error capturing location for office: $e');
+                                debugPrint(
+                                    'Error capturing location for office: $e');
                               } finally {
                                 if (modalCtx.mounted) {
                                   setModalState(() => isLocating = false);
@@ -281,9 +292,14 @@ class OfficeManagementScreen extends StatelessWidget {
                     ),
                     title: Row(
                       children: [
-                        Text(off.name,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.bold)),
+                        Expanded(
+                          child: Text(
+                            off.name,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                         if (off.isDefault) ...[
                           const SizedBox(width: 8),
                           Container(
