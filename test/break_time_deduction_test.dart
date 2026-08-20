@@ -81,15 +81,18 @@ void main() {
       final entry = timesheets.first;
       // Gross time: 10.0 hours
       expect(entry.grossDuration.inMinutes, 600);
-      // Break duration: 1 hour (60 minutes)
+      // Food Break duration: 1 hour default (60 minutes)
       expect(entry.breakDuration.inMinutes, 60);
       expect(entry.breakHours, 1.0);
-      // Net working time: 10.0 - 1.0 = 9.0 hours
-      expect(entry.totalHours, 9.0);
-      // Regular hours: max 8.0 hours
+      // Travel Tolerance duration: 1 hour (60 minutes)
+      expect(entry.travelToleranceDuration.inMinutes, 60);
+      expect(entry.travelToleranceHours, 1.0);
+      // Net working time (regular + OT): 8.0 hours
+      expect(entry.totalHours, 8.0);
+      // Regular hours: 8.0 hours
       expect(entry.regularHours, 8.0);
-      // Overtime hours: 9.0 - 8.0 = 1.0 hour
-      expect(entry.overtimeHours, 1.0);
+      // Overtime hours: 0.0 hours (OT starts after 10 gross hours)
+      expect(entry.overtimeHours, 0.0);
     });
 
     test('Deducts break time overlapping with site visit from site man-hours', () {

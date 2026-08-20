@@ -112,7 +112,7 @@ void main() {
       expect(entry.totalDuration, const Duration(hours: 8));
     });
 
-    test('Normal completed shift with 10 hours work calculates 8.0 regular and 2.0 overtime', () {
+    test('Normal completed shift with 10 hours work calculates 8.0 regular, 1.0 food break, 1.0 travel tolerance and 0.0 overtime', () {
       final checkInTime = DateTime(2026, 8, 10, 8, 0);
       final checkOutTime = DateTime(2026, 8, 10, 18, 0); // 10 hours
 
@@ -154,8 +154,58 @@ void main() {
       expect(entry.isCompleted, isTrue);
       expect(entry.isAutoCompleted, isFalse);
       expect(entry.regularHours, 8.0);
-      expect(entry.overtimeHours, 2.0);
-      expect(entry.totalDuration, const Duration(hours: 10));
+      expect(entry.breakHours, 1.0);
+      expect(entry.travelToleranceHours, 1.0);
+      expect(entry.overtimeHours, 0.0);
+      expect(entry.grossDuration, const Duration(hours: 10));
+    });
+
+    test('11-hour shift (07:30 AM to 06:30 PM) calculates 8.0 regular, 1.0 food break, 1.0 travel tolerance and 1.0 overtime (OT starts after 10h)', () {
+      final checkInTime = DateTime(2026, 8, 10, 7, 30); // 07:30 AM
+      final checkOutTime = DateTime(2026, 8, 10, 18, 30); // 06:30 PM (11 hours gross)
+
+      final records = [
+        AttendanceRecord(
+          id: 'rec-5a',
+          employeeId: 'emp-105',
+          employeeName: 'Sarah Smith',
+          workflowStep: WorkflowStep.officeCheckIn,
+          eventTimestamp: checkInTime,
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'Main Office HQ',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+        ),
+        AttendanceRecord(
+          id: 'rec-5b',
+          employeeId: 'emp-105',
+          employeeName: 'Sarah Smith',
+          workflowStep: WorkflowStep.officeCheckOut,
+          eventTimestamp: checkOutTime,
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'Main Office HQ',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+        ),
+      ];
+
+      final entries = TimesheetCalculator.calculateDailyTimesheets(records);
+      expect(entries.length, 1);
+      final entry = entries.first;
+
+      expect(entry.isCompleted, isTrue);
+      expect(entry.isAutoCompleted, isFalse);
+      expect(entry.regularHours, 8.0);
+      expect(entry.breakHours, 1.0);
+      expect(entry.travelToleranceHours, 1.0);
+      expect(entry.overtimeHours, 1.0);
+      expect(entry.grossDuration, const Duration(hours: 11));
     });
   });
 

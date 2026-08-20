@@ -722,7 +722,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               color: isDark
                                   ? Colors.orange.shade300
                                   : Colors.orange.shade900)),
-                      Text('Beyond 8.0h/day',
+                      Text('Beyond 10.0h/day',
                           style: TextStyle(
                               fontSize: 10,
                               color: isDark
@@ -1462,7 +1462,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                         : (isDark
                                             ? AppColors.textSecondaryDark
                                             : Colors.grey.shade700))),
-                            Text('Beyond 8.0h',
+                            Text('Beyond 10.0h',
                                 style: TextStyle(
                                     fontSize: 8.5,
                                     color: isDark

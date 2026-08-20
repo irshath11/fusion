@@ -129,7 +129,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                     title: 'Overtime (OT)',
                                     value:
                                         '${state.totalOvertimeHours.toStringAsFixed(1)} hrs',
-                                    subtitle: 'Beyond 8.0h (Tap)',
+                                    subtitle: 'Beyond 10.0h (Tap)',
                                     icon: Icons.more_time_rounded,
                                     color: Colors.orange.shade800,
                                     isSelected: _activeFilter == 'overtime',
@@ -698,6 +698,34 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                     ),
                   ),
                 ],
+                if (entry.travelToleranceDuration > Duration.zero) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue.shade300),
+                    ),
+                    child: Column(
+                      children: [
+                        Text('Travel',
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue.shade900)),
+                        Text(
+                          '${entry.travelToleranceDuration.inMinutes}m',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: Colors.blue.shade900),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ],
@@ -794,7 +822,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                         child: _buildBreakdownBox(
                           'Overtime (OT)',
                           '+${entry.overtimeHours.toStringAsFixed(1)} hrs',
-                          'Beyond 8.0h',
+                          'Beyond 10.0h',
                           Colors.orange.shade800,
                         ),
                       ),
@@ -802,10 +830,21 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: _buildBreakdownBox(
-                            'Break Time',
+                            'Food Break',
                             '${entry.breakDuration.inMinutes}m',
-                            'Excluded',
+                            'Default 1.0h',
                             Colors.amber.shade800,
+                          ),
+                        ),
+                      ],
+                      if (entry.travelToleranceDuration > Duration.zero) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildBreakdownBox(
+                            'Travel Tol.',
+                            '${entry.travelToleranceDuration.inMinutes}m',
+                            'Max 1.0h',
+                            Colors.blue.shade800,
                           ),
                         ),
                       ],

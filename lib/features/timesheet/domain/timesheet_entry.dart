@@ -26,8 +26,9 @@ class DailyTimesheetEntry extends Equatable {
   final String employeeName;
   final DateTime? checkInTime;
   final DateTime? checkOutTime;
-  final Duration totalDuration; // Net worked duration (excluding breaks)
-  final Duration breakDuration; // Total break time taken
+  final Duration totalDuration; // Net worked duration (excluding breaks & travel tolerance)
+  final Duration breakDuration; // Total break time taken (including food break)
+  final Duration travelToleranceDuration; // Travel tolerance time allocated
   final double regularHours;
   final double overtimeHours;
   final int stepCount;
@@ -43,6 +44,7 @@ class DailyTimesheetEntry extends Equatable {
     this.checkOutTime,
     required this.totalDuration,
     this.breakDuration = Duration.zero,
+    this.travelToleranceDuration = Duration.zero,
     required this.regularHours,
     required this.overtimeHours,
     this.stepCount = 0,
@@ -51,14 +53,17 @@ class DailyTimesheetEntry extends Equatable {
     this.siteVisits = const [],
   });
 
-  /// Net worked hours (excluding break time)
+  /// Net worked hours (excluding break time & travel tolerance)
   double get totalHours => totalDuration.inMinutes / 60.0;
 
   /// Total break hours
   double get breakHours => breakDuration.inMinutes / 60.0;
 
-  /// Gross duration from check-in to check-out (inclusive of breaks)
-  Duration get grossDuration => totalDuration + breakDuration;
+  /// Travel tolerance hours
+  double get travelToleranceHours => travelToleranceDuration.inMinutes / 60.0;
+
+  /// Gross duration from check-in to check-out (inclusive of breaks and travel tolerance)
+  Duration get grossDuration => totalDuration + breakDuration + travelToleranceDuration;
 
   @override
   List<Object?> get props => [
@@ -69,6 +74,7 @@ class DailyTimesheetEntry extends Equatable {
         checkOutTime,
         totalDuration,
         breakDuration,
+        travelToleranceDuration,
         regularHours,
         overtimeHours,
         stepCount,

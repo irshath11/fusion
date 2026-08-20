@@ -185,6 +185,8 @@ class TimesheetCalculator {
       bool isCompleted = hasExplicitOfficeCheckOut;
 
       Duration netWorkedDuration = Duration.zero;
+      Duration finalBreakDuration = totalBreakDuration;
+      Duration travelToleranceDuration = Duration.zero;
       double regularHours = 0.0;
       double overtimeHours = 0.0;
 
@@ -197,6 +199,8 @@ class TimesheetCalculator {
         if (!hasExplicitOfficeCheckOut && elapsedSinceCheckIn >= const Duration(hours: 24)) {
           checkOutTimestamp = checkInTimestamp.add(const Duration(hours: 8));
           netWorkedDuration = const Duration(hours: 8);
+          finalBreakDuration = Duration.zero;
+          travelToleranceDuration = Duration.zero;
           regularHours = standardRegularHoursPerDay;
           overtimeHours = 0.0;
           isCompleted = true;
@@ -208,24 +212,53 @@ class TimesheetCalculator {
             grossDuration = effectiveEnd.difference(checkInTimestamp);
           }
 
-          // Net Worked Duration = Gross Duration - Total Break Duration
-          if (grossDuration > totalBreakDuration) {
-            netWorkedDuration = grossDuration - totalBreakDuration;
+          if (isPreviouslyAutoCompleted) {
+            netWorkedDuration = const Duration(hours: 8);
+            finalBreakDuration = Duration.zero;
+            travelToleranceDuration = Duration.zero;
+            regularHours = standardRegularHoursPerDay;
+            overtimeHours = 0.0;
           } else {
-            netWorkedDuration = Duration.zero;
-          }
+            final int grossMins = grossDuration.inMinutes;
+            final int loggedBreakMins = totalBreakDuration.inMinutes;
 
-          final totalNetHours = netWorkedDuration.inMinutes / 60.0;
-          if (totalNetHours > 0) {
-            if (isPreviouslyAutoCompleted) {
-              regularHours = standardRegularHoursPerDay;
-              overtimeHours = 0.0;
-            } else if (totalNetHours <= standardRegularHoursPerDay) {
-              regularHours = totalNetHours;
+            if (grossMins <= 480) {
+              // Up to 8.0 hours gross: regular duty only
+              final int breakMins = loggedBreakMins;
+              final int netMins = (grossMins > breakMins) ? (grossMins - breakMins) : 0;
+              netWorkedDuration = Duration(minutes: netMins);
+              finalBreakDuration = Duration(minutes: breakMins);
+              travelToleranceDuration = Duration.zero;
+              regularHours = netMins / 60.0;
               overtimeHours = 0.0;
             } else {
+              // Beyond 8.0 hours gross:
+              // 1. Default Food Break: 1 hour (60 mins) or logged break if greater
+              const int defaultFoodBreakMins = 60;
+              final int effectiveFoodBreakMins = loggedBreakMins > defaultFoodBreakMins
+                  ? loggedBreakMins
+                  : defaultFoodBreakMins;
+              finalBreakDuration = Duration(minutes: effectiveFoodBreakMins);
+
+              // 2. Regular Hours: Capped at 8.0 hours (480 mins)
               regularHours = standardRegularHoursPerDay;
-              overtimeHours = totalNetHours - standardRegularHoursPerDay;
+              const int regularMins = 480;
+
+              // 3. Remaining minutes after 8h regular and food break
+              final int remainingMins = (grossMins > (regularMins + effectiveFoodBreakMins))
+                  ? (grossMins - regularMins - effectiveFoodBreakMins)
+                  : 0;
+
+              // 4. Travel Tolerance: Up to 1 hour (60 mins)
+              final int travelMins = remainingMins > 60 ? 60 : remainingMins;
+              travelToleranceDuration = Duration(minutes: travelMins);
+
+              // 5. Overtime: Starts after 10 gross hours (8h regular + 1h food break + 1h travel tolerance)
+              final int otMins = (remainingMins > travelMins) ? (remainingMins - travelMins) : 0;
+              overtimeHours = otMins / 60.0;
+
+              // 6. Net Worked Duration = Regular (8h) + Overtime
+              netWorkedDuration = Duration(minutes: regularMins + otMins);
             }
           }
         }
@@ -239,7 +272,8 @@ class TimesheetCalculator {
           checkInTime: checkInTimestamp,
           checkOutTime: checkOutTimestamp,
           totalDuration: netWorkedDuration,
-          breakDuration: totalBreakDuration,
+          breakDuration: finalBreakDuration,
+          travelToleranceDuration: travelToleranceDuration,
           regularHours: regularHours,
           overtimeHours: overtimeHours,
           stepCount: dayRecords.length,
