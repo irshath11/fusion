@@ -8,9 +8,9 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_theme.dart';
 import '../../../core/constants/app_enums.dart';
 import '../../../core/services/pdf_export_service.dart';
-import '../../../core/services/location_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/utils/timesheet_calculator.dart';
+import '../../../core/widgets/app_animated_tab_switcher.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../attendance/domain/attendance_record.dart';
 
@@ -162,8 +162,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                 children: [
                   IconButton(
                     icon: Icon(Icons.refresh_rounded,
-                        color: AppTheme.currentColors.primaryFor(
-                            Theme.of(context).brightness)),
+                        color: AppTheme.currentColors
+                            .primaryFor(Theme.of(context).brightness)),
                     tooltip: 'Refresh Cloud Logs',
                     onPressed: _loadCloudAttendanceRecords,
                   ),
@@ -179,198 +179,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           const SizedBox(height: 12),
 
           // Tab Bar Switcher (Directory vs Cumulative Record vs Site Man-Hours)
-          Builder(
-            builder: (context) {
-              final isDark = Theme.of(context).brightness == Brightness.dark;
-              final palette = AppTheme.currentColors;
-              final activePrimary = palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
-
-              return Container(
-                decoration: BoxDecoration(
-                  color: isDark ? palette.surfaceDark : Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(palette.cardRadius * 0.75),
-                  border: Border.all(
-                    color: isDark ? palette.cardBorderDark : Colors.transparent,
-                  ),
-                ),
-                padding: const EdgeInsets.all(4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _activeTab = 0),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            color: _activeTab == 0
-                                ? (isDark
-                                    ? activePrimary.withValues(alpha: 0.22)
-                                    : Colors.white)
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(palette.buttonRadius * 0.7),
-                            border: _activeTab == 0 && isDark
-                                ? Border.all(
-                                    color: activePrimary.withValues(alpha: 0.45))
-                                : null,
-                            boxShadow: _activeTab == 0
-                                ? [
-                                    BoxShadow(
-                                      color: palette.accentGlow,
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    )
-                                  ]
-                                : [],
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.people_alt_rounded,
-                                size: 16,
-                                color: _activeTab == 0
-                                    ? activePrimary
-                                    : (isDark
-                                        ? palette.textSecondaryDark
-                                        : Colors.grey.shade700),
-                              ),
-                              const SizedBox(width: 5),
-                              Text(
-                                'Directory',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: _activeTab == 0
-                                      ? activePrimary
-                                      : (isDark
-                                          ? palette.textSecondaryDark
-                                          : Colors.grey.shade700),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _activeTab = 1),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            color: _activeTab == 1
-                                ? (isDark
-                                    ? activePrimary.withValues(alpha: 0.22)
-                                    : Colors.white)
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(palette.buttonRadius * 0.7),
-                            border: _activeTab == 1 && isDark
-                                ? Border.all(
-                                    color: activePrimary.withValues(alpha: 0.45))
-                                : null,
-                            boxShadow: _activeTab == 1
-                                ? [
-                                    BoxShadow(
-                                      color: palette.accentGlow,
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    )
-                                  ]
-                                : [],
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.analytics_rounded,
-                                size: 16,
-                                color: _activeTab == 1
-                                    ? activePrimary
-                                    : (isDark
-                                        ? palette.textSecondaryDark
-                                        : Colors.grey.shade700),
-                              ),
-                              const SizedBox(width: 5),
-                              Text(
-                                'Cumulative',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: _activeTab == 1
-                                      ? activePrimary
-                                      : (isDark
-                                          ? palette.textSecondaryDark
-                                          : Colors.grey.shade700),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _activeTab = 2),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            color: _activeTab == 2
-                                ? (isDark
-                                    ? activePrimary.withValues(alpha: 0.22)
-                                    : Colors.white)
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(palette.buttonRadius * 0.7),
-                            border: _activeTab == 2 && isDark
-                                ? Border.all(
-                                    color: activePrimary.withValues(alpha: 0.45))
-                                : null,
-                            boxShadow: _activeTab == 2
-                                ? [
-                                    BoxShadow(
-                                      color: palette.accentGlow,
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    )
-                                  ]
-                                : [],
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.location_city_rounded,
-                                size: 16,
-                                color: _activeTab == 2
-                                    ? activePrimary
-                                    : (isDark
-                                        ? palette.textSecondaryDark
-                                        : Colors.grey.shade700),
-                              ),
-                              const SizedBox(width: 5),
-                              Text(
-                                'Site Hours',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: _activeTab == 2
-                                      ? activePrimary
-                                      : (isDark
-                                          ? palette.textSecondaryDark
-                                          : Colors.grey.shade700),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+          AppAnimatedTabSwitcher(
+            selectedIndex: _activeTab,
+            tabs: const [
+              TabItemData(label: 'Directory', icon: Icons.people_alt_rounded),
+              TabItemData(label: 'Cumulative', icon: Icons.analytics_rounded),
+              TabItemData(
+                  label: 'Site Hours', icon: Icons.location_city_rounded),
+            ],
+            onTabChanged: (index) => setState(() => _activeTab = index),
           ),
           const SizedBox(height: 14),
 
@@ -379,23 +196,27 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             builder: (context) {
               final isDark = Theme.of(context).brightness == Brightness.dark;
               final palette = AppTheme.currentColors;
-              final activePrimary = palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
+              final activePrimary = palette
+                  .primaryFor(isDark ? Brightness.dark : Brightness.light);
 
               return TextField(
                 onChanged: (val) => setState(() => _searchQuery = val),
                 style: TextStyle(
                   fontSize: 14,
-                  color: isDark ? palette.textPrimaryDark : palette.textPrimaryLight,
+                  color: isDark
+                      ? palette.textPrimaryDark
+                      : palette.textPrimaryLight,
                   fontWeight: FontWeight.w500,
                 ),
                 decoration: InputDecoration(
                   hintText: 'Search employee name, code, department...',
                   hintStyle: TextStyle(
                     fontSize: 13,
-                    color: isDark ? palette.textSecondaryDark : Colors.grey.shade500,
+                    color: isDark
+                        ? palette.textSecondaryDark
+                        : Colors.grey.shade500,
                   ),
-                  prefixIcon: Icon(Icons.search_rounded,
-                      color: activePrimary),
+                  prefixIcon: Icon(Icons.search_rounded, color: activePrimary),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.clear_rounded, size: 18),
@@ -407,13 +228,17 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide(
-                      color: isDark ? palette.cardBorderDark : Colors.grey.shade300,
+                      color: isDark
+                          ? palette.cardBorderDark
+                          : Colors.grey.shade300,
                     ),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide(
-                      color: isDark ? palette.cardBorderDark : Colors.grey.shade300,
+                      color: isDark
+                          ? palette.cardBorderDark
+                          : Colors.grey.shade300,
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
@@ -450,7 +275,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   final isDark =
                       Theme.of(context).brightness == Brightness.dark;
                   final palette = AppTheme.currentColors;
-                  final activePrimary = palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
+                  final activePrimary = palette
+                      .primaryFor(isDark ? Brightness.dark : Brightness.light);
                   final emp = filteredEmployees[index];
                   final empRecords = allRecords
                       .where((r) =>
@@ -500,7 +326,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: activePrimary.withValues(alpha: isDark ? 0.2 : 0.1),
+                              color: activePrimary.withValues(
+                                  alpha: isDark ? 0.2 : 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
@@ -587,7 +414,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final palette = AppTheme.currentColors;
-    final activePrimary = palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
+    final activePrimary =
+        palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
@@ -791,8 +619,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                 color: isDark ? palette.surfaceDark : Colors.white,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color:
-                      isDark ? palette.cardBorderDark : Colors.grey.shade200,
+                  color: isDark ? palette.cardBorderDark : Colors.grey.shade200,
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -829,7 +656,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
-                          color: activePrimary.withValues(alpha: isDark ? 0.2 : 0.1),
+                          color: activePrimary.withValues(
+                              alpha: isDark ? 0.2 : 0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -975,17 +803,21 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     dateRecords.every((r) => r.isGeofenceValid);
                 final firstTime = DateFormat('hh:mm a')
                     .format(dateRecords.first.eventTimestamp);
-                final lastTime = DateFormat('hh:mm a')
-                    .format(dateRecords.last.eventTimestamp);
 
-                final siteOutRecs = dateRecords.where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
-                final officeOutRecs = dateRecords.where((r) => r.workflowStep == WorkflowStep.officeCheckOut);
+                final siteOutRecs = dateRecords
+                    .where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
+                final officeOutRecs = dateRecords.where(
+                    (r) => r.workflowStep == WorkflowStep.officeCheckOut);
                 final endRecordTime = officeOutRecs.isNotEmpty
                     ? officeOutRecs.last.eventTimestamp
-                    : (siteOutRecs.isNotEmpty ? siteOutRecs.last.eventTimestamp : dateRecords.last.eventTimestamp);
+                    : (siteOutRecs.isNotEmpty
+                        ? siteOutRecs.last.eventTimestamp
+                        : dateRecords.last.eventTimestamp);
+                final lastTime = DateFormat('hh:mm a').format(endRecordTime);
 
-                final siteCheckIns = dateRecords
-                    .where((r) => r.workflowStep == WorkflowStep.siteCheckIn || (r.siteName != null && r.siteName!.trim().isNotEmpty));
+                final siteCheckIns = dateRecords.where((r) =>
+                    r.workflowStep == WorkflowStep.siteCheckIn ||
+                    (r.siteName != null && r.siteName!.trim().isNotEmpty));
                 final siteNamesStr = siteCheckIns.isNotEmpty
                     ? siteCheckIns
                         .map((r) => TimesheetCalculator.resolveSiteName(r))
@@ -1012,7 +844,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     leading: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: activePrimary.withValues(alpha: isDark ? 0.2 : 0.12),
+                        color: activePrimary.withValues(
+                            alpha: isDark ? 0.2 : 0.12),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(Icons.calendar_month_rounded,
@@ -1035,7 +868,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: activePrimary.withValues(alpha: isDark ? 0.2 : 0.12),
+                                color: activePrimary.withValues(
+                                    alpha: isDark ? 0.2 : 0.12),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
@@ -1057,7 +891,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                       : Colors.orange.shade100,
                                   borderRadius: BorderRadius.circular(6),
                                   border: isDark
-                                      ? Border.all(color: Colors.orange.shade800)
+                                      ? Border.all(
+                                          color: Colors.orange.shade800)
                                       : null,
                                 ),
                                 child: Text(
@@ -1136,8 +971,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                   child: Row(
                                     children: [
                                       Icon(Icons.place_rounded,
-                                          size: 14,
-                                          color: activePrimary),
+                                          size: 14, color: activePrimary),
                                       const SizedBox(width: 4),
                                       Expanded(
                                         child: Text(
@@ -1312,7 +1146,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final palette = AppTheme.currentColors;
-    final activePrimary = palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
+    final activePrimary =
+        palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
@@ -1376,9 +1211,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.timer_rounded,
-                        color: activePrimary,
-                        size: 20),
+                    Icon(Icons.timer_rounded, color: activePrimary, size: 20),
                     const SizedBox(width: 8),
                     Text(
                       'Daily Timesheet Hours Summary',
@@ -1397,7 +1230,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 8),
                         decoration: BoxDecoration(
-                          color: activePrimary.withValues(alpha: isDark ? 0.2 : 0.12),
+                          color: activePrimary.withValues(
+                              alpha: isDark ? 0.2 : 0.12),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Column(
@@ -1530,8 +1364,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 8),
                         decoration: BoxDecoration(
-                          color: AppColors.success.withValues(
-                              alpha: isDark ? 0.2 : 0.1),
+                          color: AppColors.success
+                              .withValues(alpha: isDark ? 0.2 : 0.1),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Column(
@@ -1580,14 +1414,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                 color: isDark ? palette.surfaceDark : Colors.white,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: isDark
-                      ? palette.cardBorderDark
-                      : Colors.grey.shade200,
+                  color: isDark ? palette.cardBorderDark : Colors.grey.shade200,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(
-                        alpha: isDark ? 0.2 : 0.03),
+                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
                     blurRadius: 6,
                     offset: const Offset(0, 2),
                   ),
@@ -1604,12 +1435,12 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                           Container(
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: activePrimary.withValues(alpha: isDark ? 0.2 : 0.12),
+                              color: activePrimary.withValues(
+                                  alpha: isDark ? 0.2 : 0.12),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(Icons.location_city_rounded,
-                                color: activePrimary,
-                                size: 16),
+                                color: activePrimary, size: 16),
                           ),
                           const SizedBox(width: 8),
                           Text(
@@ -1628,7 +1459,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 2.5),
                         decoration: BoxDecoration(
-                          color: activePrimary.withValues(alpha: isDark ? 0.2 : 0.12),
+                          color: activePrimary.withValues(
+                              alpha: isDark ? 0.2 : 0.12),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -1747,7 +1579,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   color: isDark ? palette.surfaceDark : Colors.grey.shade50,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: isDark ? palette.cardBorderDark : Colors.grey.shade300,
+                    color:
+                        isDark ? palette.cardBorderDark : Colors.grey.shade300,
                   ),
                 ),
                 child: Row(
@@ -1956,8 +1789,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                   Row(
                                     children: [
                                       Icon(Icons.camera_alt_rounded,
-                                          size: 16,
-                                          color: activePrimary),
+                                          size: 16, color: activePrimary),
                                       const SizedBox(width: 6),
                                       Text(
                                         'Verified Live Camera Snapshot',
@@ -1971,7 +1803,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 8, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: activePrimary.withValues(alpha: isDark ? 0.2 : 0.1),
+                                          color: activePrimary.withValues(
+                                              alpha: isDark ? 0.2 : 0.1),
                                           borderRadius:
                                               BorderRadius.circular(6),
                                         ),
@@ -1979,8 +1812,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Icon(Icons.place_rounded,
-                                                size: 12,
-                                                color: activePrimary),
+                                                size: 12, color: activePrimary),
                                             const SizedBox(width: 3),
                                             Text(
                                               siteNameText,
@@ -2006,8 +1838,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                           color: Colors.black12,
                                           borderRadius:
                                               BorderRadius.circular(12),
-                                          border: Border.all(
-                                              color: activePrimary),
+                                          border:
+                                              Border.all(color: activePrimary),
                                         ),
                                         child: _buildPhotoWidget(r.photoBase64),
                                       ),
@@ -2049,7 +1881,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                   Container(
                                     padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
-                                      color: activePrimary.withValues(alpha: isDark ? 0.2 : 0.12),
+                                      color: activePrimary.withValues(
+                                          alpha: isDark ? 0.2 : 0.12),
                                       shape: BoxShape.circle,
                                     ),
                                     child: Icon(
@@ -2268,13 +2101,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         ? AppColors.textSecondaryDark
                         : AppColors.textSecondaryLight),
               ),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 11,
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight),
-              ),
             ],
           ),
         ),
@@ -2422,7 +2248,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     final grandCombined = grandReg + grandOt;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final palette = AppTheme.currentColors;
-    final activePrimary = palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
+    final activePrimary =
+        palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
     final activeSecondary = palette.secondary;
 
     return Column(
@@ -2580,10 +2407,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                             backgroundColor: activePrimary,
                             child: Text(
                               item.employee.name.isNotEmpty
-                                  ? item.employee.name.substring(0, 1).toUpperCase()
+                                  ? item.employee.name
+                                      .substring(0, 1)
+                                      .toUpperCase()
                                   : 'E',
                               style: const TextStyle(
-                                  color: Colors.white, fontWeight: FontWeight.bold),
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -2594,7 +2424,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 Text(
                                   item.employee.name,
                                   style: const TextStyle(
-                                      fontWeight: FontWeight.bold, fontSize: 14),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 Text(
@@ -2612,7 +2443,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: activePrimary.withValues(alpha: isDark ? 0.2 : 0.1),
+                              color: activePrimary.withValues(
+                                  alpha: isDark ? 0.2 : 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
@@ -2631,10 +2463,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: isDark ? palette.backgroundDark : Colors.grey.shade50,
+                          color: isDark
+                              ? palette.backgroundDark
+                              : Colors.grey.shade50,
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: isDark ? palette.cardBorderDark : Colors.grey.shade200,
+                            color: isDark
+                                ? palette.cardBorderDark
+                                : Colors.grey.shade200,
                           ),
                         ),
                         child: Row(
@@ -2650,7 +2486,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                             Container(
                                 width: 1,
                                 height: 28,
-                                color: isDark ? palette.cardBorderDark : Colors.grey.shade300),
+                                color: isDark
+                                    ? palette.cardBorderDark
+                                    : Colors.grey.shade300),
                             _buildEmpMetricItem(
                               title: 'OT Hours',
                               value:
@@ -2661,7 +2499,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                             Container(
                                 width: 1,
                                 height: 28,
-                                color: isDark ? palette.cardBorderDark : Colors.grey.shade300),
+                                color: isDark
+                                    ? palette.cardBorderDark
+                                    : Colors.grey.shade300),
                             _buildEmpMetricItem(
                               title: 'Combined Total',
                               value:
@@ -2683,7 +2523,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                             value: regPercent,
                             minHeight: 6,
                             backgroundColor: Colors.orange.shade400,
-                            valueColor: AlwaysStoppedAnimation<Color>(activePrimary),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(activePrimary),
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -2733,10 +2574,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 8),
                           decoration: BoxDecoration(
-                            color: isDark ? AppColors.backgroundDark : Colors.grey.shade50,
+                            color: isDark
+                                ? AppColors.backgroundDark
+                                : Colors.grey.shade50,
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
-                              color: isDark ? AppColors.cardBorderDark : Colors.grey.shade200,
+                              color: isDark
+                                  ? AppColors.cardBorderDark
+                                  : Colors.grey.shade200,
                             ),
                           ),
                           child: Column(
@@ -2773,7 +2618,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                       color: (isDark
                                               ? AppColors.primaryLight
                                               : AppColors.primary)
-                                          .withValues(alpha: isDark ? 0.2 : 0.1),
+                                          .withValues(
+                                              alpha: isDark ? 0.2 : 0.1),
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Text(
@@ -2914,7 +2760,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w500,
-              color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade700,
+              color:
+                  isDark ? AppColors.textSecondaryDark : Colors.grey.shade700,
             ),
             textAlign: TextAlign.center,
             maxLines: 1,
@@ -2939,7 +2786,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             title,
             style: TextStyle(
               fontSize: 10,
-              color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600,
+              color:
+                  isDark ? AppColors.textSecondaryDark : Colors.grey.shade600,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -3006,7 +2854,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         .length;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final palette = AppTheme.currentColors;
-    final activePrimary = palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
+    final activePrimary =
+        palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
     final activeSecondary = palette.secondary;
 
     return Column(
@@ -3039,8 +2888,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     child: Row(
                       children: [
                         Icon(Icons.apartment_rounded,
-                            size: 18,
-                            color: activePrimary),
+                            size: 18, color: activePrimary),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
@@ -3165,8 +3013,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                           color: isDark
-                          ? palette.textSecondaryDark
-                          : palette.textSecondaryLight)),
+                              ? palette.textSecondaryDark
+                              : palette.textSecondaryLight)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: SingleChildScrollView(
@@ -3434,10 +3282,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
-                          color: isDark ? AppColors.backgroundDark : Colors.grey.shade50,
+                          color: isDark
+                              ? AppColors.backgroundDark
+                              : Colors.grey.shade50,
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: isDark ? AppColors.cardBorderDark : Colors.grey.shade200,
+                            color: isDark
+                                ? AppColors.cardBorderDark
+                                : Colors.grey.shade200,
                           ),
                         ),
                         child: Row(
@@ -3644,9 +3496,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     );
   }
 
-  Widget _buildDateFilterChip(String label, String value, [bool isDark = false]) {
+  Widget _buildDateFilterChip(String label, String value,
+      [bool isDark = false]) {
     final palette = AppTheme.currentColors;
-    final activePrimary = palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
+    final activePrimary =
+        palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
     final isSelected = _siteDateFilter == value;
     return GestureDetector(
       onTap: () => setState(() => _siteDateFilter = value),
@@ -3715,7 +3569,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           SnackBar(
             content: const Text(
                 'Site & Client Man-Hours PDF report ready for download/saving!'),
-            backgroundColor: AppTheme.currentColors.primaryFor(Theme.of(context).brightness),
+            backgroundColor:
+                AppTheme.currentColors.primaryFor(Theme.of(context).brightness),
           ),
         );
       }

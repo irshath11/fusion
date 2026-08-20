@@ -16,6 +16,9 @@ import '../../auth/presentation/auth_cubit.dart';
 import '../../auth/presentation/login_screen.dart';
 
 import '../../../core/theme/theme_selector_modal.dart';
+import '../../../core/widgets/app_bounceable.dart';
+import '../../../core/widgets/app_glass_card.dart';
+import '../../../core/widgets/staggered_animated_item.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -403,6 +406,15 @@ class AdminOverviewTab extends StatelessWidget {
             final palette = AppTheme.currentColors;
             final primary = palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
 
+            final statItems = [
+              {'title': 'Total Employees', 'value': '${employees.length}', 'icon': Icons.badge_rounded, 'color': primary},
+              {'title': 'On Duty Currently', 'value': '$onDutyCount', 'icon': Icons.access_time_filled_rounded, 'color': palette.success},
+              {'title': 'Checked In Today', 'value': '$totalCheckedInToday', 'icon': Icons.how_to_reg_rounded, 'color': palette.secondary},
+              {'title': 'Shift Completed', 'value': '$totalCompletedToday', 'icon': Icons.task_alt_rounded, 'color': palette.info},
+              {'title': 'Offices Geofenced', 'value': '${offices.length}', 'icon': Icons.business_rounded, 'color': primary},
+              {'title': 'Pending Offline Sync', 'value': '$pendingSyncCount', 'icon': Icons.wifi_off_rounded, 'color': palette.warning},
+            ];
+
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -414,32 +426,38 @@ class AdminOverviewTab extends StatelessWidget {
                 LayoutBuilder(
                   builder: (context, constraints) {
                     final isWide = constraints.maxWidth >= 900;
-                    return GridView.count(
-                      crossAxisCount: isWide ? 3 : 2,
+                    return GridView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                      childAspectRatio: isWide ? 2.2 : 1.5,
-                      children: [
-                        _buildStatCard(context, 'Total Employees', '${employees.length}', Icons.badge_rounded, primary),
-                        _buildStatCard(context, 'On Duty Currently', '$onDutyCount', Icons.access_time_filled_rounded, palette.success),
-                        _buildStatCard(context, 'Checked In Today', '$totalCheckedInToday', Icons.how_to_reg_rounded, palette.secondary),
-                        _buildStatCard(context, 'Shift Completed Today', '$totalCompletedToday', Icons.task_alt_rounded, palette.info),
-                        _buildStatCard(context, 'Offices Geofenced', '${offices.length}', Icons.business_rounded, primary),
-                        _buildStatCard(context, 'Pending Offline Sync', '$pendingSyncCount', Icons.wifi_off_rounded, palette.warning),
-                      ],
+                      itemCount: statItems.length,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: isWide ? 3 : 2,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                        childAspectRatio: isWide ? 2.2 : 1.5,
+                      ),
+                      itemBuilder: (context, index) {
+                        final item = statItems[index];
+                        return StaggeredAnimatedItem(
+                          index: index,
+                          child: AppBounceable(
+                            child: _buildStatCard(
+                              context,
+                              item['title'] as String,
+                              item['value'] as String,
+                              item['icon'] as IconData,
+                              item['color'] as Color,
+                            ),
+                          ),
+                        );
+                      },
                     );
                   },
                 ),
                 const SizedBox(height: 24),
-                Card(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    side: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Padding(
+                StaggeredAnimatedItem(
+                  index: 6,
+                  child: AppGlassCard(
                     padding: const EdgeInsets.all(20.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -448,7 +466,10 @@ class AdminOverviewTab extends StatelessWidget {
                           children: [
                             Icon(Icons.shield_moon_rounded, color: primary),
                             const SizedBox(width: 10),
-                            const Text('Geofence & Camera Audit Security Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            const Text(
+                              'Geofence & Camera Audit Security Status',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 16),
@@ -474,47 +495,39 @@ class AdminOverviewTab extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final palette = AppTheme.currentColors;
 
-    return Card(
-      color: color.withValues(alpha: isDark ? 0.15 : 0.08),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(palette.cardRadius * 0.8),
-        side: BorderSide(
-          color: color.withValues(alpha: isDark ? 0.35 : 0.2),
-          width: 1,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Icon(icon, color: color, size: 28),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    value,
-                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: color),
-                  ),
+    return AppGlassCard(
+      customBackgroundColor: color.withValues(alpha: isDark ? 0.18 : 0.08),
+      customBorderColor: color.withValues(alpha: isDark ? 0.4 : 0.25),
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Icon(icon, color: color, size: 28),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  value,
+                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: color),
                 ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(title,
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: isDark
-                          ? palette.textSecondaryDark
-                          : palette.textSecondaryLight)),
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(title,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isDark
+                        ? palette.textSecondaryDark
+                        : palette.textSecondaryLight)),
+          ),
+        ],
       ),
     );
   }
