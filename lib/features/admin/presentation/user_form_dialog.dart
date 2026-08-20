@@ -175,10 +175,10 @@ class _UserFormDialogState extends State<UserFormDialog> {
                       ? _selectedOfficeId
                       : 'default_main',
               isExpanded: true,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
                 contentPadding:
-                    EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 prefixIcon:
                     Icon(Icons.location_on_outlined, color: AppColors.primary),
               ),
@@ -247,7 +247,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
                 prefixIcon: Icons.lock_clock_outlined,
               ),
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 'Employee must change this temporary password on first login.',
                 style: TextStyle(
                     fontSize: 11, color: AppColors.textSecondaryLight),

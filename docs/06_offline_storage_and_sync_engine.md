@@ -1,7 +1,7 @@
 # 06. Offline Storage & Background Sync Engine Feature
 
 ## Overview
-The **Offline Storage & Background Sync Engine** provides local persistence, offline operation capability, and background cloud synchronization. All workforce operations—including employee profiles, office definitions, and daily attendance records—are written locally to Hive key-value boxes first. A background synchronization engine listens for network connectivity changes and flushes pending records to Supabase with automatic retry logic.
+The **Offline Storage & Background Sync Engine** provides local persistence, offline operation capability, and background cloud synchronization. All workforce operations—including employee profiles, office definitions, work site registries, and daily attendance records—are written locally to Hive key-value boxes first. A background synchronization engine listens for network connectivity changes and flushes pending records to Supabase with automatic retry logic while preserving exact hardware event timestamps.
 
 ---
 
@@ -12,7 +12,9 @@ The **Offline Storage & Background Sync Engine** provides local persistence, off
      - `organizationBox`: Organization setup profile.
      - `currentUserBox`: Active logged-in user profile.
      - `employeesBox`: Employee directory.
+     - `usersBox`: User accounts and role definitions.
      - `officesBox`: Geofence office stations.
+     - `workSitesBox`: Client project locations.
      - `attendanceRecordsBox`: Historical and daily attendance records.
      - `pendingSyncBox`: Queue of un-synced attendance records.
 
@@ -25,6 +27,7 @@ The **Offline Storage & Background Sync Engine** provides local persistence, off
    - Listens to device network connectivity changes via `connectivity_plus`.
    - On network restoration (Cellular / Wi-Fi), automatically triggers `syncPendingRecords()`.
    - Flushes pending records from `pendingSyncBox` to Supabase `attendance_records` table.
+   - Preserves original hardware event timestamps (`event_timestamp`).
    - Updates local record `syncStatus` from `SyncStatus.pending` to `SyncStatus.synced`.
    - Clears uploaded items from the pending sync queue upon verified cloud confirmation.
 

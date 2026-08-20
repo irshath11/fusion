@@ -40,9 +40,11 @@ class AttendanceRecord {
   });
 
   AttendanceRecord copyWith({
+    String? address,
     SyncStatus? syncStatus,
     DateTime? syncTimestamp,
     String? siteName,
+    String? photoBase64,
   }) {
     return AttendanceRecord(
       id: id,
@@ -54,9 +56,9 @@ class AttendanceRecord {
       latitude: latitude,
       longitude: longitude,
       gpsAccuracy: gpsAccuracy,
-      address: address,
+      address: address ?? this.address,
       deviceId: deviceId,
-      photoBase64: photoBase64,
+      photoBase64: photoBase64 ?? this.photoBase64,
       isGeofenceValid: isGeofenceValid,
       officeId: officeId,
       workSiteId: workSiteId,
@@ -85,29 +87,47 @@ class AttendanceRecord {
         'syncStatus': syncStatus.name,
       };
 
-  factory AttendanceRecord.fromJson(Map<String, dynamic> json) => AttendanceRecord(
-        id: json['id'],
-        employeeId: json['employeeId'],
-        employeeName: json['employeeName'] ?? 'Unknown Employee',
-        workflowStep: WorkflowStep.values.firstWhere(
-          (e) => e.dbValue == json['workflowStep'] || e.name == json['workflowStep'],
-          orElse: () => WorkflowStep.officeCheckIn,
-        ),
-        eventTimestamp: DateTime.parse(json['eventTimestamp']),
-        syncTimestamp: json['syncTimestamp'] != null ? DateTime.parse(json['syncTimestamp']) : null,
-        latitude: (json['latitude'] as num).toDouble(),
-        longitude: (json['longitude'] as num).toDouble(),
-        gpsAccuracy: (json['gpsAccuracy'] as num).toDouble(),
-        address: json['address'] ?? '',
-        deviceId: json['deviceId'] ?? '',
-        photoBase64: json['photoBase64'] ?? '',
-        isGeofenceValid: json['isGeofenceValid'] ?? true,
-        officeId: json['officeId'] ?? json['office_id'],
-        workSiteId: json['workSiteId'] ?? json['work_site_id'],
-        siteName: json['siteName'] ?? json['site_name'],
-        syncStatus: SyncStatus.values.firstWhere(
-          (e) => e.name == json['syncStatus'],
-          orElse: () => SyncStatus.pending,
-        ),
-      );
+  factory AttendanceRecord.fromJson(Map<String, dynamic> json) {
+    final stepVal = json['workflowStep'] ?? json['workflow_step'] ?? 'officeCheckIn';
+    final step = WorkflowStep.values.firstWhere(
+      (e) => e.dbValue == stepVal || e.name == stepVal,
+      orElse: () => WorkflowStep.officeCheckIn,
+    );
+
+    final rawEventTime = json['eventTimestamp'] ?? json['event_timestamp'];
+    final eventTime = rawEventTime != null
+        ? DateTime.parse(rawEventTime.toString())
+        : DateTime.now();
+
+    final rawSyncTime = json['syncTimestamp'] ?? json['sync_timestamp'];
+    final syncTime = rawSyncTime != null
+        ? DateTime.parse(rawSyncTime.toString())
+        : null;
+
+    final rawSyncStatus = json['syncStatus'] ?? json['sync_status'];
+    final status = SyncStatus.values.firstWhere(
+      (e) => e.name == rawSyncStatus,
+      orElse: () => SyncStatus.pending,
+    );
+
+    return AttendanceRecord(
+      id: json['id']?.toString() ?? '',
+      employeeId: json['employeeId']?.toString() ?? json['employee_id']?.toString() ?? '',
+      employeeName: json['employeeName']?.toString() ?? json['employee_name']?.toString() ?? 'Unknown Employee',
+      workflowStep: step,
+      eventTimestamp: eventTime,
+      syncTimestamp: syncTime,
+      latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
+      longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
+      gpsAccuracy: (json['gpsAccuracy'] ?? json['gps_accuracy'] as num?)?.toDouble() ?? 5.0,
+      address: json['address']?.toString() ?? '',
+      deviceId: json['deviceId']?.toString() ?? json['device_id']?.toString() ?? '',
+      photoBase64: json['photoBase64']?.toString() ?? json['photo_url']?.toString() ?? json['photo_base64']?.toString() ?? '',
+      isGeofenceValid: json['isGeofenceValid'] ?? json['is_geofence_valid'] ?? true,
+      officeId: json['officeId']?.toString() ?? json['office_id']?.toString(),
+      workSiteId: json['workSiteId']?.toString() ?? json['work_site_id']?.toString(),
+      siteName: json['siteName']?.toString() ?? json['site_name']?.toString(),
+      syncStatus: status,
+    );
+  }
 }

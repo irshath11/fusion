@@ -133,6 +133,7 @@ class _CameraCaptureModalState extends State<CameraCaptureModal> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: SingleChildScrollView(
@@ -142,7 +143,8 @@ class _CameraCaptureModalState extends State<CameraCaptureModal> {
           children: [
             Row(
               children: [
-                const Icon(Icons.camera_alt_rounded, color: AppColors.primary),
+                Icon(Icons.camera_alt_rounded,
+                    color: isDark ? AppColors.primaryLight : AppColors.primary),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(

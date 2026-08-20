@@ -986,34 +986,12 @@ class SupabaseService {
       final List<AttendanceRecord> records = [];
       for (final json in response) {
         try {
-          final stepStr = json['workflow_step'] ?? 'officeCheckIn';
-          final step = WorkflowStep.values.firstWhere(
-            (e) => e.dbValue == stepStr || e.name == stepStr,
-            orElse: () => WorkflowStep.officeCheckIn,
-          );
-
-          records.add(AttendanceRecord(
-            id: json['id']?.toString() ??
-                'rec_${DateTime.now().millisecondsSinceEpoch}',
-            employeeId: json['employee_id']?.toString() ?? 'emp-001',
-            employeeName: json['employee_name']?.toString() ?? 'Employee',
-            workflowStep: step,
-            eventTimestamp: json['event_timestamp'] != null
-                ? DateTime.parse(json['event_timestamp'])
-                : DateTime.now(),
-            latitude: (json['latitude'] as num?)?.toDouble() ?? 24.365500,
-            longitude: (json['longitude'] as num?)?.toDouble() ?? 54.500531,
-            gpsAccuracy: 5.0,
-            address: json['address']?.toString() ?? 'Musaffah Abu Dhabi',
-            deviceId: json['device_id']?.toString() ?? 'DEV-MOBILE',
-            photoBase64: json['photo_url']?.toString() ?? '',
-            isGeofenceValid: json['is_geofence_valid'] ?? true,
-            officeId: json['office_id']?.toString() ?? json['officeId']?.toString(),
-            workSiteId: json['work_site_id']?.toString() ?? json['workSiteId']?.toString(),
-            siteName: json['site_name']?.toString() ?? json['siteName']?.toString(),
-            syncStatus: SyncStatus.synced,
-          ));
-        } catch (_) {}
+          final map = Map<String, dynamic>.from(json);
+          final rec = AttendanceRecord.fromJson(map);
+          records.add(rec.copyWith(syncStatus: SyncStatus.synced));
+        } catch (e) {
+          debugPrint('Supabase parse attendance record error: $e');
+        }
       }
       return records;
     } catch (e) {

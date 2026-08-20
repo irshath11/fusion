@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'auth_cubit.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/app_icon_widget.dart';
 import '../../../core/widgets/custom_text_field.dart';
 import '../../../main.dart';
 
@@ -64,6 +66,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -83,43 +87,47 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         child: ScaleTransition(
                           scale: _scaleAnim,
                           child: Container(
-                            height: 80,
-                            width: 80,
                             decoration: BoxDecoration(
-                              color: AppColors.primaryLight.withValues(alpha: 0.15),
-                              shape: BoxShape.circle,
+                              borderRadius: BorderRadius.circular(22),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primary
+                                      .withValues(alpha: isDark ? 0.45 : 0.22),
+                                  blurRadius: 24,
+                                  spreadRadius: 2,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
                             ),
-                            child: const Icon(
-                              Icons.badge_rounded,
-                              size: 44,
-                              color: AppColors.primaryLight,
+                            child: const AppIconWidget(
+                              size: 84,
+                              borderRadius: 22,
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 22),
                       Center(
                         child: Text(
                           'Fusion 360',
-                          style: TextStyle(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).brightness == Brightness.dark
-                                ? Colors.white
-                                : AppColors.primaryLight,
-                            letterSpacing: 0.5,
+                            fontWeight: FontWeight.w800,
+                            color: isDark ? Colors.white : AppColors.primaryLight,
+                            letterSpacing: -0.5,
                           ),
                         ),
                       ),
                       const SizedBox(height: 6),
                       Center(
                         child: Text(
-                          'Enterprise Attendance & User Management System',
-                          style: TextStyle(
-                            color: Theme.of(context).brightness == Brightness.dark
+                          'Enterprise Attendance & Workforce Management',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: isDark
                                 ? AppColors.textSecondaryDark
                                 : AppColors.textSecondaryLight,
-                            fontSize: 14,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),
@@ -179,11 +187,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   border:
                       Border.all(color: AppColors.info.withValues(alpha: 0.2)),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
                     Icon(Icons.shield_outlined,
                         color: AppColors.info, size: 20),
-                    SizedBox(width: 10),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'Public registration disabled. Contact your Administrator to provision accounts.',

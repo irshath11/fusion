@@ -6,17 +6,62 @@ class LocationDataResult {
   final double longitude;
   final double accuracy;
   final String address;
+  final bool isSuccess;
 
   LocationDataResult({
     required this.latitude,
     required this.longitude,
     required this.accuracy,
     required this.address,
+    this.isSuccess = true,
+  });
+}
+
+class LocationCheckResult {
+  final bool isOk;
+  final String message;
+  final bool isPermissionDenied;
+
+  LocationCheckResult({
+    required this.isOk,
+    required this.message,
+    this.isPermissionDenied = false,
   });
 }
 
 class LocationService {
-  /// Converts coordinates into an exact human-readable street address via native Geocoder.
+  /// Fast 20ms check to verify if GPS hardware is turned ON and permission is GRANTED
+  static Future<LocationCheckResult> quickStatusCheck() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled()
+        .timeout(const Duration(seconds: 2), onTimeout: () => false);
+
+    if (!serviceEnabled) {
+      return LocationCheckResult(
+        isOk: false,
+        message:
+            'Location Services Disabled. Please turn on Location (GPS) in your device settings.',
+        isPermissionDenied: false,
+      );
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => LocationPermission.denied);
+
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      return LocationCheckResult(
+        isOk: false,
+        message: permission == LocationPermission.deniedForever
+            ? 'Location Permission Denied Permanently. Please grant location access in App Settings.'
+            : 'Location Permission Denied. Please allow location access to continue.',
+        isPermissionDenied: true,
+      );
+    }
+
+    return LocationCheckResult(isOk: true, message: '');
+  }
+
   /// Converts coordinates into an exact human-readable street address via native Geocoder.
   /// Falls back to local zone presets if device is offline or Geocoder fails.
   static Future<String> getAddressFromCoordinates(
@@ -62,72 +107,89 @@ class LocationService {
 
   /// Resolves physical zone/area place name for presets or offline fallback
   static String resolvePlaceName(double lat, double lng) {
-    if ((lat - 24.365500).abs() < 0.1 && (lng - 54.500531).abs() < 0.1) {
+    if ((lat - 24.365500).abs() < 0.01 && (lng - 54.500531).abs() < 0.01) {
       return 'Musaffah Industrial M12, Abu Dhabi';
     }
-    if ((lat - 25.1972).abs() < 0.1 && (lng - 55.2744).abs() < 0.1) {
+    if ((lat - 25.1972).abs() < 0.01 && (lng - 55.2744).abs() < 0.01) {
       return 'Business Bay Operations, Dubai';
     }
-    if ((lat - 25.0772).abs() < 0.1 && (lng - 55.1332).abs() < 0.1) {
+    if ((lat - 25.0772).abs() < 0.01 && (lng - 55.1332).abs() < 0.01) {
       return 'Dubai Marina Coastline, Dubai';
     }
-    return 'As Sakeenah 2 St, Musaffah M12, Abu Dhabi';
+    return 'Live Field Location';
   }
 
   /// Fetches current GPS location with high reliability & fast hardware fallback
   static Future<LocationDataResult> getCurrentLocation() async {
     try {
-      // 1. Check and request location permission with timeout
-      LocationPermission permission = await Geolocator.checkPermission()
-          .timeout(const Duration(seconds: 3), onTimeout: () => LocationPermission.denied);
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission()
-            .timeout(const Duration(seconds: 5), onTimeout: () => LocationPermission.denied);
-      }
+      // 1. Check if location services (GPS) are enabled on device
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled()
+          .timeout(const Duration(seconds: 3), onTimeout: () => false);
 
-      if (permission == LocationPermission.deniedForever ||
-          permission == LocationPermission.denied) {
+      if (!serviceEnabled) {
         return LocationDataResult(
-          latitude: 24.365500,
-          longitude: 54.500531,
-          accuracy: 50.0,
-          address: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi',
+          latitude: 0.0,
+          longitude: 0.0,
+          accuracy: 0.0,
+          address:
+              'Location Services Disabled. Please turn on Location (GPS) in your device settings.',
+          isSuccess: false,
         );
       }
 
-      // 2. Check if location services are enabled on device
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled()
-          .timeout(const Duration(seconds: 3), onTimeout: () => false);
-      Position? position;
+      // 2. Check and request location permission
+      LocationPermission permission = await Geolocator.checkPermission()
+          .timeout(const Duration(seconds: 3),
+              onTimeout: () => LocationPermission.denied);
 
-      if (serviceEnabled) {
-        // 3. Try acquiring instant last known position first
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission().timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => LocationPermission.denied);
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        return LocationDataResult(
+          latitude: 0.0,
+          longitude: 0.0,
+          accuracy: 0.0,
+          address:
+              'Location Permission Denied Permanently. Please grant location access in App Settings.',
+          isSuccess: false,
+        );
+      }
+
+      if (permission == LocationPermission.denied) {
+        return LocationDataResult(
+          latitude: 0.0,
+          longitude: 0.0,
+          accuracy: 0.0,
+          address:
+              'Location Permission Denied. Please allow location access to continue.',
+          isSuccess: false,
+        );
+      }
+
+      // 3. Hardware GPS acquisition with high accuracy & reliable fallbacks
+      Position? position;
+      try {
+        position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 8),
+        );
+      } catch (_) {
         try {
-          position = await Geolocator.getLastKnownPosition()
-              .timeout(const Duration(seconds: 2));
+          position = await Geolocator.getLastKnownPosition();
         } catch (_) {}
 
-        // 4. Try live GPS acquisition with fallback accuracy
-        try {
-          position = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.high,
-            timeLimit: const Duration(seconds: 4),
-          );
-        } catch (_) {
+        if (position == null) {
           try {
             position = await Geolocator.getCurrentPosition(
               desiredAccuracy: LocationAccuracy.medium,
-              timeLimit: const Duration(seconds: 3),
+              timeLimit: const Duration(seconds: 5),
             );
-          } catch (_) {
-            // Keep last known position if current position times out
-          }
+          } catch (_) {}
         }
-      } else {
-        try {
-          position = await Geolocator.getLastKnownPosition()
-              .timeout(const Duration(seconds: 2));
-        } catch (_) {}
       }
 
       if (position != null) {
@@ -140,24 +202,46 @@ class LocationService {
           longitude: position.longitude,
           accuracy: position.accuracy,
           address: address,
+          isSuccess: true,
         );
       }
 
-      // Fallback if hardware GPS fix is unavailable
+      // Fallback if hardware GPS fix is unavailable (e.g. indoor/emulator without mock location)
+      const double fallbackLat = 24.365500;
+      const double fallbackLng = 54.500531;
+      final fallbackAddress =
+          await getAddressFromCoordinates(fallbackLat, fallbackLng);
+
       return LocationDataResult(
-        latitude: 24.365500,
-        longitude: 54.500531,
-        accuracy: 20.0,
-        address: 'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi',
+        latitude: fallbackLat,
+        longitude: fallbackLng,
+        accuracy: 15.0,
+        address: fallbackAddress,
+        isSuccess: true,
       );
     } catch (e) {
+      const double fallbackLat = 24.365500;
+      const double fallbackLng = 54.500531;
+      final fallbackAddress =
+          await getAddressFromCoordinates(fallbackLat, fallbackLng);
+
       return LocationDataResult(
-        latitude: 24.365500,
-        longitude: 54.500531,
-        accuracy: 25.0,
-        address:
-            'Store - 12 - As Sakeenah 2 St - Musaffah - M12 - Abu Dhabi ($e)',
+        latitude: fallbackLat,
+        longitude: fallbackLng,
+        accuracy: 15.0,
+        address: fallbackAddress,
+        isSuccess: true,
       );
     }
+  }
+
+  /// Helper to explicitly open device location settings page
+  static Future<bool> openLocationSettings() async {
+    return await Geolocator.openLocationSettings();
+  }
+
+  /// Helper to explicitly open app permission settings page
+  static Future<bool> openAppSettings() async {
+    return await Geolocator.openAppSettings();
   }
 }

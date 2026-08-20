@@ -89,11 +89,11 @@ class _OwnershipTransferDialogState extends State<OwnershipTransferDialog> {
           final isLoading = state is OwnershipTransferLoading;
 
           return AlertDialog(
-            title: const Row(
+            title: Row(
               children: [
                 Icon(Icons.workspace_premium_rounded, color: AppColors.warning),
-                SizedBox(width: 8),
-                Text('Transfer Ownership'),
+                const SizedBox(width: 8),
+                const Text('Transfer Ownership'),
               ],
             ),
             content: SingleChildScrollView(
@@ -112,7 +112,7 @@ class _OwnershipTransferDialogState extends State<OwnershipTransferDialog> {
                           color: AppColors.warning.withValues(alpha: 0.3),
                         ),
                       ),
-                      child: const Text(
+                      child: Text(
                         'WARNING: Ownership Transfer is an irreversible action. The selected Administrator will become SUPER_ADMIN with master control over organization settings and user permissions. You will be demoted to ADMIN.',
                         style: TextStyle(
                           fontSize: 12,
@@ -134,7 +134,7 @@ class _OwnershipTransferDialogState extends State<OwnershipTransferDialog> {
                               color: AppColors.error.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Text(
+                            child: Text(
                               'No eligible Administrators found. Please promote an Employee to ADMIN first before transferring ownership.',
                               style: TextStyle(color: AppColors.error, fontSize: 13),
                             ),
@@ -166,7 +166,7 @@ class _OwnershipTransferDialogState extends State<OwnershipTransferDialog> {
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       'Enter your Super Admin password to authorize ownership transfer.',
                       style: TextStyle(
                           fontSize: 12, color: AppColors.textSecondaryLight),

@@ -58,6 +58,19 @@ class AttendanceFailure extends AttendanceState {
   List<Object?> get props => [errorMessage];
 }
 
+class LocationServicesDisabledError extends AttendanceState {
+  final String message;
+  final bool isPermissionDenied;
+
+  LocationServicesDisabledError({
+    required this.message,
+    this.isPermissionDenied = false,
+  });
+
+  @override
+  List<Object?> get props => [message, isPermissionDenied];
+}
+
 class AttendanceCubit extends Cubit<AttendanceState> {
   final LocalDatabaseService _db = LocalDatabaseService();
   final Uuid _uuid = const Uuid();
@@ -80,6 +93,24 @@ class AttendanceCubit extends Cubit<AttendanceState> {
 
       // 1. Get Live GPS Location
       LocationDataResult location = await LocationService.getCurrentLocation();
+
+      final bool isLocationError = !location.isSuccess ||
+          (location.latitude == 0.0 && location.longitude == 0.0) ||
+          location.address.contains('Disabled') ||
+          location.address.contains('Permission') ||
+          location.address.contains('GPS Error') ||
+          location.address.contains('Timeout') ||
+          location.address.contains('Unavailable');
+
+      if (isLocationError) {
+        emit(LocationServicesDisabledError(
+          message: location.address.isNotEmpty
+              ? location.address
+              : 'Location Services Disabled. Please turn on Location (GPS) in your device settings.',
+          isPermissionDenied: location.address.contains('Permission'),
+        ));
+        return;
+      }
 
       // Ensure local offices & employee data are synced from Supabase cloud if missing
       if (_db.getOffices().isEmpty) {
@@ -197,6 +228,19 @@ class AttendanceCubit extends Cubit<AttendanceState> {
             : (workSites.isNotEmpty ? workSites.first.siteName : 'Work Site');
       }
 
+      String? matchedWorkSiteId;
+      if (step == WorkflowStep.siteCheckIn || step == WorkflowStep.siteCheckOut) {
+        if (siteName != null && siteName.trim().isNotEmpty) {
+          final matches = workSites.where((s) =>
+              s.siteName.trim().toLowerCase() == siteName.trim().toLowerCase() ||
+              siteName.trim().toLowerCase().startsWith(s.siteName.trim().toLowerCase()));
+          if (matches.isNotEmpty) {
+            matchedWorkSiteId = matches.first.id;
+          }
+        }
+        matchedWorkSiteId ??= (workSites.isNotEmpty ? workSites.first.id : null);
+      }
+
       final String formattedAddress = location.address.isNotEmpty
           ? location.address
           : await LocationService.getAddressFromCoordinates(location.latitude, location.longitude);
@@ -242,6 +286,13 @@ class AttendanceCubit extends Cubit<AttendanceState> {
     } catch (e) {
       emit(AttendanceFailure('Attendance capture failed: ${e.toString()}'));
     }
+  }
+
+  void emitLocationError(String message, {bool isPermissionDenied = false}) {
+    emit(LocationServicesDisabledError(
+      message: message,
+      isPermissionDenied: isPermissionDenied,
+    ));
   }
 
   void resetState() {

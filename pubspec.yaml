@@ -59,3 +59,4 @@ flutter:
 
   assets:
     - assets/images/
+    - android/app/src/main/res/mipmap-xxxhdpi/

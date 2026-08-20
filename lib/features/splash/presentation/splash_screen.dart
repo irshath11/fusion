@@ -182,7 +182,7 @@ class _SplashScreenState extends State<SplashScreen>
                                   return Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      const Icon(
+                                      Icon(
                                         Icons.settings_suggest_rounded,
                                         size: 54,
                                         color: AppColors.primary,
@@ -191,7 +191,7 @@ class _SplashScreenState extends State<SplashScreen>
                                       Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
-                                        children: const [
+                                        children: [
                                           Text(
                                             'FUSION',
                                             style: TextStyle(
@@ -200,7 +200,7 @@ class _SplashScreenState extends State<SplashScreen>
                                               color: AppColors.primary,
                                             ),
                                           ),
-                                          Text(
+                                          const Text(
                                             'Electro Mechanical Maintenance',
                                             style: TextStyle(
                                               fontSize: 12,
@@ -242,13 +242,13 @@ class _SplashScreenState extends State<SplashScreen>
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
-                                children: const [
+                                children: [
                                   Icon(
                                     Icons.verified_user_rounded,
                                     size: 16,
                                     color: AppColors.primaryLight,
                                   ),
-                                  SizedBox(width: 8),
+                                  const SizedBox(width: 8),
                                   Text(
                                     'Manages For You',
                                     style: TextStyle(

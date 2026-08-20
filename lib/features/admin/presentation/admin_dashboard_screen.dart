@@ -9,10 +9,13 @@ import 'live_tracking_map_screen.dart';
 import 'reports_analytics_screen.dart';
 import 'ownership_transfer_dialog.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_theme.dart';
 import '../../../core/constants/app_enums.dart';
 import '../../../database/local_database_service.dart';
 import '../../auth/presentation/auth_cubit.dart';
 import '../../auth/presentation/login_screen.dart';
+
+import '../../../core/theme/theme_selector_modal.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -312,6 +315,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     onPressed: _showOwnershipTransferDialog,
                   ),
                   IconButton(
+                    icon: const Icon(Icons.palette_rounded),
+                    tooltip: 'Theme & Appearance',
+                    onPressed: () => ThemeSelectorModal.show(context),
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.logout_rounded),
                     tooltip: 'Logout',
                     onPressed: () {
@@ -391,6 +399,10 @@ class AdminOverviewTab extends StatelessWidget {
 
             final onDutyCount = (totalCheckedInToday - totalCompletedToday).clamp(0, totalCheckedInToday);
 
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final palette = AppTheme.currentColors;
+            final primary = palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
+
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -410,12 +422,12 @@ class AdminOverviewTab extends StatelessWidget {
                       mainAxisSpacing: 16,
                       childAspectRatio: isWide ? 2.2 : 1.5,
                       children: [
-                        _buildStatCard(context, 'Total Employees', '${employees.length}', Icons.badge_rounded, AppColors.primary),
-                        _buildStatCard(context, 'On Duty Currently', '$onDutyCount', Icons.access_time_filled_rounded, AppColors.success),
-                        _buildStatCard(context, 'Checked In Today', '$totalCheckedInToday', Icons.how_to_reg_rounded, AppColors.secondary),
-                        _buildStatCard(context, 'Shift Completed Today', '$totalCompletedToday', Icons.task_alt_rounded, AppColors.info),
-                        _buildStatCard(context, 'Offices Geofenced', '${offices.length}', Icons.business_rounded, AppColors.primary),
-                        _buildStatCard(context, 'Pending Offline Sync', '$pendingSyncCount', Icons.wifi_off_rounded, Colors.orange),
+                        _buildStatCard(context, 'Total Employees', '${employees.length}', Icons.badge_rounded, primary),
+                        _buildStatCard(context, 'On Duty Currently', '$onDutyCount', Icons.access_time_filled_rounded, palette.success),
+                        _buildStatCard(context, 'Checked In Today', '$totalCheckedInToday', Icons.how_to_reg_rounded, palette.secondary),
+                        _buildStatCard(context, 'Shift Completed Today', '$totalCompletedToday', Icons.task_alt_rounded, palette.info),
+                        _buildStatCard(context, 'Offices Geofenced', '${offices.length}', Icons.business_rounded, primary),
+                        _buildStatCard(context, 'Pending Offline Sync', '$pendingSyncCount', Icons.wifi_off_rounded, palette.warning),
                       ],
                     );
                   },
@@ -427,24 +439,24 @@ class AdminOverviewTab extends StatelessWidget {
                     side: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Padding(
-                    padding: EdgeInsets.all(20.0),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.shield_rounded, color: AppColors.primary),
-                            SizedBox(width: 10),
-                            Text('Geofence & Camera Audit Security Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            Icon(Icons.shield_moon_rounded, color: primary),
+                            const SizedBox(width: 10),
+                            const Text('Geofence & Camera Audit Security Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                           ],
                         ),
-                        SizedBox(height: 16),
-                        Text('• Live Front Camera Verification: Enforced on all check-ins/check-outs across mobile devices.'),
-                        SizedBox(height: 6),
-                        Text('• Haversine Distance Calculation: 200m strict radius geofencing active for all designated offices.'),
-                        SizedBox(height: 6),
-                        Text('• Cloud & Offline Architecture: High-concurrency Supabase PostgreSQL backend with Hive local fallback.'),
+                        const SizedBox(height: 16),
+                        const Text('• Live Front Camera Verification: Enforced on all check-ins/check-outs across mobile devices.'),
+                        const SizedBox(height: 6),
+                        const Text('• Haversine Distance Calculation: 200m strict radius geofencing active for all designated offices.'),
+                        const SizedBox(height: 6),
+                        const Text('• Cloud & Offline Architecture: High-concurrency Supabase PostgreSQL backend with Hive local fallback.'),
                       ],
                     ),
                   ),
@@ -459,12 +471,17 @@ class AdminOverviewTab extends StatelessWidget {
   }
 
   Widget _buildStatCard(BuildContext context, String title, String value, IconData icon, Color color) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = AppTheme.currentColors;
+
     return Card(
-      elevation: 0,
-      color: color.withValues(alpha: 0.06),
+      color: color.withValues(alpha: isDark ? 0.15 : 0.08),
       shape: RoundedRectangleBorder(
-        side: BorderSide(color: color.withValues(alpha: 0.25)),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(palette.cardRadius * 0.8),
+        side: BorderSide(
+          color: color.withValues(alpha: isDark ? 0.35 : 0.2),
+          width: 1,
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -488,10 +505,13 @@ class AdminOverviewTab extends StatelessWidget {
             const SizedBox(height: 10),
             FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text(
-                title,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondaryLight),
-              ),
+              child: Text(title,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isDark
+                          ? palette.textSecondaryDark
+                          : palette.textSecondaryLight)),
             ),
           ],
         ),

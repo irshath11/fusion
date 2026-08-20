@@ -1,15 +1,16 @@
 # 01. Authentication & Password Management Feature
 
 ## Overview
-The **Authentication & Password Management** feature governs identity verification, dual-layer authentication (Firebase Authentication primary + Local Hive Database fallback), role-based access control (Super Admin vs. Employee), self-service password updates, universal password visibility toggles, and session management.
+The **Authentication & Password Management** feature governs identity verification, dual-layer authentication (Firebase Authentication primary + Local Hive Database fallback), 3-tier Role-Based Access Control (Super Admin, Admin, Employee), self-service password updates, universal password visibility toggles, organization ownership transfer, and session management.
 
 ---
 
 ## 1. Key Functionalities
 
-1. **Role-Based Authentication**:
-   - **Super Admin**: Manages organization settings, office stations, employee accounts, live GPS tracking, and company reports.
-   - **Employee**: Accesses daily workflow dashboard, captures selfie/location verification, tracks attendance history, and manages credentials.
+1. **3-Tier Role-Based Access Control (RBAC)**:
+   - **Super Admin (`SUPER_ADMIN`)**: Full operational control over organization settings, employee accounts, office stations, work site registry, live tracking, reports, and atomic organization ownership transfer.
+   - **Administrator (`ADMIN`)**: Administrative access to manage employees, configure office stations, view live tracking maps, and generate company analytics and reports.
+   - **Employee (`EMPLOYEE`)**: Accesses mobile daily workflow dashboard, executes 4-step attendance workflow, captures selfie/location verification, tracks personal timesheets, and manages personal credentials.
 
 2. **Dual-Layer Authentication Engine (`AuthCubit`)**:
    - **Primary (Firebase Auth)**: Authenticates user credentials via `FirebaseAuth.instance.signInWithEmailAndPassword`. On success, syncs profile from Supabase or assigns fallback role profile.
@@ -34,13 +35,18 @@ The **Authentication & Password Management** feature governs identity verificati
 5. **Self-Service Password Management**:
    - Employees can update their private password at any time via the **Change Password** icon (`lock_reset`) located in the AppBar of the Employee Dashboard, featuring show/hide password visibility toggles on all 3 input fields (Current, New, and Confirm Password).
 
+6. **Organization Ownership Transfer Engine**:
+   - Allows an active Super Admin to transfer root organization ownership to an existing Administrator via `OwnershipTransferCubit` and `OwnershipTransferDialog`.
+   - Requires mandatory password re-authentication of the Super Admin.
+   - Executes an atomic SQL procedure (`transfer_organization_ownership`) promoting the target Administrator to `SUPER_ADMIN` and demoting the current Super Admin to `ADMIN` in a single transaction, backed by audit logging (`OWNERSHIP_TRANSFERRED`).
+
 ---
 
 ## 2. Technical Implementation & Data Structures
 
 ### Data Models (`UserEntity` & `UserRole`)
 ```dart
-enum UserRole { superAdmin, employee }
+enum UserRole { superAdmin, admin, employee }
 
 class UserEntity {
   final String id;
@@ -110,3 +116,5 @@ Navigates to Dashboard                  │     AuthError     │
 | [`lib/features/auth/presentation/auth_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/auth/presentation/auth_cubit.dart) | BLoC controller managing dual-layer login, fallback authentication, session restoration, and password changes. |
 | [`lib/core/widgets/custom_text_field.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/widgets/custom_text_field.dart) | Stateful text input widget with built-in password show/hide visibility toggle buttons. |
 | [`lib/features/auth/presentation/login_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/auth/presentation/login_screen.dart) | Clean, responsive login user interface with email/password validation & password visibility toggles. |
+| [`lib/features/admin/presentation/ownership_transfer_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/ownership_transfer_cubit.dart) | Cubit managing Super Admin re-authentication and atomic RPC organization ownership transfer. |
+| [`lib/features/admin/presentation/ownership_transfer_dialog.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/ownership_transfer_dialog.dart) | Modal dialog for selecting target admin and re-authenticating password with visibility toggles. |

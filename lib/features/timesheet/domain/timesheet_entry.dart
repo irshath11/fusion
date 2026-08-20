@@ -26,11 +26,14 @@ class DailyTimesheetEntry extends Equatable {
   final String employeeName;
   final DateTime? checkInTime;
   final DateTime? checkOutTime;
-  final Duration totalDuration;
+  final Duration totalDuration; // Net worked duration (excluding breaks & travel tolerance)
+  final Duration breakDuration; // Total break time taken (including food break)
+  final Duration travelToleranceDuration; // Travel tolerance time allocated
   final double regularHours;
   final double overtimeHours;
   final int stepCount;
   final bool isCompleted;
+  final bool isAutoCompleted;
   final List<SiteVisitSummary> siteVisits;
 
   const DailyTimesheetEntry({
@@ -40,14 +43,27 @@ class DailyTimesheetEntry extends Equatable {
     this.checkInTime,
     this.checkOutTime,
     required this.totalDuration,
+    this.breakDuration = Duration.zero,
+    this.travelToleranceDuration = Duration.zero,
     required this.regularHours,
     required this.overtimeHours,
     this.stepCount = 0,
     this.isCompleted = false,
+    this.isAutoCompleted = false,
     this.siteVisits = const [],
   });
 
+  /// Net worked hours (excluding break time & travel tolerance)
   double get totalHours => totalDuration.inMinutes / 60.0;
+
+  /// Total break hours
+  double get breakHours => breakDuration.inMinutes / 60.0;
+
+  /// Travel tolerance hours
+  double get travelToleranceHours => travelToleranceDuration.inMinutes / 60.0;
+
+  /// Gross duration from check-in to check-out (inclusive of breaks and travel tolerance)
+  Duration get grossDuration => totalDuration + breakDuration + travelToleranceDuration;
 
   @override
   List<Object?> get props => [
@@ -57,10 +73,70 @@ class DailyTimesheetEntry extends Equatable {
         checkInTime,
         checkOutTime,
         totalDuration,
+        breakDuration,
+        travelToleranceDuration,
         regularHours,
         overtimeHours,
         stepCount,
         isCompleted,
+        isAutoCompleted,
         siteVisits,
       ];
 }
+
+class SiteEmployeeContribution extends Equatable {
+  final String employeeId;
+  final String employeeName;
+  final String employeeCode;
+  final String department;
+  final double totalHours;
+  final int visitCount;
+
+  const SiteEmployeeContribution({
+    required this.employeeId,
+    required this.employeeName,
+    this.employeeCode = 'EMP',
+    this.department = 'Operations',
+    required this.totalHours,
+    required this.visitCount,
+  });
+
+  @override
+  List<Object?> get props => [
+        employeeId,
+        employeeName,
+        employeeCode,
+        department,
+        totalHours,
+        visitCount,
+      ];
+}
+
+class SiteManHourSummary extends Equatable {
+  final String siteName;
+  final String clientGroup;
+  final double totalHours;
+  final int totalVisits;
+  final int distinctEmployeesCount;
+  final List<SiteEmployeeContribution> employeeContributions;
+
+  const SiteManHourSummary({
+    required this.siteName,
+    required this.clientGroup,
+    required this.totalHours,
+    required this.totalVisits,
+    required this.distinctEmployeesCount,
+    required this.employeeContributions,
+  });
+
+  @override
+  List<Object?> get props => [
+        siteName,
+        clientGroup,
+        totalHours,
+        totalVisits,
+        distinctEmployeesCount,
+        employeeContributions,
+      ];
+}
+

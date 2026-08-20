@@ -1,12 +1,103 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:geolocator/geolocator.dart';
 import 'admin_cubit.dart';
 import '../domain/office_entity.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/services/location_service.dart';
 import '../../../core/widgets/custom_text_field.dart';
 
 class OfficeManagementScreen extends StatelessWidget {
   const OfficeManagementScreen({super.key});
+
+  void _showGpsResultDialog(BuildContext context, LocationDataResult loc) {
+    final bool isError = loc.address.contains('Permission Denied') ||
+        loc.address.contains('Disabled') ||
+        loc.address.contains('GPS Error') ||
+        loc.address.contains('Timeout');
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(
+              isError
+                  ? Icons.warning_amber_rounded
+                  : Icons.check_circle_rounded,
+              color: isError ? Colors.orange : Colors.green,
+              size: 28,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                isError ? 'GPS Signal Warning' : 'GPS Captured Successfully',
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isError) ...[
+              Text(
+                loc.address,
+                style: const TextStyle(
+                    color: Colors.redAccent,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Please turn on GPS/Location services on your device and ensure location permission is allowed.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ] else ...[
+              Text('Latitude: ${loc.latitude.toStringAsFixed(6)}'),
+              const SizedBox(height: 4),
+              Text('Longitude: ${loc.longitude.toStringAsFixed(6)}'),
+              const SizedBox(height: 4),
+              Text('Accuracy: ±${loc.accuracy.toStringAsFixed(1)}m'),
+              const Divider(height: 16),
+              Text(
+                'Address:\n${loc.address}',
+                style:
+                    const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          if (isError)
+            OutlinedButton.icon(
+              icon: const Icon(Icons.location_on_rounded, size: 18),
+              label: Text(loc.address.contains('Permission')
+                  ? 'Open App Settings'
+                  : 'Turn On Location'),
+              onPressed: () {
+                Navigator.pop(dialogCtx);
+                if (loc.address.contains('Permission')) {
+                  Geolocator.openAppSettings();
+                } else {
+                  Geolocator.openLocationSettings();
+                }
+              },
+            ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isError ? Colors.orange : AppColors.primary,
+            ),
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('OK', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
 
   void _showOfficeForm(BuildContext context, [OfficeEntity? office]) {
     final nameController =
@@ -80,11 +171,18 @@ class OfficeManagementScreen extends StatelessWidget {
                                         loc.latitude.toStringAsFixed(6);
                                     lngController.text =
                                         loc.longitude.toStringAsFixed(6);
-                                    addressController.text = loc.address;
+                                    if (loc.address.isNotEmpty &&
+                                        !loc.address
+                                            .contains('Permission Denied') &&
+                                        !loc.address.contains('GPS Error')) {
+                                      addressController.text = loc.address;
+                                    }
                                   });
+                                  _showGpsResultDialog(modalCtx, loc);
                                 }
                               } catch (e) {
-                                debugPrint('Error capturing location for office: $e');
+                                debugPrint(
+                                    'Error capturing location for office: $e');
                               } finally {
                                 if (modalCtx.mounted) {
                                   setModalState(() => isLocating = false);
@@ -194,9 +292,14 @@ class OfficeManagementScreen extends StatelessWidget {
                     ),
                     title: Row(
                       children: [
-                        Text(off.name,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.bold)),
+                        Expanded(
+                          child: Text(
+                            off.name,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                         if (off.isDefault) ...[
                           const SizedBox(width: 8),
                           Container(
