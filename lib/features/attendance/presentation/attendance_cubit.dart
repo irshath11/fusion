@@ -238,24 +238,20 @@ class AttendanceCubit extends Cubit<AttendanceState> {
             matchedWorkSiteId = matches.first.id;
           }
         }
+        if (matchedWorkSiteId == null && resolvedLocationName.isNotEmpty) {
+          final matches = workSites.where((s) =>
+              resolvedLocationName.toLowerCase().contains(s.siteName.toLowerCase()) ||
+              s.siteName.toLowerCase().contains(resolvedLocationName.toLowerCase()));
+          if (matches.isNotEmpty) {
+            matchedWorkSiteId = matches.first.id;
+          }
+        }
         matchedWorkSiteId ??= (workSites.isNotEmpty ? workSites.first.id : null);
       }
 
       final String formattedAddress = location.address.isNotEmpty
           ? location.address
           : await LocationService.getAddressFromCoordinates(location.latitude, location.longitude);
-
-      String? matchedWorkSiteId;
-      if (step == WorkflowStep.siteCheckIn || step == WorkflowStep.siteCheckOut) {
-        final matches = workSites.where((s) =>
-            resolvedLocationName.toLowerCase().contains(s.siteName.toLowerCase()) ||
-            s.siteName.toLowerCase().contains(resolvedLocationName.toLowerCase()));
-        if (matches.isNotEmpty) {
-          matchedWorkSiteId = matches.first.id;
-        } else if (workSites.isNotEmpty) {
-          matchedWorkSiteId = workSites.first.id;
-        }
-      }
 
       // 5. Create & Persist Attendance Record
       final record = AttendanceRecord(
