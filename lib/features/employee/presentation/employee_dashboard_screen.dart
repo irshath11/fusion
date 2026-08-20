@@ -19,7 +19,7 @@ import '../../auth/presentation/auth_cubit.dart';
 import '../../auth/presentation/login_screen.dart';
 import '../../timesheet/presentation/employee_timesheet_screen.dart';
 import '../../../core/constants/app_theme.dart';
-import '../../../core/theme/theme_selector_modal.dart';
+import '../../../core/widgets/app_shell.dart';
 import 'package:intl/intl.dart';
 
 class EmployeeDashboardScreen extends StatefulWidget {
@@ -34,6 +34,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
   final LocalDatabaseService _db = LocalDatabaseService();
   final SyncEngine _syncEngine = SyncEngine();
 
+  int _selectedNavIndex = 0;
   int _pendingSyncCount = 0;
   bool _isSyncing = false;
   Timer? _workingTimeTimer;
@@ -124,7 +125,8 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
               ),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.currentColors.primaryFor(Theme.of(ctx).brightness),
+                  backgroundColor: AppTheme.currentColors
+                      .primaryFor(Theme.of(ctx).brightness),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8)),
@@ -256,7 +258,8 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
             title: Row(
               children: [
                 Icon(Icons.lock_reset_rounded,
-                    color: AppTheme.currentColors.primaryFor(Theme.of(context).brightness)),
+                    color: AppTheme.currentColors
+                        .primaryFor(Theme.of(context).brightness)),
                 const SizedBox(width: 10),
                 const Text('Change Password'),
               ],
@@ -375,7 +378,8 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.currentColors.primaryFor(Theme.of(ctx).brightness),
+                  backgroundColor: AppTheme.currentColors
+                      .primaryFor(Theme.of(ctx).brightness),
                   foregroundColor: Colors.white,
                 ),
                 onPressed: isLoading
@@ -440,8 +444,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     String workingTime = '00h 00m';
     final bool isOnBreak =
         _db.isEmployeeOnBreakToday(user?.id ?? user?.firebaseUid);
-    final activeBreak =
-        _db.getActiveBreakToday(user?.id ?? user?.firebaseUid);
+    final activeBreak = _db.getActiveBreakToday(user?.id ?? user?.firebaseUid);
     final Duration totalBreakToday =
         _db.getTodayBreakDuration(user?.id ?? user?.firebaseUid);
 
@@ -486,77 +489,32 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
 
     final activeSiteName = _db.getActiveSiteNameToday(empId);
     final offices = _db.getOffices();
-    final activeLocationDisplay = (activeSiteName != null && activeSiteName.trim().isNotEmpty)
-        ? activeSiteName.trim()
-        : (offices.isNotEmpty ? offices.first.name : 'Main HQ Office');
+    final activeLocationDisplay =
+        (activeSiteName != null && activeSiteName.trim().isNotEmpty)
+            ? activeSiteName.trim()
+            : (offices.isNotEmpty ? offices.first.name : 'Main HQ Office');
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(user?.fullName ?? 'Field Employee'),
-            Text(
-              'Field Workforce Duty Portal',
-              style:
-                  TextStyle(fontSize: 12, color: AppColors.textSecondaryLight),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.palette_rounded),
-            tooltip: 'Theme & Appearance',
-            onPressed: () => ThemeSelectorModal.show(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.date_range_rounded),
-            tooltip: 'My Timesheet',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => EmployeeTimesheetScreen(
-                    employeeId: user?.id ?? user?.firebaseUid,
-                    employeeName: user?.fullName,
-                  ),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.lock_reset_rounded),
-            tooltip: 'Change Password',
-            onPressed: _showChangePasswordDialog,
-          ),
-          IconButton(
-            icon: _isSyncing
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.sync_rounded),
-            tooltip: _isSyncing ? 'Syncing...' : 'Sync Offline Queue',
-            onPressed: _isSyncing ? null : _manualSync,
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Logout',
-            onPressed: () {
-              context.read<AuthCubit>().logout();
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (ctx) => const LoginScreen()),
-                (route) => false,
-              );
-            },
-          ),
-        ],
+    final destinations = const [
+      NavDestinationItem(
+        icon: Icons.radar_outlined,
+        activeIcon: Icons.radar_rounded,
+        label: 'Duty Radar',
       ),
-      body: SafeArea(
+      NavDestinationItem(
+        icon: Icons.receipt_long_outlined,
+        activeIcon: Icons.receipt_long_rounded,
+        label: 'Timesheet',
+      ),
+    ];
+
+    Widget bodyWidget;
+    if (_selectedNavIndex == 1) {
+      bodyWidget = EmployeeTimesheetScreen(
+        employeeId: user?.id ?? user?.firebaseUid,
+        employeeName: user?.fullName,
+      );
+    } else {
+      bodyWidget = SafeArea(
         child: Column(
           children: [
             OfflineBanner(
@@ -693,8 +651,8 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                     final isDark =
                         Theme.of(context).brightness == Brightness.dark;
                     final palette = AppTheme.currentColors;
-                    final activePrimary = palette
-                        .primaryFor(isDark ? Brightness.dark : Brightness.light);
+                    final activePrimary = palette.primaryFor(
+                        isDark ? Brightness.dark : Brightness.light);
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -730,8 +688,8 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                     Container(
                                       padding: const EdgeInsets.all(12),
                                       decoration: BoxDecoration(
-                                        color: activePrimary
-                                            .withValues(alpha: 0.15),
+                                        color: activePrimary.withValues(
+                                            alpha: 0.15),
                                         borderRadius: BorderRadius.circular(
                                             palette.cardRadius * 0.7),
                                       ),
@@ -745,7 +703,9 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            activeSiteName != null ? 'Active Work Site Location' : 'Assigned Office Station',
+                                            activeSiteName != null
+                                                ? 'Active Work Site Location'
+                                                : 'Assigned Office Station',
                                             style: TextStyle(
                                                 fontSize: 12,
                                                 color: isDark
@@ -760,8 +720,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                                 fontSize: 16,
                                                 color: isDark
                                                     ? palette.textPrimaryDark
-                                                    : palette
-                                                        .textPrimaryLight),
+                                                    : palette.textPrimaryLight),
                                           ),
                                         ],
                                       ),
@@ -835,47 +794,66 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                           switchInCurve: Curves.easeOutCubic,
                           switchOutCurve: Curves.easeInCubic,
                           child: KeyedSubtree(
-                            key: ValueKey('workflow_step_${currentStep}_${isOnBreak}'),
+                            key: ValueKey(
+                                'workflow_step_${currentStep}_${isOnBreak}'),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (currentStep == WorkflowStep.breakEnd || isOnBreak) ...[
+                                if (currentStep == WorkflowStep.breakEnd ||
+                                    isOnBreak) ...[
                                   Card(
-                                    color: isDark ? const Color(0xFF2C2416) : Colors.amber.shade50,
+                                    color: isDark
+                                        ? const Color(0xFF2C2416)
+                                        : Colors.amber.shade50,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(14),
                                       side: BorderSide(
-                                        color: isDark ? Colors.amber.shade700 : Colors.amber.shade400,
+                                        color: isDark
+                                            ? Colors.amber.shade700
+                                            : Colors.amber.shade400,
                                         width: 1.5,
                                       ),
                                     ),
                                     child: Padding(
                                       padding: const EdgeInsets.all(16.0),
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Row(
                                             children: [
                                               Container(
-                                                padding: const EdgeInsets.all(8),
+                                                padding:
+                                                    const EdgeInsets.all(8),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.amber.shade700.withValues(alpha: 0.18),
-                                                  borderRadius: BorderRadius.circular(10),
+                                                  color: Colors.amber.shade700
+                                                      .withValues(alpha: 0.18),
+                                                  borderRadius:
+                                                      BorderRadius.circular(10),
                                                 ),
-                                                child: Icon(Icons.coffee_rounded,
-                                                    color: Colors.amber.shade800, size: 24),
+                                                child: Icon(
+                                                    Icons.coffee_rounded,
+                                                    color:
+                                                        Colors.amber.shade800,
+                                                    size: 24),
                                               ),
                                               const SizedBox(width: 12),
                                               Expanded(
                                                 child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
                                                   children: [
                                                     Text(
                                                       'Currently On Break',
                                                       style: TextStyle(
                                                         fontSize: 16,
-                                                        fontWeight: FontWeight.bold,
-                                                        color: isDark ? Colors.amber.shade200 : Colors.amber.shade900,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: isDark
+                                                            ? Colors
+                                                                .amber.shade200
+                                                            : Colors
+                                                                .amber.shade900,
                                                       ),
                                                     ),
                                                     Text(
@@ -884,7 +862,11 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                                           : 'Break In Progress',
                                                       style: TextStyle(
                                                         fontSize: 12,
-                                                        color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
+                                                        color: isDark
+                                                            ? Colors
+                                                                .grey.shade400
+                                                            : Colors
+                                                                .grey.shade700,
                                                       ),
                                                     ),
                                                   ],
@@ -897,7 +879,10 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                             'Break time is automatically excluded from your work hour calculation. Tap below to resume duty.',
                                             style: TextStyle(
                                               fontSize: 12,
-                                              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                              color: isDark
+                                                  ? AppColors.textSecondaryDark
+                                                  : AppColors
+                                                      .textSecondaryLight,
                                             ),
                                           ),
                                           const SizedBox(height: 14),
@@ -905,10 +890,12 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                             text: state is AttendanceProcessing
                                                 ? 'Acquiring GPS & Resuming...'
                                                 : 'End Break & Resume Work',
-                                            isLoading: state is AttendanceProcessing,
+                                            isLoading:
+                                                state is AttendanceProcessing,
                                             icon: Icons.play_arrow_rounded,
                                             onPressed: () =>
-                                                _handleAttendanceStep(WorkflowStep.breakEnd),
+                                                _handleAttendanceStep(
+                                                    WorkflowStep.breakEnd),
                                           ),
                                         ],
                                       ),
@@ -1024,39 +1011,57 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                               Expanded(
                                                 flex: 6,
                                                 child: AppButton(
-                                                  text: state is AttendanceProcessing
+                                                  text: state
+                                                          is AttendanceProcessing
                                                       ? 'Logging...'
                                                       : 'Check-Out Site',
-                                                  isLoading:
-                                                      state is AttendanceProcessing,
+                                                  isLoading: state
+                                                      is AttendanceProcessing,
                                                   icon: Icons.logout_rounded,
                                                   onPressed: () =>
                                                       _handleAttendanceStep(
-                                                          WorkflowStep.siteCheckOut),
+                                                          WorkflowStep
+                                                              .siteCheckOut),
                                                 ),
                                               ),
                                               const SizedBox(width: 8),
                                               Expanded(
                                                 flex: 5,
                                                 child: OutlinedButton.icon(
-                                                  onPressed: state is AttendanceProcessing
+                                                  onPressed: state
+                                                          is AttendanceProcessing
                                                       ? null
-                                                      : () => _handleAttendanceStep(
-                                                          WorkflowStep.breakStart),
-                                                  icon: const Icon(Icons.coffee_rounded, size: 18),
+                                                      : () =>
+                                                          _handleAttendanceStep(
+                                                              WorkflowStep
+                                                                  .breakStart),
+                                                  icon: const Icon(
+                                                      Icons.coffee_rounded,
+                                                      size: 18),
                                                   label: const FittedBox(
                                                     fit: BoxFit.scaleDown,
                                                     child: Text(
                                                       'Take Break',
-                                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                                      style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold),
                                                     ),
                                                   ),
-                                                  style: OutlinedButton.styleFrom(
-                                                    foregroundColor: Colors.amber.shade800,
-                                                    side: BorderSide(color: Colors.amber.shade600),
-                                                    padding: const EdgeInsets.symmetric(vertical: 14),
-                                                    shape: RoundedRectangleBorder(
-                                                      borderRadius: BorderRadius.circular(10),
+                                                  style:
+                                                      OutlinedButton.styleFrom(
+                                                    foregroundColor:
+                                                        Colors.amber.shade800,
+                                                    side: BorderSide(
+                                                        color: Colors
+                                                            .amber.shade600),
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        vertical: 14),
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              10),
                                                     ),
                                                   ),
                                                 ),
@@ -1174,22 +1179,32 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                           ),
                                           const SizedBox(height: 10),
                                           OutlinedButton.icon(
-                                            onPressed: state is AttendanceProcessing
+                                            onPressed: state
+                                                    is AttendanceProcessing
                                                 ? null
                                                 : () => _handleAttendanceStep(
                                                     WorkflowStep.breakStart),
-                                            icon: const Icon(Icons.coffee_rounded, size: 18),
+                                            icon: const Icon(
+                                                Icons.coffee_rounded,
+                                                size: 18),
                                             label: const Text(
                                               'Take a Break',
-                                              style: TextStyle(fontWeight: FontWeight.bold),
+                                              style: TextStyle(
+                                                  fontWeight: FontWeight.bold),
                                             ),
                                             style: OutlinedButton.styleFrom(
-                                              foregroundColor: Colors.amber.shade800,
-                                              side: BorderSide(color: Colors.amber.shade600),
-                                              padding: const EdgeInsets.symmetric(vertical: 12),
-                                              minimumSize: const Size(double.infinity, 44),
+                                              foregroundColor:
+                                                  Colors.amber.shade800,
+                                              side: BorderSide(
+                                                  color: Colors.amber.shade600),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      vertical: 12),
+                                              minimumSize: const Size(
+                                                  double.infinity, 44),
                                               shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(10),
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
                                               ),
                                             ),
                                           ),
@@ -1265,9 +1280,11 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                           WorkflowStep.siteCheckOut) &&
                                   record.siteName != null &&
                                   record.siteName!.trim().isNotEmpty;
-                              
-                              final isBreakStart = record.workflowStep == WorkflowStep.breakStart;
-                              final isBreakEnd = record.workflowStep == WorkflowStep.breakEnd;
+
+                              final isBreakStart = record.workflowStep ==
+                                  WorkflowStep.breakStart;
+                              final isBreakEnd =
+                                  record.workflowStep == WorkflowStep.breakEnd;
                               final isBreak = isBreakStart || isBreakEnd;
 
                               final Color stepColor = isBreak
@@ -1282,7 +1299,9 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                               String stepTitle;
                               if (isBreakStart) {
                                 final sName = record.siteName?.trim();
-                                if (sName != null && sName.isNotEmpty && sName != 'Break') {
+                                if (sName != null &&
+                                    sName.isNotEmpty &&
+                                    sName != 'Break') {
                                   stepTitle = '☕ Break Started ($sName)';
                                 } else {
                                   stepTitle = '☕ Break Started';
@@ -1290,7 +1309,8 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                               } else if (isBreakEnd) {
                                 stepTitle = '🟢 Break Ended (Resumed Work)';
                               } else if (hasSite) {
-                                stepTitle = '${record.workflowStep.displayName} (${record.siteName!.trim()})';
+                                stepTitle =
+                                    '${record.workflowStep.displayName} (${record.siteName!.trim()})';
                               } else {
                                 stepTitle = record.workflowStep.displayName;
                               }
@@ -1301,7 +1321,8 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                 decoration: BoxDecoration(
                                   color: Theme.of(context).cardColor,
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: stepColor.withValues(alpha: 0.6)),
+                                  border: Border.all(
+                                      color: stepColor.withValues(alpha: 0.6)),
                                 ),
                                 child: Row(
                                   children: [
@@ -1328,7 +1349,11 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                                       fontWeight:
                                                           FontWeight.bold,
                                                       color: isBreak
-                                                          ? (isDark ? Colors.amber.shade200 : Colors.amber.shade900)
+                                                          ? (isDark
+                                                              ? Colors.amber
+                                                                  .shade200
+                                                              : Colors.amber
+                                                                  .shade900)
                                                           : null),
                                                 ),
                                               ),
@@ -1339,8 +1364,12 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                                         vertical: 2),
                                                 decoration: BoxDecoration(
                                                   color: isBreak
-                                                      ? Colors.amber.shade700.withValues(alpha: 0.15)
-                                                      : activePrimary.withValues(alpha: 0.1),
+                                                      ? Colors.amber.shade700
+                                                          .withValues(
+                                                              alpha: 0.15)
+                                                      : activePrimary
+                                                          .withValues(
+                                                              alpha: 0.1),
                                                   borderRadius:
                                                       BorderRadius.circular(6),
                                                 ),
@@ -1392,7 +1421,50 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
             ),
           ],
         ),
-      ),
+      );
+    }
+
+    return AppShell(
+      title: user?.fullName ?? 'Field Employee',
+      selectedIndex: _selectedNavIndex,
+      onDestinationSelected: (index) {
+        setState(() => _selectedNavIndex = index);
+      },
+      destinations: destinations,
+      userRoleLabel: 'Field Employee',
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.lock_reset_rounded),
+          tooltip: 'Change Password',
+          onPressed: _showChangePasswordDialog,
+        ),
+        IconButton(
+          icon: _isSyncing
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.sync_rounded),
+          tooltip: _isSyncing ? 'Syncing...' : 'Sync Offline Queue',
+          onPressed: _isSyncing ? null : _manualSync,
+        ),
+        IconButton(
+          icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
+          tooltip: 'Logout',
+          onPressed: () {
+            context.read<AuthCubit>().logout();
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (ctx) => const LoginScreen()),
+              (route) => false,
+            );
+          },
+        ),
+      ],
+      body: bodyWidget,
     );
   }
 
