@@ -18,13 +18,14 @@ Enterprise-grade, offline-first mobile and web application built using **Flutter
 - **Primary Firebase Auth + Local Hive Database Fallback**: Authenticates via Firebase Authentication; seamlessly falls back to local database profiles (`app_settings` Hive box) and demo admin credentials if Firebase is unreachable or throws credential exceptions (`invalid-credential`, `user-not-found`).
 - **Universal Password Visibility Toggles**: All password input fields across the application (Login, Setup Wizard, Employee Password Update, User Creation Form, Ownership Transfer) feature interactive show/hide eye icon toggle buttons (`Icons.visibility_outlined` / `Icons.visibility_off_outlined`).
 
-### 4. Strict 4-Step Sequential Attendance Workflow Engine
+### 4. Strict 4-Step Sequential Attendance Workflow & Duty Pause Engine
 `1. Office Check-In` ➔ `2. Site Check-In` ➔ `3. Site Check-Out (Leaving Site)` ➔ `4. Office Check-Out (Reach Office)` ➔ `Shift Completed`
 - State locks prevent skipping steps or altering step execution order.
 - `SiteNameDialog` dropdown prompts selection from pre-configured work sites (`RELAAM (AMC)`, `RELAAM (WO)`, `CARRIER`, `MOPA`, `MPM`, `ELV`, `OTHERS (AMC)`, `OTHERS (WO)`) or custom location inputs.
+- **Duty Pause & Break Tracking (`BreakTypeDialog`)**: Allows field personnel to pause duty for rest/errands with optional notes, excluding break duration from net billable duty hours without breaking the 4-step shift workflow.
 
 ### 5. Employee Work Timesheet Engine
-- **Automatic Hour Calculation**: Calculates total daily work duration between `1. Office Check-In` and `4. Office Check-Out`.
+- **Automatic Hour Calculation**: Calculates total daily work duration between `1. Office Check-In` and `4. Office Check-Out`, factoring out logged duty breaks.
 - **Regular vs. Overtime Hours**: Automatically caps regular working hours at **8.0 hours per day** and allocates any excess duration as **Overtime Hours**.
 - **Site Visit Breakdown**: Captures detailed site visit durations (`SiteVisitSummary`) for each field location visited during the shift.
 - **Timesheet PDF Export**: Generates and downloads individual and master timesheet reports in PDF format directly from the app.
@@ -57,7 +58,19 @@ Enterprise-grade, offline-first mobile and web application built using **Flutter
 - Local Hive key-value boxes store attendance logs, photos, and sync queues without internet.
 - Sync engine automatically flushes queue upon connectivity restoration while preserving original `event_timestamp`.
 
-### 13. Analytics & Multi-Format Report Export
+### 13. 3-Tab Advanced Reports & Analytics Suite
+- **Directory 3-Level Drilldown View**:
+  - *Level 1*: All Employee list with real-time search, Executive KPI Ticker Ribbon (Total Staff, Active Duty, Attendance %, Geofence Audit %), and Cloud Log Sync.
+  - *Level 2*: Selected employee date-wise duty log timeline & check-in/out timestamps.
+  - *Level 3*: Date detailed view with high-res camera selfie photo verification, exact GPS coordinates, geofence compliance badges, and site visit breakdown.
+- **Cumulative Summary Tab**: Cross-employee aggregate attendance statistics, present/absent counts, total regular hours, overtime hours, cumulative site visits, and export shortcuts.
+- **Site / Client Man-Hours Analytics Tab**: Site-wise and Client-wise man-hour aggregation engine, date range filters (`All Time`, `This Month`, `This Week`, `Today`), grouping toggle (`Group by Client` vs. `Specific Site`), and expandable site cards with detailed worker lists.
+
+### 14. Cloud Attendance Log Sync & Local Auto-Merge Engine
+- On-demand and automatic synchronization of remote attendance logs from Supabase (`fetchAttendanceRecordsFromSupabase()`).
+- Auto-merges remote records into local Hive storage while eliminating duplicates, featuring live progress indicator controls (`_isLoadingCloud`).
+
+### 15. Analytics & Multi-Format Report Export
 - Generates downloadable compliance reports in **PDF**, **Excel (.xlsx)**, and **CSV** formats with customizable filters.
 
 ---

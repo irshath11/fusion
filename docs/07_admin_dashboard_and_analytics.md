@@ -7,12 +7,17 @@ The **Admin Dashboard, Live GPS Tracking & Analytics** feature provides executiv
 
 ## 1. Key Functionalities
 
-1. **Executive Key Performance Indicators (KPI Cards)**:
-   - **Active Employees**: Total active personnel in system.
+1. **Executive Key Performance Indicators (KPI Cards & Ticker Ribbon)**:
+   - **Active Employees**: Total active personnel configured in system.
    - **Present Today**: Unique employees who executed at least 1 workflow step today.
    - **On Duty**: Personnel actively performing field inspection duties.
    - **Shift Complete**: Personnel who completed all 4 daily workflow steps (`Office Check-Out`).
    - **Pending Sync**: Queue of records stored locally waiting for network transmission.
+   - **Executive KPI Ticker Ribbon (`AppGlassCard`)**: High-impact glassmorphic KPI summary bar displaying:
+     - **Total Staff**: Dynamic aggregate staff count.
+     - **Active Duty**: Active field personnel count (`officeCheckIn`).
+     - **Attendance Rate (%)**: Real-time calculated attendance compliance percentage.
+     - **Geofence Audit (%)**: Percentage of check-ins meeting strict geofence radius criteria (e.g. 98.4%).
 
 2. **Live Interactive GPS Tracking Map (`LiveTrackingMapScreen`)**:
    - Built with OpenStreetMap & `flutter_map`.

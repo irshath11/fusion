@@ -30,29 +30,32 @@ The **Fusion Field Workforce Tracking & Timesheet Management Platform** is an en
                  │
                  ├─► Primary: Firebase Auth (`signInWithEmailAndPassword`)
                  └─► Fallback: Local Hive DB & Demo Credentials (`app_settings` & `employeesBox`)
-                         │
-                         ▼
-             [Role-Based Router (`main.dart`)]
-                 │
-                 ├─► Role = 'SUPER_ADMIN' / 'ADMIN' ──► Admin Web/Mobile Suite (`AdminDashboardScreen`)
-                 │                                        ├─► Executive KPI Cards & Activity Feed
-                 │                                        ├─► Employee & User Management (3-Tier RBAC)
-                 │                                        ├─► Office & Work Site Registry
-                 │                                        ├─► Live GPS Tracking Map (`LiveTrackingMapScreen`)
-                 │                                        ├─► Timesheet & Reports Engine (`ReportsAnalyticsScreen`)
-                 │                                        └─► Organization Ownership Transfer Dialog
-                 │
-                 └─► Role = 'EMPLOYEE' ───────────────► Employee Duty Portal (`EmployeeDashboardScreen`)
-                                                         ├─► 4-Step Attendance Stepper:
-                                                         │    1. Office Check-In (`OFFICE_CHECK_IN`)
-                                                         │    2. Site Check-In (`SITE_CHECK_IN` + `SiteNameDialog`)
-                                                         │    3. Site Check-Out (`SITE_CHECK_OUT`)
-                                                         │    4. Office Check-Out (`OFFICE_CHECK_OUT`)
-                                                         │    5. Shift Completed (`COMPLETED`)
-                                                         ├─► Live Camera Capture & 480px JPEG Compression Engine
-                                                         ├─► Haversine Distance Geofence Validation
-                                                         ├─► Personal Daily Work Timesheet & PDF Export
-                                                         └─► Background Offline Sync Queue Indicator (`OfflineBanner`)
+                          [Role-Based Router (`main.dart`)]
+                  │
+                  ├─► Role = 'SUPER_ADMIN' / 'ADMIN' ──► Admin Web/Mobile Suite (`AdminDashboardScreen`)
+                  │                                        ├─► Executive KPI Ticker Ribbon & Attendance Feeds
+                  │                                        ├─► Employee & User Management (3-Tier RBAC)
+                  │                                        ├─► Office & Work Site Registry
+                  │                                        ├─► Live GPS Tracking Map (`LiveTrackingMapScreen`)
+                  │                                        ├─► 3-Tab Reports & Analytics (`ReportsAnalyticsScreen`)
+                  │                                        │    ├─► Directory 3-Level Drilldown & Selfie Verification
+                  │                                        │    ├─► Cumulative Attendance Summary & Overtime Aggregation
+                  │                                        │    └─► Site / Client Man-Hours Analytics & Client Grouping
+                  │                                        ├─► Cloud Attendance Log Sync & Auto-Merge Engine
+                  │                                        └─► Organization Ownership Transfer Dialog
+                  │
+                  └─► Role = 'EMPLOYEE' ───────────────► Employee Duty Portal (`EmployeeDashboardScreen`)
+                                                          ├─► 4-Step Attendance Stepper & Duty Pause Engine:
+                                                          │    1. Office Check-In (`OFFICE_CHECK_IN`)
+                                                          │    2. Site Check-In (`SITE_CHECK_IN` + `SiteNameDialog`)
+                                                          │    3. Duty Pause / Break (`BreakTypeDialog`)
+                                                          │    4. Site Check-Out (`SITE_CHECK_OUT`)
+                                                          │    5. Office Check-Out (`OFFICE_CHECK_OUT`)
+                                                          │    6. Shift Completed (`COMPLETED`)
+                                                          ├─► Live Camera Capture & 480px JPEG Compression Engine
+                                                          ├─► Haversine Distance Geofence Validation
+                                                          ├─► Personal Daily Work Timesheet & PDF Export
+                                                          └─► Background Offline Sync Queue Indicator (`OfflineBanner`)
 ```
 
 ### User Roles & Permissions Matrix

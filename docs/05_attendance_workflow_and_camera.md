@@ -43,6 +43,11 @@ The **Attendance Workflow & Camera Verification** feature enforces a strict sequ
    - Formats and displays exact capture timestamps (e.g., `09:15 AM`, `05:30 PM`) in a styled badge next to step titles.
    - Displays sync badges (`SYNCED` / `PENDING`).
 
+6. **Duty Pause & Break Tracking Engine (`BreakTypeDialog`)**:
+   - Interactive dialog allowing field personnel to log duty breaks during an active shift.
+   - Displays an informational banner notifying users that break durations are automatically excluded from net billable work shift hours without breaking the 4-step shift sequence.
+   - Supports optional detail notes (e.g., `Quick rest`, `Personal errand`) for administrative auditing.
+
 ---
 
 ## 2. Technical Implementation & Data Structures
@@ -137,5 +142,6 @@ class AttendanceRecord {
 | [`lib/features/attendance/presentation/attendance_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/presentation/attendance_cubit.dart) | Cubit executing workflow step validation, geofence checks, record creation, and sync queuing. |
 | [`lib/features/employee/presentation/employee_dashboard_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/employee/presentation/employee_dashboard_screen.dart) | Employee dashboard UI with workflow timeline, capture button, and time badge displays. |
 | [`lib/features/attendance/presentation/site_name_dialog.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/presentation/site_name_dialog.dart) | Modal dialog for site selection dropdown (`RELAAM (AMC)`, `RELAAM (WO)`, `CARRIER`, `MOPA`, `MPM`, `ELV`, `OTHERS (AMC)`, `OTHERS (WO)`). |
+| [`lib/features/attendance/presentation/break_type_dialog.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/presentation/break_type_dialog.dart) | Modal dialog for starting duty breaks and logging optional break details. |
 | [`lib/features/attendance/presentation/camera_capture_modal.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/presentation/camera_capture_modal.dart) | Camera modal dialog handling camera preview, capture, retake, and confirmation. |
 | [`lib/core/services/camera_service.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/services/camera_service.dart) | Image downscaling and JPEG quality compression service. |
