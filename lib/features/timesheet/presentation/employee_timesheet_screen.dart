@@ -510,10 +510,10 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
     final timeFormat = DateFormat('hh:mm a');
 
     final String checkInStr = entry.checkInTime != null
-        ? timeFormat.format(entry.checkInTime!.toLocal())
+        ? timeFormat.format(entry.checkInTime!)
         : '--:--';
     final String checkOutStr = entry.checkOutTime != null
-        ? timeFormat.format(entry.checkOutTime!.toLocal())
+        ? timeFormat.format(entry.checkOutTime!)
         : '--:--';
 
     return InkWell(
@@ -698,34 +698,6 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                     ),
                   ),
                 ],
-                if (entry.travelToleranceDuration > Duration.zero) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.blue.shade300),
-                    ),
-                    child: Column(
-                      children: [
-                        Text('Travel',
-                            style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue.shade900)),
-                        Text(
-                          '${entry.travelToleranceDuration.inMinutes}m',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: Colors.blue.shade900),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
               ],
             ),
           ],
@@ -738,10 +710,10 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
     final fullFormat = DateFormat('EEEE, dd MMMM yyyy');
     final timeFormat = DateFormat('hh:mm a');
     final checkInStr = entry.checkInTime != null
-        ? timeFormat.format(entry.checkInTime!.toLocal())
+        ? timeFormat.format(entry.checkInTime!)
         : 'Pending';
     final checkOutStr = entry.checkOutTime != null
-        ? timeFormat.format(entry.checkOutTime!.toLocal())
+        ? timeFormat.format(entry.checkOutTime!)
         : 'Pending';
 
     showModalBottomSheet(
@@ -837,17 +809,6 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                           ),
                         ),
                       ],
-                      if (entry.travelToleranceDuration > Duration.zero) ...[
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _buildBreakdownBox(
-                            'Travel Tol.',
-                            '${entry.travelToleranceDuration.inMinutes}m',
-                            'Max 1.0h',
-                            Colors.blue.shade800,
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                   if (entry.siteVisits.isNotEmpty) ...[
@@ -857,9 +818,9 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                             TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     const SizedBox(height: 6),
                     ...entry.siteVisits.map((sv) {
-                      final sIn = timeFormat.format(sv.checkInTime.toLocal());
+                      final sIn = timeFormat.format(sv.checkInTime);
                       final sOut = sv.checkOutTime != null
-                          ? timeFormat.format(sv.checkOutTime!.toLocal())
+                          ? timeFormat.format(sv.checkOutTime!)
                           : 'In Progress';
 
                       return Padding(

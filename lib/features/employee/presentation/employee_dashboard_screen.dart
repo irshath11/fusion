@@ -878,7 +878,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                                     ),
                                                     Text(
                                                       activeBreak != null
-                                                          ? '${activeBreak.siteName ?? "Break"} • Started ${DateFormat("hh:mm a").format(activeBreak.eventTimestamp.toLocal())}'
+                                                          ? '${activeBreak.siteName ?? "Break"} • Started ${DateFormat("hh:mm a").format(activeBreak.eventTimestamp)}'
                                                           : 'Break In Progress',
                                                       style: TextStyle(
                                                         fontSize: 12,
@@ -1256,7 +1256,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                             itemBuilder: (context, index) {
                               final record = userTodayRecords[index];
                               final formattedTime = DateFormat('hh:mm a')
-                                  .format(record.eventTimestamp.toLocal());
+                                  .format(record.eventTimestamp);
                               final hasSite = (record.workflowStep ==
                                           WorkflowStep.siteCheckIn ||
                                       record.workflowStep ==
