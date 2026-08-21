@@ -38,7 +38,9 @@ jobs:
 
       - name: Build Web App
         run: |
-          flutter build web --release --base-href "/fusion/"
+          flutter build web --release --base-href "/"
+          cp build/web/index.html build/web/404.html
+          echo "fusionmaint.org" > build/web/CNAME
           touch build/web/.nojekyll
 
       - name: Upload GitHub Pages artifact
