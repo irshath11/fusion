@@ -176,43 +176,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                             color: AppTheme.currentColors
                                 .primaryFor(Theme.of(context).brightness)),
                     tooltip: 'Refresh Cloud Logs',
-                    onPressed: _isLoadingCloud ? null : _loadCloudAttendanceRecords,
+                    onPressed:
+                        _isLoadingCloud ? null : _loadCloudAttendanceRecords,
                   ),
                 ],
               ),
             ],
           ),
           const SizedBox(height: 12),
-
-          // Executive KPI Ticker Ribbon
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isWide = constraints.maxWidth >= 600;
-              final totalCount = allEmployees.length;
-              final activeCount = allRecords
-                  .where((r) => r.workflowStep == WorkflowStep.officeCheckIn)
-                  .map((r) => r.employeeId)
-                  .toSet()
-                  .length;
-              final rate = totalCount > 0 ? ((activeCount / totalCount) * 100).toStringAsFixed(1) : '100.0';
-
-              return AppGlassCard(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                borderRadius: 16,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildRibbonKpi('Total Staff', '$totalCount', Icons.people_outline_rounded, AppColors.info),
-                    _buildRibbonKpi('Active Duty', '$activeCount', Icons.bolt_rounded, AppColors.success),
-                    _buildRibbonKpi('Attendance', '$rate%', Icons.pie_chart_outline_rounded, AppColors.warning),
-                    if (isWide)
-                      _buildRibbonKpi('Geofence Audit', '98.4%', Icons.shield_rounded, AppColors.secondary),
-                  ],
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 14),
 
           // Tab Bar Switcher (Directory vs Cumulative Record vs Site Man-Hours)
           AppAnimatedTabSwitcher(
@@ -1782,7 +1753,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                             : AppColors.textPrimaryLight),
                                   ),
                                   const SizedBox(height: 2),
-                                  if (kIsWeb || MediaQuery.of(context).size.width > 600) ...[
+                                  if (kIsWeb ||
+                                      MediaQuery.of(context).size.width >
+                                          600) ...[
                                     Text(
                                       'Address: ${TimesheetCalculator.resolveFullAddress(r)}',
                                       style: TextStyle(
@@ -3635,7 +3608,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
   }
 
-  Widget _buildRibbonKpi(String label, String value, IconData icon, Color color) {
+  Widget _buildRibbonKpi(
+      String label, String value, IconData icon, Color color) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Row(
       children: [
