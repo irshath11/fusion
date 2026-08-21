@@ -446,8 +446,10 @@ class SupabaseService {
     required String userId,
     required String orgId,
     required String fullName,
+    String? email,
     String? phoneNumber,
     UserRole? role,
+    String? employeeCode,
     String? designation,
     String? department,
     bool? useDefaultOffice,
@@ -462,6 +464,7 @@ class SupabaseService {
         'full_name': fullName,
         'updated_at': DateTime.now().toIso8601String(),
       };
+      if (email != null && email.trim().isNotEmpty) updates['email'] = email.trim();
       if (phoneNumber != null) updates['phone_number'] = phoneNumber;
       if (role != null) updates['role'] = role.nameString;
 
@@ -470,6 +473,9 @@ class SupabaseService {
       final empUpdates = <String, dynamic>{
         'updated_at': DateTime.now().toIso8601String(),
       };
+      if (employeeCode != null && employeeCode.isNotEmpty) {
+        empUpdates['employee_code'] = employeeCode;
+      }
       if (designation != null) empUpdates['designation'] = designation;
       if (department != null) empUpdates['department'] = department;
       if (useDefaultOffice != null)

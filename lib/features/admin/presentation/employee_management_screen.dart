@@ -345,8 +345,10 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                               cubit.updateUser(
                                                 userId: user.id,
                                                 fullName: fullName,
+                                                email: email,
                                                 phoneNumber: phoneNumber,
                                                 role: role,
+                                                employeeCode: employeeCode,
                                                 designation: designation,
                                                 department: department,
                                                 useDefaultOffice:

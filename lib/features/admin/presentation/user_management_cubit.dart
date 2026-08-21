@@ -252,8 +252,10 @@ class UserManagementCubit extends Cubit<UserManagementState> {
   Future<void> updateUser({
     required String userId,
     required String fullName,
+    String? email,
     String? phoneNumber,
     UserRole? role,
+    String? employeeCode,
     String? designation,
     String? department,
     bool? useDefaultOffice,
@@ -266,16 +268,32 @@ class UserManagementCubit extends Cubit<UserManagementState> {
           _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
       final actorUserId = _db.currentUser?.id;
 
-      // Update local storage
+      // Update local UserEntity if present
+      final localUsers = _db.getUsers();
+      final userIndex = localUsers.indexWhere((u) => u.id == userId || u.email == userId);
+      if (userIndex >= 0) {
+        final existingUser = localUsers[userIndex];
+        final updatedUser = existingUser.copyWith(
+          fullName: fullName.trim(),
+          email: (email != null && email.trim().isNotEmpty) ? email.trim() : existingUser.email,
+          phoneNumber: phoneNumber?.trim() ?? existingUser.phoneNumber,
+          role: role ?? existingUser.role,
+        );
+        _db.saveUser(updatedUser);
+      }
+
+      // Update local EmployeeEntity
       final localEmployees = _db.getEmployees();
       final existingEmp = localEmployees.firstWhere(
         (e) => e.id == userId || e.email == userId,
         orElse: () => EmployeeEntity(
           id: userId,
-          employeeCode: 'EMP-000',
+          employeeCode: employeeCode?.trim().isNotEmpty == true
+              ? employeeCode!.trim()
+              : 'EMP-000',
           name: fullName,
           mobileNumber: phoneNumber ?? '',
-          email: '',
+          email: email?.trim() ?? '',
           designation: designation ?? 'Team Member',
           department: department ?? 'Operations',
         ),
@@ -283,10 +301,12 @@ class UserManagementCubit extends Cubit<UserManagementState> {
 
       final updatedEmp = EmployeeEntity(
         id: existingEmp.id,
-        employeeCode: existingEmp.employeeCode,
+        employeeCode: (employeeCode != null && employeeCode.trim().isNotEmpty)
+            ? employeeCode.trim()
+            : existingEmp.employeeCode,
         name: fullName.trim(),
         mobileNumber: phoneNumber?.trim() ?? existingEmp.mobileNumber,
-        email: existingEmp.email,
+        email: (email != null && email.trim().isNotEmpty) ? email.trim() : existingEmp.email,
         designation: designation?.trim() ?? existingEmp.designation,
         department: department?.trim() ?? existingEmp.department,
         useDefaultOffice: useDefaultOffice ?? existingEmp.useDefaultOffice,
@@ -301,8 +321,10 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         userId: userId,
         orgId: orgId,
         fullName: fullName,
+        email: email,
         phoneNumber: phoneNumber,
         role: role,
+        employeeCode: employeeCode,
         designation: designation,
         department: department,
         useDefaultOffice: useDefaultOffice,
