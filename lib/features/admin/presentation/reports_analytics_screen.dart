@@ -11,7 +11,6 @@ import '../../../core/services/pdf_export_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/utils/timesheet_calculator.dart';
 import '../../../core/widgets/app_animated_tab_switcher.dart';
-import '../../../core/widgets/app_glass_card.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../attendance/domain/attendance_record.dart';
 
@@ -3608,44 +3607,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
   }
 
-  Widget _buildRibbonKpi(
-      String label, String value, IconData icon, Color color) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.15),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, size: 16, color: color),
-        ),
-        const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                color: isDark ? Colors.white : AppColors.slate900,
-              ),
-            ),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                color: isDark ? Colors.white54 : AppColors.slate500,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
 }
 
 class _EmpCumulativeData {

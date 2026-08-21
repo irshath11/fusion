@@ -28,15 +28,6 @@ class AdminDashboardScreen extends StatefulWidget {
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   int _currentNavIndex = 0;
 
-  final List<Widget> _pages = const [
-    AdminOverviewTab(),
-    EmployeeManagementScreen(),
-    OfficeManagementScreen(),
-    WorkSiteManagementScreen(),
-    LiveTrackingMapScreen(),
-    ReportsAnalyticsScreen(),
-  ];
-
   final List<NavDestinationItem> _navItems = const [
     NavDestinationItem(
       icon: Icons.dashboard_outlined,
@@ -118,7 +109,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ],
           body: IndexedStack(
             index: _currentNavIndex,
-            children: _pages,
+            children: [
+              const AdminOverviewTab(),
+              const EmployeeManagementScreen(),
+              const OfficeManagementScreen(),
+              const WorkSiteManagementScreen(),
+              const LiveTrackingMapScreen(),
+              ReportsAnalyticsScreen(
+                key: ValueKey('reports_tab_${_currentNavIndex}_${DateTime.now().millisecondsSinceEpoch}'),
+              ),
+            ],
           ),
         ),
       ),
