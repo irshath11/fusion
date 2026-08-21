@@ -37,7 +37,9 @@ jobs:
         run: flutter pub get
 
       - name: Build Web App
-        run: flutter build web --release --base-href "/fusion/"
+        run: |
+          flutter build web --release --base-href "/fusion/"
+          touch build/web/.nojekyll
 
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
