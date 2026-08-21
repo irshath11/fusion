@@ -51,10 +51,10 @@ class AdminCubit extends Cubit<AdminState> {
     } catch (_) {}
 
     final officeMap = <String, OfficeEntity>{};
-    for (final off in localOffices) {
+    for (final off in cloudOffices) {
       officeMap[off.id] = off;
     }
-    for (final off in cloudOffices) {
+    for (final off in localOffices) {
       officeMap[off.id] = off;
     }
 
@@ -63,18 +63,47 @@ class AdminCubit extends Cubit<AdminState> {
     final orgId = _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
     try {
       final cloudUsers = await _supabase.fetchOrganizationUsers(orgId);
+      final localEmployees = _db.getEmployees();
+
       for (final u in cloudUsers) {
-        final emp = EmployeeEntity(
-          id: u.id,
-          employeeCode: 'EMP-${u.id.length >= 4 ? u.id.substring(0, 4).toUpperCase() : u.id.toUpperCase()}',
-          name: u.fullName,
-          mobileNumber: u.phoneNumber ?? '',
-          email: u.email,
-          designation: 'Staff',
-          department: 'Operations',
-          isActive: u.isActive,
-        );
-        _db.saveEmployee(emp);
+        final existingEmpIndex = localEmployees.indexWhere((e) =>
+            e.id == u.id ||
+            (e.email.isNotEmpty && u.email.isNotEmpty && e.email.trim().toLowerCase() == u.email.trim().toLowerCase()) ||
+            (e.name.trim().toLowerCase() == u.fullName.trim().toLowerCase() && u.fullName.trim().isNotEmpty));
+
+        if (existingEmpIndex >= 0) {
+          final existing = localEmployees[existingEmpIndex];
+          final updatedEmp = EmployeeEntity(
+            id: existing.id.isNotEmpty ? existing.id : u.id,
+            employeeCode: existing.employeeCode.isNotEmpty && existing.employeeCode != 'EMP-000'
+                ? existing.employeeCode
+                : 'EMP-${u.id.length >= 4 ? u.id.substring(0, 4).toUpperCase() : u.id.toUpperCase()}',
+            name: u.fullName.trim().isNotEmpty ? u.fullName.trim() : existing.name,
+            mobileNumber: (u.phoneNumber != null && u.phoneNumber!.trim().isNotEmpty)
+                ? u.phoneNumber!.trim()
+                : existing.mobileNumber,
+            email: u.email.trim().isNotEmpty ? u.email.trim() : existing.email,
+            designation: existing.designation,
+            department: existing.department,
+            useDefaultOffice: existing.useDefaultOffice,
+            assignedOfficeId: existing.assignedOfficeId,
+            assignedOfficeName: existing.assignedOfficeName,
+            isActive: u.isActive,
+          );
+          _db.saveEmployee(updatedEmp);
+        } else {
+          final emp = EmployeeEntity(
+            id: u.id,
+            employeeCode: 'EMP-${u.id.length >= 4 ? u.id.substring(0, 4).toUpperCase() : u.id.toUpperCase()}',
+            name: u.fullName,
+            mobileNumber: u.phoneNumber ?? '',
+            email: u.email,
+            designation: 'Staff',
+            department: 'Operations',
+            isActive: u.isActive,
+          );
+          _db.saveEmployee(emp);
+        }
       }
     } catch (_) {}
 

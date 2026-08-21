@@ -72,55 +72,58 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (context) => AdminCubit(),
-      child: BlocListener<AuthCubit, AuthState>(
-        listener: (context, state) {
-          if (state is Unauthenticated) {
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (ctx) => const LoginScreen()),
-              (route) => false,
-            );
-          }
-        },
-        child: AppShell(
-          title: _navItems[_currentNavIndex].label,
-          selectedIndex: _currentNavIndex,
-          onDestinationSelected: (index) {
-            setState(() => _currentNavIndex = index);
-          },
-          destinations: _navItems,
-          userRoleLabel: 'System Admin',
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.swap_horiz_rounded),
-              tooltip: 'Transfer Ownership',
-              onPressed: _showOwnershipTransferDialog,
-            ),
-            IconButton(
-              icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
-              tooltip: 'Sign Out',
-              onPressed: () {
-                context.read<AuthCubit>().logout();
+      child: Builder(
+        builder: (adminCtx) {
+          return BlocListener<AuthCubit, AuthState>(
+            listener: (context, state) {
+              if (state is Unauthenticated) {
                 Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (ctx) => const LoginScreen()),
                   (route) => false,
                 );
+              }
+            },
+            child: AppShell(
+              title: _navItems[_currentNavIndex].label,
+              selectedIndex: _currentNavIndex,
+              onDestinationSelected: (index) {
+                setState(() => _currentNavIndex = index);
+                adminCtx.read<AdminCubit>().loadDashboardData();
               },
-            ),
-          ],
-          body: IndexedStack(
-            index: _currentNavIndex,
-            children: [
-              const AdminOverviewTab(),
-              const EmployeeManagementScreen(),
-              const OfficeManagementScreen(),
-              const WorkSiteManagementScreen(),
-              const LiveTrackingMapScreen(),
-              ReportsAnalyticsScreen(
-                key: ValueKey('reports_tab_${_currentNavIndex}_${DateTime.now().millisecondsSinceEpoch}'),
+              destinations: _navItems,
+              userRoleLabel: 'System Admin',
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.swap_horiz_rounded),
+                  tooltip: 'Transfer Ownership',
+                  onPressed: _showOwnershipTransferDialog,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
+                  tooltip: 'Sign Out',
+                  onPressed: () {
+                    context.read<AuthCubit>().logout();
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (ctx) => const LoginScreen()),
+                      (route) => false,
+                    );
+                  },
+                ),
+              ],
+              body: IndexedStack(
+                index: _currentNavIndex,
+                children: [
+                  AdminOverviewTab(key: ValueKey('overview_$_currentNavIndex')),
+                  EmployeeManagementScreen(key: ValueKey('employee_$_currentNavIndex')),
+                  OfficeManagementScreen(key: ValueKey('office_$_currentNavIndex')),
+                  WorkSiteManagementScreen(key: ValueKey('worksite_$_currentNavIndex')),
+                  LiveTrackingMapScreen(key: ValueKey('live_map_$_currentNavIndex')),
+                  ReportsAnalyticsScreen(key: ValueKey('reports_$_currentNavIndex')),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
