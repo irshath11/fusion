@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - master
+      - admin_web
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
