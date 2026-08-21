@@ -1782,6 +1782,18 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                             : AppColors.textPrimaryLight),
                                   ),
                                   const SizedBox(height: 2),
+                                  if (kIsWeb || MediaQuery.of(context).size.width > 600) ...[
+                                    Text(
+                                      'Address: ${TimesheetCalculator.resolveFullAddress(r)}',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                          color: isDark
+                                              ? AppColors.textPrimaryDark
+                                              : AppColors.textPrimaryLight),
+                                    ),
+                                    const SizedBox(height: 2),
+                                  ],
                                   Text(
                                     'GPS Coordinates: ${r.latitude.toStringAsFixed(6)}, ${r.longitude.toStringAsFixed(6)} (Accuracy: ${r.gpsAccuracy.toStringAsFixed(1)}m)',
                                     style: TextStyle(

@@ -45,6 +45,41 @@ class TimesheetCalculator {
     return 'Work Site';
   }
 
+  /// Resolves exact human-readable full address for an attendance record
+  static String resolveFullAddress(AttendanceRecord r) {
+    if (r.address.trim().isNotEmpty &&
+        !r.address.contains('Live Field Location') &&
+        !r.address.contains('Timeout') &&
+        !r.address.contains('Error') &&
+        !r.address.contains('Permission Denied')) {
+      return r.address.trim();
+    }
+    final db = LocalDatabaseService();
+    if (r.workSiteId != null && r.workSiteId!.isNotEmpty) {
+      final siteMatches = db.getWorkSites().where((w) => w.id == r.workSiteId);
+      if (siteMatches.isNotEmpty && siteMatches.first.address.trim().isNotEmpty) {
+        return siteMatches.first.address.trim();
+      }
+    }
+    if (r.officeId != null && r.officeId!.isNotEmpty) {
+      final officeMatches = db.getOffices().where((o) => o.id == r.officeId);
+      if (officeMatches.isNotEmpty && officeMatches.first.address.trim().isNotEmpty) {
+        return officeMatches.first.address.trim();
+      }
+    }
+    if (r.siteName != null && r.siteName!.trim().isNotEmpty) {
+      final siteMatches = db.getWorkSites().where((w) =>
+          w.siteName.toLowerCase() == r.siteName!.trim().toLowerCase());
+      if (siteMatches.isNotEmpty && siteMatches.first.address.trim().isNotEmpty) {
+        return siteMatches.first.address.trim();
+      }
+    }
+    if (r.address.trim().isNotEmpty) {
+      return r.address.trim();
+    }
+    return 'N/A';
+  }
+
   /// Calculates daily timesheet entries from raw attendance records for an employee or all employees
   static List<DailyTimesheetEntry> calculateDailyTimesheets(
     List<AttendanceRecord> records, {
