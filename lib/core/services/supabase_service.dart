@@ -297,16 +297,114 @@ class SupabaseService {
 
       // Fallback: If orgId filter returned empty list, fetch all non-deleted users
       if (response.isEmpty) {
-        response = await client!
-            .from('users')
-            .select()
-            .eq('is_deleted', false)
-            .order('created_at', ascending: false);
+        try {
+          response = await client!
+              .from('users')
+              .select()
+              .eq('is_deleted', false)
+              .order('created_at', ascending: false);
+        } catch (_) {}
       }
 
       return response.map((json) => UserEntity.fromJson(json)).toList();
     } catch (e) {
       debugPrint('Supabase fetchOrganizationUsers error: $e');
+      return [];
+    }
+  }
+
+  /// Fetch Employees from Supabase (queries public.employees table and merges user details)
+  Future<List<EmployeeEntity>> fetchEmployeesFromSupabase([String? orgId]) async {
+    if (!_isInitialized || client == null) return [];
+
+    try {
+      final targetOrgId = (orgId != null && orgId.isNotEmpty)
+          ? await ensureOrganizationExistsInCloud(orgId) ?? orgId
+          : null;
+
+      final List<dynamic> usersResp;
+      if (targetOrgId != null && targetOrgId.isNotEmpty) {
+        final filtered = await client!
+            .from('users')
+            .select()
+            .eq('organization_id', targetOrgId)
+            .eq('is_deleted', false);
+        usersResp = filtered.isNotEmpty
+            ? filtered
+            : await client!.from('users').select().eq('is_deleted', false);
+      } else {
+        usersResp =
+            await client!.from('users').select().eq('is_deleted', false);
+      }
+
+      final List<dynamic> empResp;
+      if (targetOrgId != null && targetOrgId.isNotEmpty) {
+        final filtered = await client!
+            .from('employees')
+            .select()
+            .eq('organization_id', targetOrgId)
+            .eq('is_deleted', false);
+        empResp = filtered.isNotEmpty
+            ? filtered
+            : await client!.from('employees').select().eq('is_deleted', false);
+      } else {
+        empResp =
+            await client!.from('employees').select().eq('is_deleted', false);
+      }
+
+      final offices = await fetchOfficesFromSupabase();
+
+      final List<EmployeeEntity> result = [];
+
+      for (final u in usersResp) {
+        if (u is! Map) continue;
+        final userId = u['id']?.toString() ?? '';
+        final email = u['email']?.toString() ?? '';
+        final name = u['full_name']?.toString() ?? '';
+        final phone = u['phone_number']?.toString() ?? '';
+        final isActive = u['is_active'] ?? true;
+
+        Map<String, dynamic>? empRow;
+        for (final e in empResp) {
+          if (e is Map && e['user_id']?.toString() == userId) {
+            empRow = Map<String, dynamic>.from(e);
+            break;
+          }
+        }
+
+        final empCode = empRow?['employee_code']?.toString() ??
+            'EMP-${userId.length >= 4 ? userId.substring(0, 4).toUpperCase() : "000"}';
+        final designation = empRow?['designation']?.toString() ?? 'Staff';
+        final department = empRow?['department']?.toString() ?? 'Operations';
+        final useDefaultOffice = empRow?['use_default_office'] ?? true;
+        final assignedOfficeId = empRow?['assigned_office_id']?.toString();
+
+        String? assignedOfficeName;
+        if (assignedOfficeId != null && assignedOfficeId.isNotEmpty) {
+          final matchedOffice = offices.where((o) => o.id == assignedOfficeId);
+          if (matchedOffice.isNotEmpty) {
+            assignedOfficeName = matchedOffice.first.name;
+          }
+        }
+
+        result.add(EmployeeEntity(
+          id: userId,
+          employeeCode: empCode,
+          name: name,
+          mobileNumber: phone,
+          email: email,
+          designation: designation,
+          department: department,
+          useDefaultOffice: useDefaultOffice,
+          assignedOfficeId: assignedOfficeId,
+          assignedOfficeName: assignedOfficeName,
+          isActive: isActive,
+        ));
+      }
+
+      return result;
+    } catch (e) {
+      debugPrint('Supabase fetchEmployeesFromSupabase error: $e');
       return [];
     }
   }
@@ -501,72 +599,6 @@ class SupabaseService {
     } catch (e) {
       debugPrint('Supabase updateUserInSupabase error: $e');
       return false;
-    }
-  }
-
-  /// Fetch all active Employee Records from Supabase
-  Future<List<EmployeeEntity>> fetchEmployeesFromSupabase() async {
-    if (!_isInitialized || client == null) return [];
-    try {
-      final List<dynamic> usersResp =
-          await client!.from('users').select().eq('is_deleted', false);
-
-      final List<dynamic> empResp =
-          await client!.from('employees').select().eq('is_deleted', false);
-
-      final offices = await fetchOfficesFromSupabase();
-
-      final List<EmployeeEntity> result = [];
-
-      for (final u in usersResp) {
-        if (u is! Map) continue;
-        final userId = u['id']?.toString() ?? '';
-        final email = u['email']?.toString() ?? '';
-        final name = u['full_name']?.toString() ?? '';
-        final phone = u['phone_number']?.toString() ?? '';
-        final isActive = u['is_active'] ?? true;
-
-        Map<String, dynamic>? empRow;
-        for (final e in empResp) {
-          if (e is Map && e['user_id']?.toString() == userId) {
-            empRow = Map<String, dynamic>.from(e);
-            break;
-          }
-        }
-
-        final empCode = empRow?['employee_code']?.toString() ??
-            'EMP-${userId.length >= 4 ? userId.substring(0, 4).toUpperCase() : "000"}';
-        final designation = empRow?['designation']?.toString() ?? 'Staff';
-        final department = empRow?['department']?.toString() ?? 'Operations';
-        final useDefaultOffice = empRow?['use_default_office'] ?? true;
-        final assignedOfficeId = empRow?['assigned_office_id']?.toString();
-
-        String? assignedOfficeName;
-        if (assignedOfficeId != null && assignedOfficeId.isNotEmpty) {
-          final matchedOffice = offices.where((o) => o.id == assignedOfficeId);
-          if (matchedOffice.isNotEmpty) {
-            assignedOfficeName = matchedOffice.first.name;
-          }
-        }
-
-        result.add(EmployeeEntity(
-          id: userId,
-          employeeCode: empCode,
-          name: name,
-          mobileNumber: phone,
-          email: email,
-          designation: designation,
-          department: department,
-          useDefaultOffice: useDefaultOffice,
-          assignedOfficeId: assignedOfficeId,
-          assignedOfficeName: assignedOfficeName,
-          isActive: isActive,
-        ));
-      }
-      return result;
-    } catch (e) {
-      debugPrint('Supabase fetchEmployeesFromSupabase error: $e');
-      return [];
     }
   }
 

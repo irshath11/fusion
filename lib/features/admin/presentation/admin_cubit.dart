@@ -62,37 +62,45 @@ class AdminCubit extends Cubit<AdminState> {
 
     final orgId = _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
     try {
+      final cloudEmployees = await _supabase.fetchEmployeesFromSupabase(orgId);
       final cloudUsers = await _supabase.fetchOrganizationUsers(orgId);
+
       final localEmployees = _db.getEmployees();
+      final empMap = <String, EmployeeEntity>{};
+
+      for (final e in localEmployees) {
+        final key = e.id.isNotEmpty ? e.id : (e.email.isNotEmpty ? e.email.trim().toLowerCase() : e.name.trim().toLowerCase());
+        empMap[key] = e;
+      }
+
+      for (final ce in cloudEmployees) {
+        final key = ce.id.isNotEmpty ? ce.id : (ce.email.isNotEmpty ? ce.email.trim().toLowerCase() : ce.name.trim().toLowerCase());
+        final existing = empMap[key];
+        if (existing != null) {
+          empMap[key] = EmployeeEntity(
+            id: existing.id.isNotEmpty ? existing.id : ce.id,
+            employeeCode: ce.employeeCode.isNotEmpty && !ce.employeeCode.startsWith('EMP-000')
+                ? ce.employeeCode
+                : existing.employeeCode,
+            name: ce.name.isNotEmpty ? ce.name : existing.name,
+            mobileNumber: ce.mobileNumber.isNotEmpty ? ce.mobileNumber : existing.mobileNumber,
+            email: ce.email.isNotEmpty ? ce.email : existing.email,
+            designation: ce.designation.isNotEmpty && ce.designation != 'Staff' ? ce.designation : existing.designation,
+            department: ce.department.isNotEmpty && ce.department != 'Operations' ? ce.department : existing.department,
+            useDefaultOffice: existing.useDefaultOffice,
+            assignedOfficeId: ce.assignedOfficeId ?? existing.assignedOfficeId,
+            assignedOfficeName: ce.assignedOfficeName ?? existing.assignedOfficeName,
+            isActive: ce.isActive,
+          );
+        } else {
+          empMap[key] = ce;
+        }
+      }
 
       for (final u in cloudUsers) {
-        final existingEmpIndex = localEmployees.indexWhere((e) =>
-            e.id == u.id ||
-            (e.email.isNotEmpty && u.email.isNotEmpty && e.email.trim().toLowerCase() == u.email.trim().toLowerCase()) ||
-            (e.name.trim().toLowerCase() == u.fullName.trim().toLowerCase() && u.fullName.trim().isNotEmpty));
-
-        if (existingEmpIndex >= 0) {
-          final existing = localEmployees[existingEmpIndex];
-          final updatedEmp = EmployeeEntity(
-            id: existing.id.isNotEmpty ? existing.id : u.id,
-            employeeCode: existing.employeeCode.isNotEmpty && existing.employeeCode != 'EMP-000'
-                ? existing.employeeCode
-                : 'EMP-${u.id.length >= 4 ? u.id.substring(0, 4).toUpperCase() : u.id.toUpperCase()}',
-            name: u.fullName.trim().isNotEmpty ? u.fullName.trim() : existing.name,
-            mobileNumber: (u.phoneNumber != null && u.phoneNumber!.trim().isNotEmpty)
-                ? u.phoneNumber!.trim()
-                : existing.mobileNumber,
-            email: u.email.trim().isNotEmpty ? u.email.trim() : existing.email,
-            designation: existing.designation,
-            department: existing.department,
-            useDefaultOffice: existing.useDefaultOffice,
-            assignedOfficeId: existing.assignedOfficeId,
-            assignedOfficeName: existing.assignedOfficeName,
-            isActive: u.isActive,
-          );
-          _db.saveEmployee(updatedEmp);
-        } else {
-          final emp = EmployeeEntity(
+        final key = u.id.isNotEmpty ? u.id : (u.email.isNotEmpty ? u.email.trim().toLowerCase() : u.fullName.trim().toLowerCase());
+        if (!empMap.containsKey(key)) {
+          empMap[key] = EmployeeEntity(
             id: u.id,
             employeeCode: 'EMP-${u.id.length >= 4 ? u.id.substring(0, 4).toUpperCase() : u.id.toUpperCase()}',
             name: u.fullName,
@@ -102,8 +110,11 @@ class AdminCubit extends Cubit<AdminState> {
             department: 'Operations',
             isActive: u.isActive,
           );
-          _db.saveEmployee(emp);
         }
+      }
+
+      for (final emp in empMap.values) {
+        _db.saveEmployee(emp);
       }
     } catch (_) {}
 
