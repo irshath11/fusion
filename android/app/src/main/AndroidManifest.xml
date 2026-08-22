@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.fusion_attendance">
+    package="com.fusion.attendance">
 
     <!-- Permissions required for Live Camera, Geofencing GPS, and Sync -->
     <uses-permission android:name="android.permission.CAMERA" />

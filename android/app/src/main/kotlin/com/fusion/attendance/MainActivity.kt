@@ -1,4 +1,4 @@
-package com.example.fusion_attendance
+package com.fusion.attendance
 
 import io.flutter.embedding.android.FlutterActivity
 
