@@ -132,6 +132,51 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 class AdminOverviewTab extends StatelessWidget {
   const AdminOverviewTab({super.key});
 
+  void _showResetCacheDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.cleaning_services_rounded, color: Colors.orangeAccent),
+              SizedBox(width: 10),
+              Text('Reset Attendance Cache'),
+            ],
+          ),
+          content: const Text(
+            'Are you sure you want to clear all locally cached attendance records? This action cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                LocalDatabaseService().clearAttendanceCache();
+                Navigator.pop(dialogCtx);
+                context.read<AdminCubit>().loadDashboardData('Local attendance cache cleared.');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Local attendance cache cleared successfully.'),
+                    backgroundColor: Colors.orangeAccent,
+                  ),
+                );
+              },
+              child: const Text('Clear Cache'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final db = LocalDatabaseService();
@@ -257,6 +302,26 @@ class AdminOverviewTab extends StatelessWidget {
                       },
                     );
                   },
+                ),
+                const SizedBox(height: 16),
+                Center(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: palette.warning,
+                      side: BorderSide(
+                          color: palette.warning.withValues(alpha: 0.6)),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 12, horizontal: 20),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () => _showResetCacheDialog(context),
+                    icon: const Icon(Icons.cleaning_services_rounded, size: 18),
+                    label: const Text('Clear Local Attendance Cache',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13)),
+                  ),
                 ),
                 const SizedBox(height: 24),
                 StaggeredAnimatedItem(

@@ -395,6 +395,11 @@ class LocalDatabaseService {
     _persistAttendanceRecords();
   }
 
+  void clearAttendanceCache() {
+    _attendanceRecords.clear();
+    _persistAttendanceRecords();
+  }
+
   void updateAttendanceRecord(AttendanceRecord updatedRecord) {
     final index = _attendanceRecords.indexWhere((r) => r.id == updatedRecord.id);
     if (index >= 0) {

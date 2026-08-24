@@ -160,6 +160,54 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     }
   }
 
+  void _showResetCacheDialog() {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.cleaning_services_rounded, color: Colors.orangeAccent),
+              SizedBox(width: 10),
+              Text('Reset Attendance Cache'),
+            ],
+          ),
+          content: const Text(
+            'Are you sure you want to clear all locally cached attendance records? This action cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                _db.clearAttendanceCache();
+                Navigator.pop(dialogCtx);
+                _refreshSyncCount();
+                if (mounted) {
+                  setState(() {});
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Local attendance cache cleared successfully.'),
+                      backgroundColor: Colors.orangeAccent,
+                    ),
+                  );
+                }
+              },
+              child: const Text('Clear Cache'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _handleAttendanceStep(WorkflowStep step,
       {String? activeSiteName}) async {
     final user = _db.currentUser;
@@ -777,6 +825,48 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                               ],
                             ),
                           ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Quick Cache & Sync Tools Row
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: palette.warning,
+                                  side: BorderSide(
+                                      color: palette.warning.withValues(alpha: 0.6)),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                onPressed: _showResetCacheDialog,
+                                icon: const Icon(Icons.cleaning_services_rounded, size: 18),
+                                label: const Text('Clear Local Cache',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: activePrimary,
+                                  side: BorderSide(
+                                      color: activePrimary.withValues(alpha: 0.6)),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                onPressed: _isSyncing ? null : _manualSync,
+                                icon: const Icon(Icons.sync_rounded, size: 18),
+                                label: const Text('Sync Offline Data',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 20),
 
