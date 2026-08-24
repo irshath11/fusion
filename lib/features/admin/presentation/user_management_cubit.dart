@@ -63,40 +63,40 @@ class UserManagementCubit extends Cubit<UserManagementState> {
       final orgId =
           _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
       final remoteUsers = await _supabase.fetchOrganizationUsers(orgId);
-      if (remoteUsers.isNotEmpty) {
-        _db.saveUsers(remoteUsers);
+      if (_supabase.isInitialized) {
+        _db.setUsers(remoteUsers);
       }
-
-      final localEmployees = _db.getEmployees();
-      final localMappedUsers = localEmployees.map((e) {
-        return UserEntity(
-          id: e.id,
-          firebaseUid: e.id,
-          email: e.email,
-          fullName: e.name,
-          phoneNumber: e.mobileNumber,
-          role: UserRole.employee,
-          organizationId: orgId,
-          isActive: e.isActive,
-        );
-      }).toList();
 
       final Map<String, UserEntity> userMap = {};
 
       for (final u in remoteUsers) {
         final key = u.email.trim().isNotEmpty
             ? u.email.trim().toLowerCase()
-            : u.fullName.trim().toLowerCase();
+            : (u.fullName.trim().isNotEmpty
+                ? u.fullName.trim().toLowerCase()
+                : u.id);
         userMap[key] = u;
       }
 
-      for (final localUser in localMappedUsers) {
-        final emailKey = localUser.email.trim().toLowerCase();
-        final nameKey = localUser.fullName.trim().toLowerCase();
-        final key = emailKey.isNotEmpty ? emailKey : nameKey;
-        if (!userMap.containsKey(key) &&
-            !userMap.values
-                .any((u) => u.fullName.trim().toLowerCase() == nameKey)) {
+      // If remote was unreachable (offline mode and uninitialized), fallback to local cache
+      if (remoteUsers.isEmpty && !_supabase.isInitialized) {
+        final localEmployees = _db.getEmployees();
+        for (final e in localEmployees) {
+          final localUser = UserEntity(
+            id: e.id,
+            firebaseUid: e.id,
+            email: e.email,
+            fullName: e.name,
+            phoneNumber: e.mobileNumber,
+            role: UserRole.employee,
+            organizationId: orgId,
+            isActive: e.isActive,
+          );
+          final key = localUser.email.trim().isNotEmpty
+              ? localUser.email.trim().toLowerCase()
+              : (localUser.fullName.trim().isNotEmpty
+                  ? localUser.fullName.trim().toLowerCase()
+                  : localUser.id);
           userMap[key] = localUser;
         }
       }
@@ -383,20 +383,37 @@ class UserManagementCubit extends Cubit<UserManagementState> {
     }
   }
 
-  Future<void> softDeleteUser(String userId) async {
+  Future<void> softDeleteUser(String userId, {String? email, String? fullName}) async {
     emit(UserManagementLoading());
     try {
       final orgId =
           _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
       final actorUserId = _db.currentUser?.id;
 
+      // 1. Purge from local Hive storage immediately so user is removed from UI
+      _db.deleteEmployee(userId);
+      _db.deleteUser(userId);
+      if (email != null && email.isNotEmpty) {
+        _db.deleteEmployee(email);
+        _db.deleteUser(email);
+      }
+      if (fullName != null && fullName.isNotEmpty) {
+        _db.deleteEmployee(fullName);
+        _db.deleteUser(fullName);
+      }
+
+      // 2. Soft delete in Supabase cloud database
       await _supabase.softDeleteUser(
         userId: userId,
+        email: email,
         orgId: orgId,
         actorUserId: actorUserId,
       );
 
-      emit(UserManagementActionSuccess('User soft-deleted successfully.'));
+      // 3. Synchronize local DB cache with cloud
+      await _supabase.syncCloudDataToLocal();
+
+      emit(UserManagementActionSuccess('User deleted successfully.'));
       await fetchUsers();
     } catch (e) {
       emit(UserManagementError('Failed to delete user: ${e.toString()}'));

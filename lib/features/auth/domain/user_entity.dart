@@ -11,6 +11,9 @@ class UserEntity {
   final bool isActive;
   final bool requiresPasswordChange;
   final bool isDeleted;
+  final String? employeeCode;
+  final String? designation;
+  final String? department;
 
   UserEntity({
     required this.id,
@@ -23,6 +26,9 @@ class UserEntity {
     this.isActive = true,
     this.requiresPasswordChange = false,
     this.isDeleted = false,
+    this.employeeCode,
+    this.designation,
+    this.department,
   });
 
   Map<String, dynamic> toJson() => {
@@ -36,6 +42,9 @@ class UserEntity {
         'is_active': isActive,
         'requires_password_change': requiresPasswordChange,
         'is_deleted': isDeleted,
+        'employee_code': employeeCode,
+        'designation': designation,
+        'department': department,
       };
 
   factory UserEntity.fromJson(Map<String, dynamic> json) => UserEntity(
@@ -50,6 +59,9 @@ class UserEntity {
         requiresPasswordChange:
             json['requires_password_change'] ?? json['requiresPasswordChange'] ?? false,
         isDeleted: json['is_deleted'] ?? json['isDeleted'] ?? false,
+        employeeCode: json['employee_code'] ?? json['employeeCode'],
+        designation: json['designation'],
+        department: json['department'],
       );
 
   UserEntity copyWith({
@@ -63,6 +75,9 @@ class UserEntity {
     bool? isActive,
     bool? requiresPasswordChange,
     bool? isDeleted,
+    String? employeeCode,
+    String? designation,
+    String? department,
   }) {
     return UserEntity(
       id: id ?? this.id,
@@ -75,6 +90,9 @@ class UserEntity {
       isActive: isActive ?? this.isActive,
       requiresPasswordChange: requiresPasswordChange ?? this.requiresPasswordChange,
       isDeleted: isDeleted ?? this.isDeleted,
+      employeeCode: employeeCode ?? this.employeeCode,
+      designation: designation ?? this.designation,
+      department: department ?? this.department,
     );
   }
 }

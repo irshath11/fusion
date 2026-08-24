@@ -250,14 +250,26 @@ class LocalDatabaseService {
     _persistUsers();
   }
 
+  void setUsers(List<UserEntity> users) {
+    _users.clear();
+    _users.addAll(users);
+    _persistUsers();
+  }
+
   void saveUsers(List<UserEntity> users) {
     for (final user in users) {
       saveUser(user);
     }
   }
 
-  void deleteUser(String id) {
-    _users.removeWhere((u) => u.id == id);
+  void deleteUser(String idOrEmail) {
+    final clean = idOrEmail.trim().toLowerCase();
+    _users.removeWhere((u) =>
+        u.id == idOrEmail ||
+        u.id.toLowerCase() == clean ||
+        (u.firebaseUid.isNotEmpty && u.firebaseUid.toLowerCase() == clean) ||
+        (u.email.isNotEmpty && u.email.trim().toLowerCase() == clean) ||
+        (clean.isNotEmpty && u.fullName.trim().toLowerCase() == clean));
     _persistUsers();
   }
 
@@ -272,6 +284,12 @@ class LocalDatabaseService {
 
   // Offices CRUD
   List<OfficeEntity> getOffices() => List.unmodifiable(_offices);
+
+  void setOffices(List<OfficeEntity> offices) {
+    _offices.clear();
+    _offices.addAll(offices);
+    _persistOffices();
+  }
 
   void saveOffice(OfficeEntity office) {
     int index = _offices.indexWhere((o) => o.id == office.id);
@@ -329,6 +347,12 @@ class LocalDatabaseService {
     return List.unmodifiable(uniqueMap.values.toList());
   }
 
+  void setEmployees(List<EmployeeEntity> employees) {
+    _employees.clear();
+    _employees.addAll(employees);
+    _persistEmployees();
+  }
+
   void saveEmployee(EmployeeEntity employee) {
     int index = _employees.indexWhere((e) =>
         e.id == employee.id ||
@@ -344,8 +368,14 @@ class LocalDatabaseService {
     _persistEmployees();
   }
 
-  void deleteEmployee(String id) {
-    _employees.removeWhere((e) => e.id == id);
+  void deleteEmployee(String idOrEmail) {
+    final clean = idOrEmail.trim().toLowerCase();
+    _employees.removeWhere((e) =>
+        e.id == idOrEmail ||
+        e.id.toLowerCase() == clean ||
+        e.employeeCode.toLowerCase() == clean ||
+        (e.email.isNotEmpty && e.email.trim().toLowerCase() == clean) ||
+        (clean.isNotEmpty && e.name.trim().toLowerCase() == clean));
     _persistEmployees();
   }
 
@@ -360,6 +390,12 @@ class LocalDatabaseService {
 
   // Work Sites CRUD
   List<WorkSiteEntity> getWorkSites() => List.unmodifiable(_workSites);
+
+  void setWorkSites(List<WorkSiteEntity> sites) {
+    _workSites.clear();
+    _workSites.addAll(sites);
+    _persistWorkSites();
+  }
 
   void saveWorkSite(WorkSiteEntity site) {
     int index = _workSites.indexWhere((s) => s.id == site.id);

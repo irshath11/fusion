@@ -23,7 +23,8 @@ class PdfExportService {
     for (final emp in employees) {
       final empRecords = records.where((r) {
         return r.employeeId == emp.id ||
-            r.employeeName.toLowerCase() == emp.name.toLowerCase();
+            r.employeeName.toLowerCase() == emp.name.toLowerCase() ||
+            (emp.employeeCode != null && r.employeeId == emp.employeeCode);
       }).toList();
 
       final timesheets = TimesheetCalculator.calculateDailyTimesheets(empRecords);

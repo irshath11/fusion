@@ -65,29 +65,59 @@ class AdminCubit extends Cubit<AdminState> {
       final cloudEmployees = await _supabase.fetchEmployeesFromSupabase(orgId);
       final cloudUsers = await _supabase.fetchOrganizationUsers(orgId);
 
-      final localEmployees = _db.getEmployees();
       final empMap = <String, EmployeeEntity>{};
 
-      for (final e in localEmployees) {
-        final key = e.id.isNotEmpty ? e.id : (e.email.isNotEmpty ? e.email.trim().toLowerCase() : e.name.trim().toLowerCase());
-        empMap[key] = e;
+      // 1. Add active cloud users
+      for (final u in cloudUsers) {
+        final key = u.id.isNotEmpty
+            ? u.id
+            : (u.email.isNotEmpty
+                ? u.email.trim().toLowerCase()
+                : u.fullName.trim().toLowerCase());
+        final code = (u.employeeCode != null && u.employeeCode!.trim().isNotEmpty && u.employeeCode != 'EMP-000')
+            ? u.employeeCode!.trim()
+            : 'EMP-${u.id.length >= 4 ? u.id.substring(0, 4).toUpperCase() : u.id.toUpperCase()}';
+        empMap[key] = EmployeeEntity(
+          id: u.id,
+          employeeCode: code,
+          name: u.fullName,
+          mobileNumber: u.phoneNumber ?? '',
+          email: u.email,
+          designation: u.designation ?? 'Staff',
+          department: u.department ?? 'Operations',
+          isActive: u.isActive,
+        );
       }
 
+      // 2. Overlay / Merge authoritative active cloud employees
       for (final ce in cloudEmployees) {
-        final key = ce.id.isNotEmpty ? ce.id : (ce.email.isNotEmpty ? ce.email.trim().toLowerCase() : ce.name.trim().toLowerCase());
-        final existing = empMap[key];
-        if (existing != null) {
+        final key = ce.id.isNotEmpty
+            ? ce.id
+            : (ce.email.isNotEmpty
+                ? ce.email.trim().toLowerCase()
+                : ce.name.trim().toLowerCase());
+        if (empMap.containsKey(key)) {
+          final existing = empMap[key]!;
+          final isCeCodeValid = ce.employeeCode.isNotEmpty &&
+              ce.employeeCode != 'EMP-000' &&
+              !ce.employeeCode.startsWith('EMP-${ce.id.length >= 4 ? ce.id.substring(0, 4).toUpperCase() : ""}');
+          final isExistingCodeValid = existing.employeeCode.isNotEmpty &&
+              existing.employeeCode != 'EMP-000' &&
+              !existing.employeeCode.startsWith('EMP-${existing.id.length >= 4 ? existing.id.substring(0, 4).toUpperCase() : ""}');
+
+          final finalCode = isCeCodeValid
+              ? ce.employeeCode
+              : (isExistingCodeValid ? existing.employeeCode : (ce.employeeCode.isNotEmpty ? ce.employeeCode : existing.employeeCode));
+
           empMap[key] = EmployeeEntity(
-            id: existing.id.isNotEmpty ? existing.id : ce.id,
-            employeeCode: ce.employeeCode.isNotEmpty && !ce.employeeCode.startsWith('EMP-000')
-                ? ce.employeeCode
-                : existing.employeeCode,
+            id: ce.id.isNotEmpty ? ce.id : existing.id,
+            employeeCode: finalCode,
             name: ce.name.isNotEmpty ? ce.name : existing.name,
             mobileNumber: ce.mobileNumber.isNotEmpty ? ce.mobileNumber : existing.mobileNumber,
             email: ce.email.isNotEmpty ? ce.email : existing.email,
-            designation: ce.designation.isNotEmpty && ce.designation != 'Staff' ? ce.designation : existing.designation,
-            department: ce.department.isNotEmpty && ce.department != 'Operations' ? ce.department : existing.department,
-            useDefaultOffice: existing.useDefaultOffice,
+            designation: ce.designation.isNotEmpty ? ce.designation : existing.designation,
+            department: ce.department.isNotEmpty ? ce.department : existing.department,
+            useDefaultOffice: ce.useDefaultOffice,
             assignedOfficeId: ce.assignedOfficeId ?? existing.assignedOfficeId,
             assignedOfficeName: ce.assignedOfficeName ?? existing.assignedOfficeName,
             isActive: ce.isActive,
@@ -97,24 +127,9 @@ class AdminCubit extends Cubit<AdminState> {
         }
       }
 
-      for (final u in cloudUsers) {
-        final key = u.id.isNotEmpty ? u.id : (u.email.isNotEmpty ? u.email.trim().toLowerCase() : u.fullName.trim().toLowerCase());
-        if (!empMap.containsKey(key)) {
-          empMap[key] = EmployeeEntity(
-            id: u.id,
-            employeeCode: 'EMP-${u.id.length >= 4 ? u.id.substring(0, 4).toUpperCase() : u.id.toUpperCase()}',
-            name: u.fullName,
-            mobileNumber: u.phoneNumber ?? '',
-            email: u.email,
-            designation: 'Staff',
-            department: 'Operations',
-            isActive: u.isActive,
-          );
-        }
-      }
-
-      for (final emp in empMap.values) {
-        _db.saveEmployee(emp);
+      // 3. If cloud is initialized and fetched, synchronize down to local database
+      if (_supabase.isInitialized) {
+        _db.setEmployees(empMap.values.toList());
       }
     } catch (_) {}
 
@@ -172,9 +187,27 @@ class AdminCubit extends Cubit<AdminState> {
     await loadDashboardData('Employee profile saved successfully.');
   }
 
-  void deleteEmployee(String id) {
+  Future<void> deleteEmployee(String id, {String? email, String? name}) async {
     _db.deleteEmployee(id);
-    loadDashboardData('Employee deleted.');
+    _db.deleteUser(id);
+    if (email != null && email.isNotEmpty) {
+      _db.deleteEmployee(email);
+      _db.deleteUser(email);
+    }
+    if (name != null && name.isNotEmpty) {
+      _db.deleteEmployee(name);
+      _db.deleteUser(name);
+    }
+    final orgId =
+        _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
+    await _supabase.softDeleteUser(
+      userId: id,
+      email: email,
+      orgId: orgId,
+      actorUserId: _db.currentUser?.id,
+    );
+    await _supabase.syncCloudDataToLocal();
+    await loadDashboardData('Employee deleted.');
   }
 
   // Save / Update Office with Live GPS Capture

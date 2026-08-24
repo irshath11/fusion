@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_enums.dart';
+import '../../../core/services/supabase_service.dart';
 import '../../../core/widgets/custom_text_field.dart';
 import '../../../database/local_database_service.dart';
 import '../../auth/domain/user_entity.dart';
@@ -46,6 +47,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
   String _selectedOfficeName = 'Head Office (Main Office)';
 
   List<Map<String, String>> _availableLocations = [];
+  bool _isLoadingDetails = false;
 
   @override
   void initState() {
@@ -68,23 +70,153 @@ class _UserFormDialogState extends State<UserFormDialog> {
     _emailController = TextEditingController(text: user?.email ?? '');
     _phoneController = TextEditingController(text: user?.phoneNumber ?? '');
     _codeController = TextEditingController(
-        text: 'EMP-${1000 + DateTime.now().millisecond % 900}');
-    _designationController = TextEditingController(text: 'Technician');
-    _departmentController = TextEditingController(text: 'Field Engineering');
+        text: _resolveCleanCode(user?.employeeCode, user?.fullName, user?.id));
+    _designationController = TextEditingController(
+        text: (user?.designation != null && user!.designation!.isNotEmpty)
+            ? user.designation!
+            : 'Technician');
+    _departmentController = TextEditingController(
+        text: (user?.department != null && user!.department!.isNotEmpty)
+            ? user.department!
+            : 'Field Engineering');
     _tempPasswordController = TextEditingController();
 
     if (user != null) {
       _selectedRole = user.role;
+      _codeController.text =
+          _resolveCleanCode(user.employeeCode, user.fullName, user.id);
+      if (user.designation != null && user.designation!.isNotEmpty) {
+        _designationController.text = user.designation!;
+      }
+      if (user.department != null && user.department!.isNotEmpty) {
+        _departmentController.text = user.department!;
+      }
+
       final empList = LocalDatabaseService().getEmployees();
       final empMatches =
           empList.where((e) => e.id == user.id || e.email == user.email);
       if (empMatches.isNotEmpty) {
         final emp = empMatches.first;
+        if (emp.employeeCode.isNotEmpty &&
+            !_isHexFallback(emp.employeeCode, emp.id)) {
+          _codeController.text = emp.employeeCode;
+        }
+        if (emp.designation.isNotEmpty) {
+          _designationController.text = emp.designation;
+        }
+        if (emp.department.isNotEmpty) {
+          _departmentController.text = emp.department;
+        }
+        if (emp.mobileNumber.isNotEmpty) {
+          _phoneController.text = emp.mobileNumber;
+        }
         _useDefaultOffice = emp.useDefaultOffice;
         if (!_useDefaultOffice && emp.assignedOfficeId != null) {
           _selectedOfficeId = emp.assignedOfficeId!;
           _selectedOfficeName = emp.assignedOfficeName ?? 'Custom Location';
         }
+      }
+
+      // Fetch fresh, live details from Supabase
+      _fetchEmployeeDetailsFromSupabase(user);
+    }
+  }
+
+  static bool _isHexFallback(String? code, String? id) {
+    if (code == null || code.isEmpty) return false;
+    if (id != null &&
+        id.length >= 4 &&
+        code.toUpperCase() == 'EMP-${id.substring(0, 4).toUpperCase()}') {
+      return true;
+    }
+    final reg = RegExp(r'^EMP-[0-9A-Fa-f]{4}$');
+    if (reg.hasMatch(code) &&
+        id != null &&
+        id.toLowerCase().startsWith(code.substring(4).toLowerCase())) {
+      return true;
+    }
+    return false;
+  }
+
+  static String _resolveCleanCode(String? rawCode, String? name, String? id) {
+    if (rawCode != null &&
+        rawCode.trim().isNotEmpty &&
+        rawCode.trim() != 'EMP-000' &&
+        !_isHexFallback(rawCode.trim(), id)) {
+      return rawCode.trim();
+    }
+    final cleanName =
+        (name ?? '').replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+    if (cleanName.isNotEmpty) {
+      final prefix = cleanName.length >= 4
+          ? cleanName.substring(0, 4)
+          : (cleanName.length >= 3 ? cleanName.substring(0, 3) : cleanName);
+      return 'EMP-$prefix';
+    }
+    if (id != null && id.length >= 4) {
+      return 'EMP-${id.substring(0, 4).toUpperCase()}';
+    }
+    return 'EMP-001';
+  }
+
+  Future<void> _fetchEmployeeDetailsFromSupabase(UserEntity user) async {
+    setState(() {
+      _isLoadingDetails = true;
+    });
+
+    try {
+      final remoteEmp = await SupabaseService().fetchEmployeeDetails(user.id);
+      final remoteUser =
+          await SupabaseService().fetchUserByFirebaseUid(user.id);
+
+      if (!mounted) return;
+
+      if (remoteEmp != null) {
+        if (remoteEmp.name.isNotEmpty) _nameController.text = remoteEmp.name;
+        if (remoteEmp.email.isNotEmpty) _emailController.text = remoteEmp.email;
+        if (remoteEmp.mobileNumber.isNotEmpty) {
+          _phoneController.text = remoteEmp.mobileNumber;
+        }
+        if (remoteEmp.employeeCode.isNotEmpty &&
+            !_isHexFallback(remoteEmp.employeeCode, user.id)) {
+          _codeController.text = remoteEmp.employeeCode;
+        } else if (_isHexFallback(_codeController.text, user.id)) {
+          _codeController.text =
+              _resolveCleanCode(null, user.fullName, user.id);
+        }
+        if (remoteEmp.designation.isNotEmpty) {
+          _designationController.text = remoteEmp.designation;
+        }
+        if (remoteEmp.department.isNotEmpty) {
+          _departmentController.text = remoteEmp.department;
+        }
+        _useDefaultOffice = remoteEmp.useDefaultOffice;
+        if (!_useDefaultOffice && remoteEmp.assignedOfficeId != null) {
+          _selectedOfficeId = remoteEmp.assignedOfficeId!;
+          _selectedOfficeName =
+              remoteEmp.assignedOfficeName ?? 'Custom Location';
+        }
+      }
+
+      if (remoteUser != null) {
+        _selectedRole = remoteUser.role;
+        if (_nameController.text.isEmpty && remoteUser.fullName.isNotEmpty) {
+          _nameController.text = remoteUser.fullName;
+        }
+        if (_emailController.text.isEmpty && remoteUser.email.isNotEmpty) {
+          _emailController.text = remoteUser.email;
+        }
+        if (_phoneController.text.isEmpty && remoteUser.phoneNumber != null) {
+          _phoneController.text = remoteUser.phoneNumber!;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching employee details from Supabase: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingDetails = false;
+        });
       }
     }
   }
@@ -106,12 +238,55 @@ class _UserFormDialogState extends State<UserFormDialog> {
     final isEditing = widget.userToEdit != null;
 
     return AlertDialog(
-      title: Text(isEditing ? 'Edit User Profile' : 'Add New User / Employee'),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+                isEditing ? 'Edit User Profile' : 'Add New User / Employee'),
+          ),
+          if (_isLoadingDetails)
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.primary,
+              ),
+            ),
+        ],
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (_isLoadingDetails) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.cloud_sync_rounded,
+                        size: 16, color: AppColors.primary),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Fetching live employee details from Supabase...',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             CustomTextField(
               controller: _nameController,
               label: 'Full Name',
@@ -142,6 +317,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
             ),
             const SizedBox(height: 6),
             DropdownButtonFormField<UserRole>(
+              key: ValueKey('role_dropdown_$_selectedRole'),
               initialValue: _selectedRole,
               isExpanded: true,
               decoration: const InputDecoration(
@@ -170,6 +346,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
             ),
             const SizedBox(height: 6),
             DropdownButtonFormField<String>(
+              key: ValueKey('location_dropdown_$_selectedOfficeId'),
               initialValue:
                   _availableLocations.any((l) => l['id'] == _selectedOfficeId)
                       ? _selectedOfficeId

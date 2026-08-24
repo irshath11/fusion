@@ -55,6 +55,20 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           }
         }
       }
+
+      // Also ensure latest employee records and codes from Supabase are synced
+      final orgId =
+          _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
+      final cloudUsers =
+          await SupabaseService().fetchOrganizationUsers(orgId);
+      if (cloudUsers.isNotEmpty) {
+        _db.setUsers(cloudUsers);
+      }
+      final cloudEmployees =
+          await SupabaseService().fetchEmployeesFromSupabase(orgId);
+      if (cloudEmployees.isNotEmpty) {
+        _db.setEmployees(cloudEmployees);
+      }
     } catch (e) {
       debugPrint('Cloud attendance fetch error: $e');
     } finally {
@@ -62,6 +76,210 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         setState(() => _isLoadingCloud = false);
       }
     }
+  }
+
+  List<EmployeeEntity> _getSynthesizedEmployees() {
+    final dbEmployees = _db.getEmployees();
+    final dbUsers = _db.getUsers();
+    final allRecords = _db.getAttendanceRecords();
+
+    final Map<String, EmployeeEntity> employeeMap = {};
+
+    bool isHexFallback(String code, String id) {
+      if (id.length >= 4 &&
+          code.toUpperCase() == 'EMP-${id.substring(0, 4).toUpperCase()}') {
+        return true;
+      }
+      final reg = RegExp(r'^EMP-[0-9A-Fa-f]{4}$');
+      if (reg.hasMatch(code) &&
+          id.toLowerCase().startsWith(code.substring(4).toLowerCase())) {
+        return true;
+      }
+      return false;
+    }
+
+    String resolveBestCode(String? rawCode, String name, String id) {
+      if (rawCode != null &&
+          rawCode.trim().isNotEmpty &&
+          rawCode.trim() != 'EMP-000' &&
+          !isHexFallback(rawCode.trim(), id)) {
+        return rawCode.trim();
+      }
+      final cleanName =
+          name.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+      if (cleanName.isNotEmpty) {
+        final prefix = cleanName.length >= 4
+            ? cleanName.substring(0, 4)
+            : (cleanName.length >= 3 ? cleanName.substring(0, 3) : cleanName);
+        return 'EMP-$prefix';
+      }
+      return id.length >= 4
+          ? 'EMP-${id.substring(0, 4).toUpperCase()}'
+          : 'EMP-001';
+    }
+
+    String? findMatchingKey(String id, String email, String name) {
+      if (id.isNotEmpty && employeeMap.containsKey(id)) return id;
+      for (final entry in employeeMap.entries) {
+        final e = entry.value;
+        if (id.isNotEmpty && e.id == id) return entry.key;
+        if (email.isNotEmpty &&
+            e.email.trim().toLowerCase() == email.trim().toLowerCase()) {
+          return entry.key;
+        }
+        if (name.isNotEmpty &&
+            e.name.trim().toLowerCase() == name.trim().toLowerCase()) {
+          return entry.key;
+        }
+      }
+      return null;
+    }
+
+    // 1. Add from dbUsers (which carry employeeCode, designation, department)
+    for (final u in dbUsers) {
+      final code = resolveBestCode(u.employeeCode, u.fullName, u.id);
+      final emp = EmployeeEntity(
+        id: u.id,
+        employeeCode: code,
+        name: u.fullName,
+        mobileNumber: u.phoneNumber ?? '',
+        email: u.email,
+        designation: u.designation ?? 'Staff',
+        department: u.department ?? 'General',
+        isActive: u.isActive,
+      );
+      final key = u.id.isNotEmpty
+          ? u.id
+          : (u.email.trim().isNotEmpty
+              ? u.email.trim().toLowerCase()
+              : u.fullName.trim().toLowerCase());
+      employeeMap[key] = emp;
+    }
+
+    // 2. Overlay / Merge with dbEmployees from Supabase employees table
+    for (final e in dbEmployees) {
+      final matchedKey = findMatchingKey(e.id, e.email, e.name);
+      if (matchedKey != null && employeeMap.containsKey(matchedKey)) {
+        final existing = employeeMap[matchedKey]!;
+        final isECodeValid = e.employeeCode.isNotEmpty &&
+            e.employeeCode != 'EMP-000' &&
+            !isHexFallback(e.employeeCode, e.id);
+        final isExistingCodeValid = existing.employeeCode.isNotEmpty &&
+            existing.employeeCode != 'EMP-000' &&
+            !isHexFallback(existing.employeeCode, existing.id);
+
+        final finalCode = isECodeValid
+            ? e.employeeCode
+            : (isExistingCodeValid
+                ? existing.employeeCode
+                : resolveBestCode(e.employeeCode, e.name, e.id));
+
+        employeeMap[matchedKey] = EmployeeEntity(
+          id: e.id.isNotEmpty ? e.id : existing.id,
+          employeeCode: finalCode,
+          name: e.name.isNotEmpty ? e.name : existing.name,
+          mobileNumber: e.mobileNumber.isNotEmpty
+              ? e.mobileNumber
+              : existing.mobileNumber,
+          email: e.email.isNotEmpty ? e.email : existing.email,
+          designation: e.designation.isNotEmpty
+              ? e.designation
+              : existing.designation,
+          department:
+              e.department.isNotEmpty ? e.department : existing.department,
+          useDefaultOffice: e.useDefaultOffice,
+          assignedOfficeId: e.assignedOfficeId ?? existing.assignedOfficeId,
+          assignedOfficeName:
+              e.assignedOfficeName ?? existing.assignedOfficeName,
+          isActive: e.isActive,
+        );
+      } else {
+        final code = resolveBestCode(e.employeeCode, e.name, e.id);
+        final key = e.id.isNotEmpty
+            ? e.id
+            : (e.email.trim().isNotEmpty
+                ? e.email.trim().toLowerCase()
+                : e.name.trim().toLowerCase());
+        employeeMap[key] = EmployeeEntity(
+          id: e.id,
+          employeeCode: code,
+          name: e.name,
+          mobileNumber: e.mobileNumber,
+          email: e.email,
+          designation: e.designation,
+          department: e.department,
+          useDefaultOffice: e.useDefaultOffice,
+          assignedOfficeId: e.assignedOfficeId,
+          assignedOfficeName: e.assignedOfficeName,
+          isActive: e.isActive,
+        );
+      }
+    }
+
+    // 3. Check any attendance records that might have been logged by employee
+    for (final r in allRecords) {
+      final nameKey = r.employeeName.trim().toLowerCase();
+      final idKey = r.employeeId;
+
+      bool alreadyExists = employeeMap.values.any((e) =>
+          e.id == idKey ||
+          (e.employeeCode.isNotEmpty &&
+              e.employeeCode.toLowerCase() == idKey.toLowerCase()) ||
+          (e.name.trim().toLowerCase() == nameKey && nameKey.isNotEmpty));
+
+      if (!alreadyExists && r.employeeName.trim().isNotEmpty) {
+        final code = resolveBestCode(null, r.employeeName, r.employeeId);
+        employeeMap[idKey.isNotEmpty ? idKey : nameKey] = EmployeeEntity(
+          id: r.employeeId,
+          employeeCode: code,
+          name: r.employeeName,
+          mobileNumber: '',
+          email: '',
+          designation: 'Field Staff',
+          department: 'Operations',
+        );
+      }
+    }
+
+    return employeeMap.values.toList();
+  }
+
+  EmployeeEntity _resolveEmployee(String? employeeId) {
+    if (employeeId == null || employeeId.isEmpty) {
+      return EmployeeEntity(
+        id: '',
+        employeeCode: 'EMP',
+        name: 'Employee',
+        mobileNumber: '',
+        email: '',
+        designation: 'Staff',
+        department: 'General',
+      );
+    }
+    final all = _getSynthesizedEmployees();
+    final cleanId = employeeId.trim().toLowerCase();
+    final match = all.where((e) =>
+        e.id.toLowerCase() == cleanId ||
+        e.employeeCode.toLowerCase() == cleanId ||
+        e.name.toLowerCase().trim() == cleanId ||
+        e.email.toLowerCase().trim() == cleanId ||
+        (cleanId.length >= 4 && e.id.toLowerCase().startsWith(cleanId)) ||
+        (cleanId.length >= 4 &&
+            e.employeeCode.toLowerCase().contains(cleanId)) ||
+        (cleanId.isNotEmpty && e.name.toLowerCase().trim().contains(cleanId)) ||
+        (cleanId.isNotEmpty &&
+            cleanId.contains(e.name.toLowerCase().trim())));
+    if (match.isNotEmpty) return match.first;
+
+    return EmployeeEntity(
+      id: employeeId,
+      employeeCode: employeeId.startsWith('EMP-') ? employeeId : 'EMP',
+      name: 'Employee',
+      mobileNumber: '',
+      email: '',
+      designation: 'Staff',
+      department: 'General',
+    );
   }
 
   @override
@@ -79,43 +297,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   // LEVEL 1: EMPLOYEE LIST VIEW
   // ==========================================
   Widget _buildLevel1EmployeeListView() {
-    final dbEmployees = _db.getEmployees();
     final allRecords = _db.getAttendanceRecords();
-
-    // Synthesize employee list from both DB & Attendance Records
-    final Map<String, EmployeeEntity> employeeMap = {};
-    for (final e in dbEmployees) {
-      final key = e.email.trim().isNotEmpty
-          ? e.email.trim().toLowerCase()
-          : e.name.trim().toLowerCase();
-      employeeMap[key] = e;
-    }
-
-    for (final r in allRecords) {
-      final nameKey = r.employeeName.trim().toLowerCase();
-      final idKey = r.employeeId;
-
-      bool alreadyExists = employeeMap.values.any((e) =>
-          e.id == idKey ||
-          (e.name.trim().toLowerCase() == nameKey && nameKey.isNotEmpty));
-
-      if (!alreadyExists) {
-        final shortId = r.employeeId.length >= 4
-            ? r.employeeId.substring(0, 4).toUpperCase()
-            : r.employeeId.toUpperCase();
-        employeeMap[nameKey.isNotEmpty ? nameKey : idKey] = EmployeeEntity(
-          id: r.employeeId,
-          employeeCode: 'EMP-$shortId',
-          name: r.employeeName,
-          mobileNumber: '',
-          email: '',
-          designation: 'Field Staff',
-          department: 'Operations',
-        );
-      }
-    }
-
-    final allEmployees = employeeMap.values.toList();
+    final allEmployees = _getSynthesizedEmployees();
 
     final filteredEmployees = allEmployees.where((e) {
       final q = _searchQuery.trim().toLowerCase();
@@ -380,22 +563,21 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   // LEVEL 2: DATE LIST VIEW FOR SELECTED EMPLOYEE
   // ==========================================
   Widget _buildLevel2DateListView() {
-    final emp = _db.getEmployees().firstWhere(
-          (e) => e.id == _selectedEmployeeId,
-          orElse: () => EmployeeEntity(
-            id: _selectedEmployeeId!,
-            employeeCode: 'EMP',
-            name: 'Employee',
-            mobileNumber: '',
-            email: '',
-            designation: 'Staff',
-            department: 'General',
-          ),
-        );
+    final emp = _resolveEmployee(_selectedEmployeeId);
 
     final empRecords = _db.getAttendanceRecords().where((r) {
-      return r.employeeId == emp.id ||
-          r.employeeName.toLowerCase() == emp.name.toLowerCase();
+      final rEmpId = r.employeeId.trim().toLowerCase();
+      final rEmpName = r.employeeName.trim().toLowerCase();
+      final eId = emp.id.trim().toLowerCase();
+      final eName = emp.name.trim().toLowerCase();
+      final eCode = emp.employeeCode.trim().toLowerCase();
+      return (eId.isNotEmpty && rEmpId == eId) ||
+          (eName.isNotEmpty && rEmpName == eName) ||
+          (eCode.isNotEmpty && rEmpId == eCode) ||
+          (eId.length >= 4 && rEmpId.startsWith(eId)) ||
+          (rEmpId.length >= 4 && eId.startsWith(rEmpId)) ||
+          (eName.isNotEmpty &&
+              (rEmpName.contains(eName) || eName.contains(rEmpName)));
     }).toList();
 
     // Group records by date (yyyy-MM-dd)
@@ -1107,24 +1289,23 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   // LEVEL 3: DETAILED RECORD & PHOTO VIEW FOR SELECTED DATE
   // ==========================================
   Widget _buildLevel3DateDetailView() {
-    final emp = _db.getEmployees().firstWhere(
-          (e) => e.id == _selectedEmployeeId,
-          orElse: () => EmployeeEntity(
-            id: _selectedEmployeeId!,
-            employeeCode: 'EMP',
-            name: 'Employee',
-            mobileNumber: '',
-            email: '',
-            designation: 'Staff',
-            department: 'General',
-          ),
-        );
+    final emp = _resolveEmployee(_selectedEmployeeId);
 
     final selectedDateStr = DateFormat('yyyy-MM-dd').format(_selectedDate!);
 
     final dateRecords = _db.getAttendanceRecords().where((r) {
-      final matchesUser = r.employeeId == emp.id ||
-          r.employeeName.toLowerCase() == emp.name.toLowerCase();
+      final rEmpId = r.employeeId.trim().toLowerCase();
+      final rEmpName = r.employeeName.trim().toLowerCase();
+      final eId = emp.id.trim().toLowerCase();
+      final eName = emp.name.trim().toLowerCase();
+      final eCode = emp.employeeCode.trim().toLowerCase();
+      final matchesUser = (eId.isNotEmpty && rEmpId == eId) ||
+          (eName.isNotEmpty && rEmpName == eName) ||
+          (eCode.isNotEmpty && rEmpId == eCode) ||
+          (eId.length >= 4 && rEmpId.startsWith(eId)) ||
+          (rEmpId.length >= 4 && eId.startsWith(rEmpId)) ||
+          (eName.isNotEmpty &&
+              (rEmpName.contains(eName) || eName.contains(rEmpName)));
       final matchesDate =
           DateFormat('yyyy-MM-dd').format(r.eventTimestamp) == selectedDateStr;
       return matchesUser && matchesDate;
@@ -2236,8 +2417,18 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
     for (final emp in employees) {
       final empRecords = allRecords.where((r) {
-        return r.employeeId == emp.id ||
-            r.employeeName.toLowerCase() == emp.name.toLowerCase();
+        final rEmpId = r.employeeId.trim().toLowerCase();
+        final rEmpName = r.employeeName.trim().toLowerCase();
+        final eId = emp.id.trim().toLowerCase();
+        final eName = emp.name.trim().toLowerCase();
+        final eCode = emp.employeeCode.trim().toLowerCase();
+        return (eId.isNotEmpty && rEmpId == eId) ||
+            (eName.isNotEmpty && rEmpName == eName) ||
+            (eCode.isNotEmpty && rEmpId == eCode) ||
+            (eId.length >= 4 && rEmpId.startsWith(eId)) ||
+            (rEmpId.length >= 4 && eId.startsWith(rEmpId)) ||
+            (eName.isNotEmpty &&
+                (rEmpName.contains(eName) || eName.contains(rEmpName)));
       }).toList();
 
       final timesheets =

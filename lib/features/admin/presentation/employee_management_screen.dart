@@ -56,9 +56,16 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
 
           // Apply filters
           final filteredUsers = users.where((u) {
-            final matchesSearch =
-                u.fullName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                    u.email.toLowerCase().contains(_searchQuery.toLowerCase());
+            final q = _searchQuery.toLowerCase().trim();
+            final matchesSearch = q.isEmpty ||
+                u.fullName.toLowerCase().contains(q) ||
+                u.email.toLowerCase().contains(q) ||
+                (u.employeeCode != null &&
+                    u.employeeCode!.toLowerCase().contains(q)) ||
+                (u.designation != null &&
+                    u.designation!.toLowerCase().contains(q)) ||
+                (u.department != null &&
+                    u.department!.toLowerCase().contains(q));
             final matchesRole = _selectedRoleFilter == 'ALL' ||
                 u.role.nameString == _selectedRoleFilter;
             return matchesSearch && matchesRole;
@@ -154,7 +161,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                           onChanged: (val) =>
                               setState(() => _searchQuery = val),
                           decoration: InputDecoration(
-                            hintText: 'Search by name or email...',
+                            hintText: 'Search by name, code or email...',
                             prefixIcon: const Icon(Icons.search_rounded),
                             isDense: true,
                             border: OutlineInputBorder(
@@ -207,6 +214,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                       itemBuilder: (ctx, index) {
                         final user = filteredUsers[index];
                         final isSelf = user.id == currentUser?.id;
+                        final displayCode = _resolveCleanCode(
+                            user.employeeCode, user.fullName, user.id);
 
                         Color roleBadgeColor;
                         switch (user.role) {
@@ -249,6 +258,25 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                         fontWeight: FontWeight.bold),
                                   ),
                                 ),
+                                if (displayCode.isNotEmpty)
+                                  Container(
+                                    margin: const EdgeInsets.only(right: 6),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          Colors.blueGrey.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      displayCode,
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blueGrey,
+                                      ),
+                                    ),
+                                  ),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 8, vertical: 2),
@@ -272,6 +300,18 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const SizedBox(height: 4),
+                                if (user.designation != null &&
+                                    user.designation!.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 2.0),
+                                    child: Text(
+                                      '${user.designation}${user.department != null && user.department!.isNotEmpty ? ' • ${user.department}' : ''}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
                                 Text(user.email),
                                 if (user.phoneNumber != null &&
                                     user.phoneNumber!.isNotEmpty)
@@ -389,9 +429,9 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                           children: [
                                             Icon(
                                               user.isActive
-                                                  ? Icons.person_off_outlined
-                                                  : Icons
-                                                      .person_add_alt_outlined,
+                                                ? Icons.person_off_outlined
+                                                : Icons
+                                                    .person_add_alt_outlined,
                                               size: 18,
                                             ),
                                             const SizedBox(width: 8),
@@ -419,7 +459,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                             Icon(Icons.delete_outline,
                                                 size: 18, color: Colors.red),
                                             SizedBox(width: 8),
-                                            Text('Soft Delete User',
+                                            Text('Delete User',
                                                 style: TextStyle(
                                                     color: Colors.red)),
                                           ],
@@ -445,9 +485,9 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Soft Delete User?'),
+        title: const Text('Delete User?'),
         content: Text(
-            'Are you sure you want to soft delete ${user.fullName}? Their account will be deactivated and marked as deleted in Supabase audit logs.'),
+            'Are you sure you want to delete ${user.fullName}? Their account will be removed and marked as deleted in Supabase.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -456,13 +496,51 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () {
-              cubit.softDeleteUser(user.id);
+              cubit.softDeleteUser(user.id,
+                  email: user.email, fullName: user.fullName);
               Navigator.pop(ctx);
             },
-            child: const Text('Soft Delete'),
+            child: const Text('Delete'),
           ),
         ],
       ),
     );
+  }
+
+  static bool _isHexFallback(String? code, String? id) {
+    if (code == null || code.isEmpty) return false;
+    if (id != null &&
+        id.length >= 4 &&
+        code.toUpperCase() == 'EMP-${id.substring(0, 4).toUpperCase()}') {
+      return true;
+    }
+    final reg = RegExp(r'^EMP-[0-9A-Fa-f]{4}$');
+    if (reg.hasMatch(code) &&
+        id != null &&
+        id.toLowerCase().startsWith(code.substring(4).toLowerCase())) {
+      return true;
+    }
+    return false;
+  }
+
+  static String _resolveCleanCode(String? rawCode, String? name, String? id) {
+    if (rawCode != null &&
+        rawCode.trim().isNotEmpty &&
+        rawCode.trim() != 'EMP-000' &&
+        !_isHexFallback(rawCode.trim(), id)) {
+      return rawCode.trim();
+    }
+    final cleanName =
+        (name ?? '').replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+    if (cleanName.isNotEmpty) {
+      final prefix = cleanName.length >= 4
+          ? cleanName.substring(0, 4)
+          : (cleanName.length >= 3 ? cleanName.substring(0, 3) : cleanName);
+      return 'EMP-$prefix';
+    }
+    if (id != null && id.length >= 4) {
+      return 'EMP-${id.substring(0, 4).toUpperCase()}';
+    }
+    return 'EMP-001';
   }
 }
