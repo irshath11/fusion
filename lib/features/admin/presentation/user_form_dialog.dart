@@ -67,25 +67,39 @@ class _UserFormDialogState extends State<UserFormDialog> {
     _nameController = TextEditingController(text: user?.fullName ?? '');
     _emailController = TextEditingController(text: user?.email ?? '');
     _phoneController = TextEditingController(text: user?.phoneNumber ?? '');
-    _codeController = TextEditingController(
-        text: 'EMP-${1000 + DateTime.now().millisecond % 900}');
-    _designationController = TextEditingController(text: 'Technician');
-    _departmentController = TextEditingController(text: 'Field Engineering');
+    _codeController = TextEditingController();
+    _designationController = TextEditingController();
+    _departmentController = TextEditingController();
     _tempPasswordController = TextEditingController();
 
     if (user != null) {
       _selectedRole = user.role;
       final empList = LocalDatabaseService().getEmployees();
-      final empMatches =
-          empList.where((e) => e.id == user.id || e.email == user.email);
+      final empMatches = empList.where((e) =>
+          e.id == user.id ||
+          (e.email.isNotEmpty &&
+              e.email.trim().toLowerCase() == user.email.trim().toLowerCase()));
       if (empMatches.isNotEmpty) {
         final emp = empMatches.first;
+        _codeController.text = emp.employeeCode;
+        _designationController.text = emp.designation;
+        _departmentController.text = emp.department;
         _useDefaultOffice = emp.useDefaultOffice;
         if (!_useDefaultOffice && emp.assignedOfficeId != null) {
           _selectedOfficeId = emp.assignedOfficeId!;
           _selectedOfficeName = emp.assignedOfficeName ?? 'Custom Location';
         }
+      } else {
+        _codeController.text =
+            'EMP-${1000 + DateTime.now().millisecond % 900}';
+        _designationController.text = 'Technician';
+        _departmentController.text = 'Field Engineering';
       }
+    } else {
+      _codeController.text =
+          'EMP-${1000 + DateTime.now().millisecond % 900}';
+      _designationController.text = 'Technician';
+      _departmentController.text = 'Field Engineering';
     }
   }
 

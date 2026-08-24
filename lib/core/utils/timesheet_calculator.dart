@@ -34,7 +34,8 @@ class TimesheetCalculator {
     final empMatches = db.getEmployees().where((e) => e.id == r.employeeId);
     if (empMatches.isNotEmpty) {
       final emp = empMatches.first;
-      if (emp.assignedOfficeName != null && emp.assignedOfficeName!.isNotEmpty) {
+      if (emp.assignedOfficeName != null &&
+          emp.assignedOfficeName!.isNotEmpty) {
         return emp.assignedOfficeName!;
       }
     }
@@ -55,10 +56,13 @@ class TimesheetCalculator {
     final filteredRecords = records.where((r) {
       if (targetEmployeeId == null || targetEmployeeId.isEmpty) return true;
       final idMatch = r.employeeId == targetEmployeeId ||
-          (targetFirebaseUid != null && targetFirebaseUid.isNotEmpty && r.employeeId == targetFirebaseUid);
+          (targetFirebaseUid != null &&
+              targetFirebaseUid.isNotEmpty &&
+              r.employeeId == targetFirebaseUid);
       final nameMatch = targetEmployeeName != null &&
           targetEmployeeName.isNotEmpty &&
-          r.employeeName.trim().toLowerCase() == targetEmployeeName.trim().toLowerCase();
+          r.employeeName.trim().toLowerCase() ==
+              targetEmployeeName.trim().toLowerCase();
       return idMatch || nameMatch;
     }).toList();
 
@@ -101,11 +105,13 @@ class TimesheetCalculator {
 
       // 2. Office Check-Out or Last Site Check-Out as effective end time
       DateTime? checkOutTimestamp;
-      final officeOutMatches = dayRecords.where((r) => r.workflowStep == WorkflowStep.officeCheckOut);
+      final officeOutMatches = dayRecords
+          .where((r) => r.workflowStep == WorkflowStep.officeCheckOut);
       if (officeOutMatches.isNotEmpty) {
         checkOutTimestamp = officeOutMatches.last.eventTimestamp;
       } else {
-        final siteOutMatches = dayRecords.where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
+        final siteOutMatches = dayRecords
+            .where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
         if (siteOutMatches.isNotEmpty) {
           checkOutTimestamp = siteOutMatches.last.eventTimestamp;
         }
@@ -127,7 +133,8 @@ class TimesheetCalculator {
             }
           }
           if (bEnd == null) {
-            if (checkOutTimestamp != null && checkOutTimestamp.isAfter(bStart)) {
+            if (checkOutTimestamp != null &&
+                checkOutTimestamp.isAfter(bStart)) {
               bEnd = checkOutTimestamp;
             } else if (DateTime.now().difference(bStart).inHours < 24) {
               bEnd = DateTime.now();
@@ -196,7 +203,8 @@ class TimesheetCalculator {
 
         // If no explicit office check-out and elapsed time crosses 24 hours:
         // Automatically capture data after 8 hrs from check-in time, complete only regular time (8h), and check out.
-        if (!hasExplicitOfficeCheckOut && elapsedSinceCheckIn >= const Duration(hours: 24)) {
+        if (!hasExplicitOfficeCheckOut &&
+            elapsedSinceCheckIn >= const Duration(hours: 24)) {
           checkOutTimestamp = checkInTimestamp.add(const Duration(hours: 8));
           netWorkedDuration = const Duration(hours: 8);
           finalBreakDuration = Duration.zero;
@@ -225,7 +233,8 @@ class TimesheetCalculator {
             if (grossMins <= 480) {
               // Up to 8.0 hours gross: regular duty only
               final int breakMins = loggedBreakMins;
-              final int netMins = (grossMins > breakMins) ? (grossMins - breakMins) : 0;
+              final int netMins =
+                  (grossMins > breakMins) ? (grossMins - breakMins) : 0;
               netWorkedDuration = Duration(minutes: netMins);
               finalBreakDuration = Duration(minutes: breakMins);
               travelToleranceDuration = Duration.zero;
@@ -235,9 +244,10 @@ class TimesheetCalculator {
               // Beyond 8.0 hours gross:
               // 1. Default Food Break: 1 hour (60 mins) or logged break if greater
               const int defaultFoodBreakMins = 60;
-              final int effectiveFoodBreakMins = loggedBreakMins > defaultFoodBreakMins
-                  ? loggedBreakMins
-                  : defaultFoodBreakMins;
+              final int effectiveFoodBreakMins =
+                  loggedBreakMins > defaultFoodBreakMins
+                      ? loggedBreakMins
+                      : defaultFoodBreakMins;
               finalBreakDuration = Duration(minutes: effectiveFoodBreakMins);
 
               // 2. Regular Hours: Capped at 8.0 hours (480 mins)
@@ -245,16 +255,19 @@ class TimesheetCalculator {
               const int regularMins = 480;
 
               // 3. Remaining minutes after 8h regular and food break
-              final int remainingMins = (grossMins > (regularMins + effectiveFoodBreakMins))
-                  ? (grossMins - regularMins - effectiveFoodBreakMins)
-                  : 0;
+              final int remainingMins =
+                  (grossMins > (regularMins + effectiveFoodBreakMins))
+                      ? (grossMins - regularMins - effectiveFoodBreakMins)
+                      : 0;
 
               // 4. Travel Tolerance: Up to 1 hour (60 mins)
               final int travelMins = remainingMins > 60 ? 60 : remainingMins;
               travelToleranceDuration = Duration(minutes: travelMins);
 
               // 5. Overtime: Starts after 10 gross hours (8h regular + 1h food break + 1h travel tolerance)
-              final int otMins = (remainingMins > travelMins) ? (remainingMins - travelMins) : 0;
+              final int otMins = (remainingMins > travelMins)
+                  ? (remainingMins - travelMins)
+                  : 0;
               overtimeHours = otMins / 60.0;
 
               // 6. Net Worked Duration = Regular (8h) + Overtime
@@ -314,7 +327,8 @@ class TimesheetCalculator {
     final siteMatches = db.getWorkSites().where((w) =>
         w.siteName.toLowerCase() == clean.toLowerCase() ||
         clean.toLowerCase().contains(w.siteName.toLowerCase()));
-    if (siteMatches.isNotEmpty && siteMatches.first.clientName.trim().isNotEmpty) {
+    if (siteMatches.isNotEmpty &&
+        siteMatches.first.clientName.trim().isNotEmpty) {
       return siteMatches.first.clientName.trim().toUpperCase();
     }
 
@@ -348,7 +362,8 @@ class TimesheetCalculator {
         if (r.eventTimestamp.isBefore(start)) return false;
       }
       if (endDate != null) {
-        final end = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+        final end =
+            DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
         if (r.eventTimestamp.isAfter(end)) return false;
       }
       return true;
@@ -375,17 +390,20 @@ class TimesheetCalculator {
       final empEntity = empLookup[empId];
       final empCode = empEntity != null
           ? empEntity.employeeCode
-          : (empId.length >= 4 ? 'EMP-${empId.substring(0, 4).toUpperCase()}' : 'EMP');
-      final department = empEntity != null ? empEntity.department : 'Operations';
+          : (empId.length >= 4
+              ? 'EMP-${empId.substring(0, 4).toUpperCase()}'
+              : 'EMP');
+      final department =
+          empEntity != null ? empEntity.department : 'Operations';
 
       DateTime? checkOutTimestamp;
-      final officeOutMatches =
-          dayRecords.where((r) => r.workflowStep == WorkflowStep.officeCheckOut);
+      final officeOutMatches = dayRecords
+          .where((r) => r.workflowStep == WorkflowStep.officeCheckOut);
       if (officeOutMatches.isNotEmpty) {
         checkOutTimestamp = officeOutMatches.last.eventTimestamp;
       } else {
-        final siteOutMatches =
-            dayRecords.where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
+        final siteOutMatches = dayRecords
+            .where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
         if (siteOutMatches.isNotEmpty) {
           checkOutTimestamp = siteOutMatches.last.eventTimestamp;
         }
@@ -446,8 +464,10 @@ class TimesheetCalculator {
           }
 
           final diff = sOut.difference(sIn);
-          final netSiteDuration = diff > siteBreak ? (diff - siteBreak) : Duration.zero;
-          final durationHours = (netSiteDuration.inMinutes / 60.0).clamp(0.0, 24.0);
+          final netSiteDuration =
+              diff > siteBreak ? (diff - siteBreak) : Duration.zero;
+          final durationHours =
+              (netSiteDuration.inMinutes / 60.0).clamp(0.0, 24.0);
 
           final acc = accMap.putIfAbsent(
             key,
@@ -556,4 +576,3 @@ class _EmpContributionAcc {
     required this.department,
   });
 }
-

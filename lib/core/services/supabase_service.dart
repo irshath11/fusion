@@ -448,30 +448,50 @@ class SupabaseService {
     required String fullName,
     String? phoneNumber,
     UserRole? role,
+    String? employeeCode,
     String? designation,
     String? department,
     bool? useDefaultOffice,
     String? assignedOfficeId,
     String? actorUserId,
   }) async {
-    if (!_isInitialized || client == null || !_isValidUuid(userId))
-      return false;
+    if (!_isInitialized || client == null) return false;
 
     try {
+      final cleanId = userId.trim();
+      if (cleanId.isEmpty) return false;
+
+      // Resolve actual User record from Supabase
+      UserEntity? existingUser;
+      if (!_isValidUuid(cleanId)) {
+        existingUser = await fetchUserByFirebaseUid(cleanId);
+      }
+
+      final targetId = (existingUser != null && _isValidUuid(existingUser.id))
+          ? existingUser.id
+          : cleanId;
+
       final updates = <String, dynamic>{
-        'full_name': fullName,
+        'full_name': fullName.trim(),
         'updated_at': DateTime.now().toIso8601String(),
       };
-      if (phoneNumber != null) updates['phone_number'] = phoneNumber;
+      if (phoneNumber != null) updates['phone_number'] = phoneNumber.trim();
       if (role != null) updates['role'] = role.nameString;
 
-      await client!.from('users').update(updates).eq('id', userId);
+      if (_isValidUuid(targetId)) {
+        await client!.from('users').update(updates).eq('id', targetId);
+      } else {
+        await client!.from('users').update(updates).eq('firebase_uid', cleanId);
+      }
 
       final empUpdates = <String, dynamic>{
         'updated_at': DateTime.now().toIso8601String(),
       };
-      if (designation != null) empUpdates['designation'] = designation;
-      if (department != null) empUpdates['department'] = department;
+      if (employeeCode != null && employeeCode.isNotEmpty) {
+        empUpdates['employee_code'] = employeeCode.trim();
+      }
+      if (designation != null) empUpdates['designation'] = designation.trim();
+      if (department != null) empUpdates['department'] = department.trim();
       if (useDefaultOffice != null)
         empUpdates['use_default_office'] = useDefaultOffice;
       if (assignedOfficeId != null) {
@@ -479,15 +499,40 @@ class SupabaseService {
             _isValidUuid(assignedOfficeId) ? assignedOfficeId : null;
       }
 
-      await client!.from('employees').update(empUpdates).eq('user_id', userId);
+      final lookupId = _isValidUuid(targetId) ? targetId : cleanId;
+      final existingEmp = await client!
+          .from('employees')
+          .select('id')
+          .eq('user_id', lookupId)
+          .maybeSingle();
+
+      if (existingEmp != null) {
+        await client!.from('employees').update(empUpdates).eq('user_id', lookupId);
+      } else {
+        final targetOrgId =
+            await ensureOrganizationExistsInCloud(orgId) ?? orgId;
+        empUpdates['user_id'] = lookupId;
+        empUpdates['organization_id'] = targetOrgId;
+        empUpdates['employee_code'] = employeeCode?.trim() ?? 'EMP-000';
+        empUpdates['designation'] = designation?.trim() ?? 'Staff';
+        empUpdates['department'] = department?.trim() ?? 'Operations';
+        empUpdates['use_default_office'] = useDefaultOffice ?? true;
+        empUpdates['is_deleted'] = false;
+        empUpdates['created_at'] = DateTime.now().toIso8601String();
+        await client!.from('employees').upsert(empUpdates);
+      }
 
       if (_isValidUuid(orgId)) {
         await logActivity(
           orgId: orgId,
           actorUserId: _isValidUuid(actorUserId) ? actorUserId : null,
-          targetUserId: userId,
+          targetUserId: _isValidUuid(lookupId) ? lookupId : null,
           action: ActivityLogAction.employeeUpdated.dbValue,
-          details: {'updated_name': fullName, 'role': role?.nameString},
+          details: {
+            'updated_name': fullName,
+            'role': role?.nameString,
+            'code': employeeCode
+          },
         );
       }
 
@@ -589,20 +634,37 @@ class SupabaseService {
     required bool isActive,
     String? actorUserId,
   }) async {
-    if (!_isInitialized || client == null || !_isValidUuid(userId))
-      return false;
+    if (!_isInitialized || client == null) return false;
 
     try {
-      await client!.from('users').update({
-        'is_active': isActive,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', userId);
+      final cleanId = userId.trim();
+      if (cleanId.isEmpty) return false;
+
+      UserEntity? existingUser;
+      if (!_isValidUuid(cleanId)) {
+        existingUser = await fetchUserByFirebaseUid(cleanId);
+      }
+      final targetId = (existingUser != null && _isValidUuid(existingUser.id))
+          ? existingUser.id
+          : cleanId;
+
+      if (_isValidUuid(targetId)) {
+        await client!.from('users').update({
+          'is_active': isActive,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', targetId);
+      } else {
+        await client!.from('users').update({
+          'is_active': isActive,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('firebase_uid', cleanId);
+      }
 
       if (_isValidUuid(orgId)) {
         await logActivity(
           orgId: orgId,
           actorUserId: _isValidUuid(actorUserId) ? actorUserId : null,
-          targetUserId: userId,
+          targetUserId: _isValidUuid(targetId) ? targetId : null,
           action: isActive
               ? ActivityLogAction.employeeActivated.dbValue
               : ActivityLogAction.employeeDisabled.dbValue,
@@ -623,29 +685,49 @@ class SupabaseService {
     required String orgId,
     String? actorUserId,
   }) async {
-    if (!_isInitialized || client == null || !_isValidUuid(userId))
-      return false;
+    if (!_isInitialized || client == null) return false;
 
     try {
-      final now = DateTime.now().toIso8601String();
-      await client!.from('users').update({
-        'is_deleted': true,
-        'is_active': false,
-        'deleted_at': now,
-        'updated_at': now,
-      }).eq('id', userId);
+      final cleanId = userId.trim();
+      if (cleanId.isEmpty) return false;
 
+      UserEntity? existingUser;
+      if (!_isValidUuid(cleanId)) {
+        existingUser = await fetchUserByFirebaseUid(cleanId);
+      }
+      final targetId = (existingUser != null && _isValidUuid(existingUser.id))
+          ? existingUser.id
+          : cleanId;
+
+      final now = DateTime.now().toIso8601String();
+      if (_isValidUuid(targetId)) {
+        await client!.from('users').update({
+          'is_deleted': true,
+          'is_active': false,
+          'deleted_at': now,
+          'updated_at': now,
+        }).eq('id', targetId);
+      } else {
+        await client!.from('users').update({
+          'is_deleted': true,
+          'is_active': false,
+          'deleted_at': now,
+          'updated_at': now,
+        }).eq('firebase_uid', cleanId);
+      }
+
+      final lookupId = _isValidUuid(targetId) ? targetId : cleanId;
       await client!.from('employees').update({
         'is_deleted': true,
         'deleted_at': now,
         'updated_at': now,
-      }).eq('user_id', userId);
+      }).eq('user_id', lookupId);
 
       if (_isValidUuid(orgId)) {
         await logActivity(
           orgId: orgId,
           actorUserId: _isValidUuid(actorUserId) ? actorUserId : null,
-          targetUserId: userId,
+          targetUserId: _isValidUuid(lookupId) ? lookupId : null,
           action: ActivityLogAction.employeeDeleted.dbValue,
           details: {'soft_deleted_at': now},
         );

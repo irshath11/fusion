@@ -65,36 +65,66 @@ class UserManagementCubit extends Cubit<UserManagementState> {
       final remoteUsers = await _supabase.fetchOrganizationUsers(orgId);
 
       final localEmployees = _db.getEmployees();
-      final localMappedUsers = localEmployees.map((e) {
-        return UserEntity(
-          id: e.id,
-          firebaseUid: e.id,
-          email: e.email,
-          fullName: e.name,
-          phoneNumber: e.mobileNumber,
-          role: UserRole.employee,
-          organizationId: orgId,
-          isActive: e.isActive,
-        );
-      }).toList();
-
       final Map<String, UserEntity> userMap = {};
 
       for (final u in remoteUsers) {
-        final key = u.email.trim().isNotEmpty
-            ? u.email.trim().toLowerCase()
-            : u.fullName.trim().toLowerCase();
-        userMap[key] = u;
+        // Match local employee record by ID or email
+        final localMatchIndex = localEmployees.indexWhere((e) =>
+            (e.id.isNotEmpty && e.id == u.id) ||
+            (e.email.isNotEmpty &&
+                u.email.isNotEmpty &&
+                e.email.trim().toLowerCase() == u.email.trim().toLowerCase()));
+
+        UserEntity userToUse = u;
+        if (localMatchIndex >= 0) {
+          final localEmp = localEmployees[localMatchIndex];
+          userToUse = UserEntity(
+            id: u.id,
+            firebaseUid: u.firebaseUid,
+            email: localEmp.email.isNotEmpty ? localEmp.email : u.email,
+            fullName: localEmp.name.isNotEmpty ? localEmp.name : u.fullName,
+            phoneNumber: localEmp.mobileNumber.isNotEmpty
+                ? localEmp.mobileNumber
+                : u.phoneNumber,
+            role: u.role,
+            organizationId: u.organizationId,
+            isActive: localEmp.isActive,
+          );
+        }
+
+        final key = userToUse.id.isNotEmpty
+            ? userToUse.id
+            : (userToUse.email.trim().isNotEmpty
+                ? userToUse.email.trim().toLowerCase()
+                : userToUse.fullName.trim().toLowerCase());
+        userMap[key] = userToUse;
       }
 
-      for (final localUser in localMappedUsers) {
-        final emailKey = localUser.email.trim().toLowerCase();
-        final nameKey = localUser.fullName.trim().toLowerCase();
-        final key = emailKey.isNotEmpty ? emailKey : nameKey;
+      for (final localEmp in localEmployees) {
+        final key = localEmp.id.isNotEmpty
+            ? localEmp.id
+            : (localEmp.email.trim().isNotEmpty
+                ? localEmp.email.trim().toLowerCase()
+                : localEmp.name.trim().toLowerCase());
+
         if (!userMap.containsKey(key) &&
-            !userMap.values
-                .any((u) => u.fullName.trim().toLowerCase() == nameKey)) {
-          userMap[key] = localUser;
+            !userMap.values.any((u) =>
+                (u.email.isNotEmpty &&
+                    u.email.trim().toLowerCase() ==
+                        localEmp.email.trim().toLowerCase()) ||
+                (u.fullName.isNotEmpty &&
+                    u.fullName.trim().toLowerCase() ==
+                        localEmp.name.trim().toLowerCase()))) {
+          userMap[key] = UserEntity(
+            id: localEmp.id,
+            firebaseUid: localEmp.id,
+            email: localEmp.email,
+            fullName: localEmp.name,
+            phoneNumber: localEmp.mobileNumber,
+            role: UserRole.employee,
+            organizationId: orgId,
+            isActive: localEmp.isActive,
+          );
         }
       }
 
@@ -251,6 +281,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
     required String fullName,
     String? phoneNumber,
     UserRole? role,
+    String? employeeCode,
     String? designation,
     String? department,
     bool? useDefaultOffice,
@@ -269,7 +300,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         (e) => e.id == userId || e.email == userId,
         orElse: () => EmployeeEntity(
           id: userId,
-          employeeCode: 'EMP-000',
+          employeeCode: employeeCode ?? 'EMP-000',
           name: fullName,
           mobileNumber: phoneNumber ?? '',
           email: '',
@@ -280,7 +311,9 @@ class UserManagementCubit extends Cubit<UserManagementState> {
 
       final updatedEmp = EmployeeEntity(
         id: existingEmp.id,
-        employeeCode: existingEmp.employeeCode,
+        employeeCode: (employeeCode != null && employeeCode.trim().isNotEmpty)
+            ? employeeCode.trim()
+            : existingEmp.employeeCode,
         name: fullName.trim(),
         mobileNumber: phoneNumber?.trim() ?? existingEmp.mobileNumber,
         email: existingEmp.email,
@@ -300,6 +333,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         fullName: fullName,
         phoneNumber: phoneNumber,
         role: role,
+        employeeCode: employeeCode,
         designation: designation,
         department: department,
         useDefaultOffice: useDefaultOffice,

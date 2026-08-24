@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'user_management_cubit.dart';
+import 'admin_cubit.dart';
 import 'user_form_dialog.dart';
 import 'ownership_transfer_dialog.dart';
 import '../../../core/constants/app_colors.dart';
@@ -30,7 +31,15 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
 
     return BlocProvider(
       create: (context) => UserManagementCubit()..fetchUsers(),
-      child: BlocConsumer<UserManagementCubit, UserManagementState>(
+      child: BlocListener<AdminCubit, AdminState>(
+        listener: (context, state) {
+          if (state is AdminDataLoaded) {
+            try {
+              context.read<UserManagementCubit>().fetchUsers();
+            } catch (_) {}
+          }
+        },
+        child: BlocConsumer<UserManagementCubit, UserManagementState>(
         listener: (context, state) {
           if (state is UserManagementActionSuccess) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -347,6 +356,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                                 fullName: fullName,
                                                 phoneNumber: phoneNumber,
                                                 role: role,
+                                                employeeCode: employeeCode,
                                                 designation: designation,
                                                 department: department,
                                                 useDefaultOffice:
@@ -435,7 +445,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
           );
         },
       ),
-    );
+    ),
+  );
   }
 
   void _confirmSoftDelete(

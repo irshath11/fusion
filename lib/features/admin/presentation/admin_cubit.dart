@@ -60,20 +60,9 @@ class AdminCubit extends Cubit<AdminState> {
 
     final combinedOffices = officeMap.values.toList();
 
-    final orgId = _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
     try {
-      final cloudUsers = await _supabase.fetchOrganizationUsers(orgId);
-      for (final u in cloudUsers) {
-        final emp = EmployeeEntity(
-          id: u.id,
-          employeeCode: 'EMP-${u.id.length >= 4 ? u.id.substring(0, 4).toUpperCase() : u.id.toUpperCase()}',
-          name: u.fullName,
-          mobileNumber: u.phoneNumber ?? '',
-          email: u.email,
-          designation: 'Staff',
-          department: 'Operations',
-          isActive: u.isActive,
-        );
+      final cloudEmployees = await _supabase.fetchEmployeesFromSupabase();
+      for (final emp in cloudEmployees) {
         _db.saveEmployee(emp);
       }
     } catch (_) {}
@@ -121,6 +110,7 @@ class AdminCubit extends Cubit<AdminState> {
           orgId: orgId,
           fullName: name.trim(),
           phoneNumber: mobile.trim(),
+          employeeCode: code.trim(),
           designation: designation.trim(),
           department: department.trim(),
           useDefaultOffice: useDefaultOffice,

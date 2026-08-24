@@ -81,11 +81,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             index: _currentBottomNavIndex,
             children: _pages,
           ),
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: _currentBottomNavIndex,
-            onDestinationSelected: (index) {
-              setState(() => _currentBottomNavIndex = index);
-            },
+          bottomNavigationBar: Builder(
+            builder: (ctx) => NavigationBar(
+              selectedIndex: _currentBottomNavIndex,
+              onDestinationSelected: (index) {
+                setState(() => _currentBottomNavIndex = index);
+                try {
+                  ctx.read<AdminCubit>().loadDashboardData();
+                } catch (_) {}
+              },
             destinations: const [
               NavigationDestination(icon: Icon(Icons.dashboard_rounded), label: 'Overview'),
               NavigationDestination(icon: Icon(Icons.people_alt_rounded), label: 'Employees'),
@@ -96,7 +100,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }
 

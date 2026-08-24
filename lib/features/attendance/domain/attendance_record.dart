@@ -88,7 +88,8 @@ class AttendanceRecord {
       };
 
   factory AttendanceRecord.fromJson(Map<String, dynamic> json) {
-    final stepVal = json['workflowStep'] ?? json['workflow_step'] ?? 'officeCheckIn';
+    final stepVal =
+        json['workflowStep'] ?? json['workflow_step'] ?? 'officeCheckIn';
     final step = WorkflowStep.values.firstWhere(
       (e) => e.dbValue == stepVal || e.name == stepVal,
       orElse: () => WorkflowStep.officeCheckIn,
@@ -100,9 +101,8 @@ class AttendanceRecord {
         : DateTime.now();
 
     final rawSyncTime = json['syncTimestamp'] ?? json['sync_timestamp'];
-    final syncTime = rawSyncTime != null
-        ? DateTime.parse(rawSyncTime.toString())
-        : null;
+    final syncTime =
+        rawSyncTime != null ? DateTime.parse(rawSyncTime.toString()) : null;
 
     final rawSyncStatus = json['syncStatus'] ?? json['sync_status'];
     final status = SyncStatus.values.firstWhere(
@@ -112,20 +112,32 @@ class AttendanceRecord {
 
     return AttendanceRecord(
       id: json['id']?.toString() ?? '',
-      employeeId: json['employeeId']?.toString() ?? json['employee_id']?.toString() ?? '',
-      employeeName: json['employeeName']?.toString() ?? json['employee_name']?.toString() ?? 'Unknown Employee',
+      employeeId: json['employeeId']?.toString() ??
+          json['employee_id']?.toString() ??
+          '',
+      employeeName: json['employeeName']?.toString() ??
+          json['employee_name']?.toString() ??
+          'Unknown Employee',
       workflowStep: step,
       eventTimestamp: eventTime,
       syncTimestamp: syncTime,
       latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
       longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
-      gpsAccuracy: (json['gpsAccuracy'] ?? json['gps_accuracy'] as num?)?.toDouble() ?? 5.0,
+      gpsAccuracy:
+          (json['gpsAccuracy'] ?? json['gps_accuracy'] as num?)?.toDouble() ??
+              5.0,
       address: json['address']?.toString() ?? '',
-      deviceId: json['deviceId']?.toString() ?? json['device_id']?.toString() ?? '',
-      photoBase64: json['photoBase64']?.toString() ?? json['photo_url']?.toString() ?? json['photo_base64']?.toString() ?? '',
-      isGeofenceValid: json['isGeofenceValid'] ?? json['is_geofence_valid'] ?? true,
+      deviceId:
+          json['deviceId']?.toString() ?? json['device_id']?.toString() ?? '',
+      photoBase64: json['photoBase64']?.toString() ??
+          json['photo_url']?.toString() ??
+          json['photo_base64']?.toString() ??
+          '',
+      isGeofenceValid:
+          json['isGeofenceValid'] ?? json['is_geofence_valid'] ?? true,
       officeId: json['officeId']?.toString() ?? json['office_id']?.toString(),
-      workSiteId: json['workSiteId']?.toString() ?? json['work_site_id']?.toString(),
+      workSiteId:
+          json['workSiteId']?.toString() ?? json['work_site_id']?.toString(),
       siteName: json['siteName']?.toString() ?? json['site_name']?.toString(),
       syncStatus: status,
     );

@@ -11,6 +11,8 @@ import '../../../core/services/pdf_export_service.dart';
 import '../../../core/services/location_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/utils/timesheet_calculator.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'admin_cubit.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../attendance/domain/attendance_record.dart';
 
@@ -44,6 +46,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   Future<void> _loadCloudAttendanceRecords() async {
     setState(() => _isLoadingCloud = true);
     try {
+      await SupabaseService().syncCloudDataToLocal();
       final cloudRecords =
           await SupabaseService().fetchAttendanceRecordsFromSupabase();
       if (cloudRecords.isNotEmpty) {
@@ -66,28 +69,36 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_selectedEmployeeId != null && _selectedDate != null) {
-      return _buildLevel3DateDetailView();
-    } else if (_selectedEmployeeId != null) {
-      return _buildLevel2DateListView();
-    } else {
-      return _buildLevel1EmployeeListView();
-    }
+    return BlocBuilder<AdminCubit, AdminState>(
+      builder: (context, state) {
+        if (_selectedEmployeeId != null && _selectedDate != null) {
+          return _buildLevel3DateDetailView();
+        } else if (_selectedEmployeeId != null) {
+          return _buildLevel2DateListView();
+        } else {
+          return _buildLevel1EmployeeListView(state);
+        }
+      },
+    );
   }
 
   // ==========================================
   // LEVEL 1: EMPLOYEE LIST VIEW
   // ==========================================
-  Widget _buildLevel1EmployeeListView() {
-    final dbEmployees = _db.getEmployees();
+  Widget _buildLevel1EmployeeListView([AdminState? state]) {
+    final dbEmployees = (state is AdminDataLoaded && state.employees.isNotEmpty)
+        ? state.employees
+        : _db.getEmployees();
     final allRecords = _db.getAttendanceRecords();
 
     // Synthesize employee list from both DB & Attendance Records
     final Map<String, EmployeeEntity> employeeMap = {};
     for (final e in dbEmployees) {
-      final key = e.email.trim().isNotEmpty
-          ? e.email.trim().toLowerCase()
-          : e.name.trim().toLowerCase();
+      final key = e.id.isNotEmpty
+          ? e.id
+          : (e.email.trim().isNotEmpty
+              ? e.email.trim().toLowerCase()
+              : e.name.trim().toLowerCase());
       employeeMap[key] = e;
     }
 
@@ -95,15 +106,16 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       final nameKey = r.employeeName.trim().toLowerCase();
       final idKey = r.employeeId;
 
-      bool alreadyExists = employeeMap.values.any((e) =>
-          e.id == idKey ||
-          (e.name.trim().toLowerCase() == nameKey && nameKey.isNotEmpty));
+      bool alreadyExists = employeeMap.containsKey(idKey) ||
+          employeeMap.values.any((e) =>
+              e.id == idKey ||
+              (e.name.trim().toLowerCase() == nameKey && nameKey.isNotEmpty));
 
       if (!alreadyExists) {
         final shortId = r.employeeId.length >= 4
             ? r.employeeId.substring(0, 4).toUpperCase()
             : r.employeeId.toUpperCase();
-        employeeMap[nameKey.isNotEmpty ? nameKey : idKey] = EmployeeEntity(
+        employeeMap[idKey] = EmployeeEntity(
           id: r.employeeId,
           employeeCode: 'EMP-$shortId',
           name: r.employeeName,
@@ -1032,18 +1044,18 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                       child: Icon(Icons.calendar_month_rounded,
                           color: activePrimary),
                     ),
-                    title: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    title: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Text(
-                            formattedDateStr,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 15),
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                        Text(
+                          formattedDateStr,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 15),
                         ),
-                        Row(
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -1061,8 +1073,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                     color: activePrimary),
                               ),
                             ),
-                            if (dayOt > 0) ...[
-                              const SizedBox(width: 4),
+                            if (dayOt > 0)
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
@@ -1086,9 +1097,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                           : Colors.orange.shade900),
                                 ),
                               ),
-                            ],
-                            if (dayBreakMin > 0) ...[
-                              const SizedBox(width: 4),
+                            if (dayBreakMin > 0)
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
@@ -1111,9 +1120,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                           : Colors.amber.shade900),
                                 ),
                               ),
-                            ],
                           ],
-                        )
+                        ),
                       ],
                     ),
                     subtitle: Padding(
