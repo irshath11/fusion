@@ -427,6 +427,50 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     );
   }
 
+  void _showResetCacheDialog() {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.cleaning_services_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Reset Local Cache'),
+          ],
+        ),
+        content: const Text(
+          'This will purge all locally cached attendance records from this device.\n\n'
+          'Use this if you deleted logs directly in Supabase or want to clear old offline data.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(dialogCtx);
+              _db.clearLocalAttendanceRecords();
+              _refreshSyncCount();
+              if (mounted) setState(() {});
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Local attendance records cleared successfully.'),
+                  backgroundColor: AppColors.success,
+                ),
+              );
+            },
+            child: const Text('Reset Cache'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = _db.currentUser;
@@ -503,9 +547,18 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.palette_rounded),
-            tooltip: 'Theme & Appearance',
-            onPressed: () => ThemeSelectorModal.show(context),
+            icon: _isSyncing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.sync_rounded),
+            tooltip: _isSyncing ? 'Syncing...' : 'Sync Offline Queue',
+            onPressed: _isSyncing ? null : _manualSync,
           ),
           IconButton(
             icon: const Icon(Icons.date_range_rounded),
@@ -522,35 +575,67 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
               );
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.lock_reset_rounded),
-            tooltip: 'Change Password',
-            onPressed: _showChangePasswordDialog,
-          ),
-          IconButton(
-            icon: _isSyncing
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.sync_rounded),
-            tooltip: _isSyncing ? 'Syncing...' : 'Sync Offline Queue',
-            onPressed: _isSyncing ? null : _manualSync,
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Logout',
-            onPressed: () {
-              context.read<AuthCubit>().logout();
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (ctx) => const LoginScreen()),
-                (route) => false,
-              );
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded),
+            tooltip: 'More options',
+            onSelected: (value) {
+              if (value == 'theme') {
+                ThemeSelectorModal.show(context);
+              } else if (value == 'reset_cache') {
+                _showResetCacheDialog();
+              } else if (value == 'password') {
+                _showChangePasswordDialog();
+              } else if (value == 'logout') {
+                context.read<AuthCubit>().logout();
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (ctx) => const LoginScreen()),
+                  (route) => false,
+                );
+              }
             },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'theme',
+                child: Row(
+                  children: [
+                    Icon(Icons.palette_rounded, size: 20),
+                    SizedBox(width: 12),
+                    Text('Theme & Appearance'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'reset_cache',
+                child: Row(
+                  children: [
+                    Icon(Icons.cleaning_services_rounded, size: 20, color: Colors.orange),
+                    SizedBox(width: 12),
+                    Text('Reset Local Cache'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'password',
+                child: Row(
+                  children: [
+                    Icon(Icons.lock_reset_rounded, size: 20),
+                    SizedBox(width: 12),
+                    Text('Change Password'),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout_rounded, size: 20, color: Colors.red),
+                    SizedBox(width: 12),
+                    Text('Logout', style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),

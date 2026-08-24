@@ -562,6 +562,13 @@ class LocalDatabaseService {
     _persistAttendanceRecords();
   }
 
+  /// Purges all locally stored attendance records from memory and Hive local storage.
+  void clearLocalAttendanceRecords() {
+    _attendanceRecords.clear();
+    _persistAttendanceRecords();
+  }
+
+
   void _persistAttendanceRecords() {
     try {
       final jsonList = _attendanceRecords.map((r) => r.toJson()).toList();

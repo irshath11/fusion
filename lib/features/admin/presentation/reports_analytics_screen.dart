@@ -1852,43 +1852,49 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: _getStepColor(r.workflowStep)
-                                        .withValues(alpha: 0.15),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    _getStepIcon(r.workflowStep),
-                                    color: _getStepColor(r.workflowStep),
-                                    size: 20,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      r.workflowStep.displayName,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14),
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: _getStepColor(r.workflowStep)
+                                          .withValues(alpha: 0.15),
+                                      shape: BoxShape.circle,
                                     ),
-                                    Text(
-                                      timeStr,
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          color: isDark
-                                              ? AppColors.textSecondaryDark
-                                              : AppColors.textSecondaryLight),
+                                    child: Icon(
+                                      _getStepIcon(r.workflowStep),
+                                      color: _getStepColor(r.workflowStep),
+                                      size: 20,
                                     ),
-                                  ],
-                                ),
-                              ],
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          r.workflowStep.displayName,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        Text(
+                                          timeStr,
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              color: isDark
+                                                  ? AppColors.textSecondaryDark
+                                                  : AppColors.textSecondaryLight),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
+                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 10, vertical: 4),
@@ -1983,41 +1989,56 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Icon(Icons.camera_alt_rounded,
-                                          size: 16, color: activePrimary),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        'Verified Live Camera Snapshot',
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: activePrimary),
-                                      ),
-                                      const Spacer(),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: activePrimary.withValues(
-                                              alpha: isDark ? 0.2 : 0.1),
-                                          borderRadius:
-                                              BorderRadius.circular(6),
-                                        ),
+                                      Expanded(
                                         child: Row(
-                                          mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            Icon(Icons.place_rounded,
-                                                size: 12, color: activePrimary),
-                                            const SizedBox(width: 3),
-                                            Text(
-                                              siteNameText,
-                                              style: TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: activePrimary),
+                                            Icon(Icons.camera_alt_rounded,
+                                                size: 16, color: activePrimary),
+                                            const SizedBox(width: 6),
+                                            Flexible(
+                                              child: Text(
+                                                'Verified Live Camera Snapshot',
+                                                style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: activePrimary),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
                                             ),
                                           ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Flexible(
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: activePrimary.withValues(
+                                                alpha: isDark ? 0.2 : 0.1),
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.place_rounded,
+                                                  size: 12, color: activePrimary),
+                                              const SizedBox(width: 3),
+                                              Flexible(
+                                                child: Text(
+                                                  siteNameText,
+                                                  style: TextStyle(
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: activePrimary),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ],
