@@ -828,48 +828,6 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Quick Cache & Sync Tools Row
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: palette.warning,
-                                  side: BorderSide(
-                                      color: palette.warning.withValues(alpha: 0.6)),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                onPressed: _showResetCacheDialog,
-                                icon: const Icon(Icons.cleaning_services_rounded, size: 18),
-                                label: const Text('Clear Local Cache',
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: activePrimary,
-                                  side: BorderSide(
-                                      color: activePrimary.withValues(alpha: 0.6)),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                onPressed: _isSyncing ? null : _manualSync,
-                                icon: const Icon(Icons.sync_rounded, size: 18),
-                                label: const Text('Sync Offline Data',
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-
                         // Action Banner / Button for Current Step
                         Text(
                           'Required Workflow Action',
@@ -1523,6 +1481,11 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
       destinations: destinations,
       userRoleLabel: 'Field Employee',
       actions: [
+        IconButton(
+          icon: const Icon(Icons.cleaning_services_rounded),
+          tooltip: 'Clear Local Cache',
+          onPressed: _showResetCacheDialog,
+        ),
         IconButton(
           icon: const Icon(Icons.lock_reset_rounded),
           tooltip: 'Change Password',
