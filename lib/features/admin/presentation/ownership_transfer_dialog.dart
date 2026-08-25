@@ -124,7 +124,8 @@ class _OwnershipTransferDialogState extends State<OwnershipTransferDialog> {
                     const SizedBox(height: 16),
                     const Text(
                       'Select Target Administrator:',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                     const SizedBox(height: 8),
                     _effectiveCandidateAdmins.isEmpty
@@ -136,7 +137,8 @@ class _OwnershipTransferDialogState extends State<OwnershipTransferDialog> {
                             ),
                             child: Text(
                               'No eligible Administrators found. Please promote an Employee to ADMIN first before transferring ownership.',
-                              style: TextStyle(color: AppColors.error, fontSize: 13),
+                              style: TextStyle(
+                                  color: AppColors.error, fontSize: 13),
                             ),
                           )
                         : DropdownButtonFormField<UserEntity>(
@@ -157,13 +159,15 @@ class _OwnershipTransferDialogState extends State<OwnershipTransferDialog> {
                               );
                             }).toList(),
                             onChanged: (val) {
-                              if (val != null) setState(() => _selectedAdmin = val);
+                              if (val != null)
+                                setState(() => _selectedAdmin = val);
                             },
                           ),
                     const SizedBox(height: 20),
                     const Text(
                       'Verify Identity:',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                     const SizedBox(height: 4),
                     Text(

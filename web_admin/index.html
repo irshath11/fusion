@@ -197,15 +197,23 @@
           </div>
 
           <div class="card-table-wrapper" style="padding: 20px;">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
-              <span style="font-size: 18px;">🛡️</span>
-              <h3 style="font-size: 15px; font-weight: 600;">Geofence & Camera Audit Security Enforcement</h3>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 20px; color: var(--primary);">⚡</span>
+                <div>
+                  <h3 style="font-size: 15px; font-weight: 600; margin: 0;">Live Activity & Operations Hub</h3>
+                  <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">Real-time workforce attendance stream and rapid administrative shortcuts</div>
+                </div>
+              </div>
+              <span class="badge badge-success"><span class="badge-dot"></span>LIVE STREAM</span>
             </div>
-            <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.6;">
-              • <strong>Live Selfie Camera Audit:</strong> Every employee check-in requires biometric photo proof captured on site.<br>
-              • <strong>Haversine Geofence Calculation:</strong> Automatic calculation of exact distance to office/site coordinates (200m radius threshold).<br>
-              • <strong>Cloud Storage & Database Sync:</strong> Real-time PostgreSQL row updates connected via Supabase client SDK.
-            </p>
+            
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-color);">
+              <button class="btn btn-secondary btn-sm" onclick="switchTab('tab-live-map')">📍 Live Field Map</button>
+              <button class="btn btn-secondary btn-sm" onclick="switchTab('tab-reports')">📊 Reports & Timesheets</button>
+              <button class="btn btn-secondary btn-sm" onclick="switchTab('tab-employees')">👥 Manage Team</button>
+              <button class="btn btn-secondary btn-sm" onclick="switchTab('tab-offices')">🏢 Office Stations</button>
+            </div>
           </div>
         </div>
 
