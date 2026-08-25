@@ -395,3 +395,19 @@ npx serve -s . -l 3000
 ### Database Deployment
 1. Open Supabase Console -> SQL Editor.
 2. Copy contents of `backend/supabase_schema.sql` and click **Run**.
+
+---
+
+## 14. Theme Engine & Production Release Infrastructure
+
+### Multi-Preset Dynamic Theme Engine (`AppThemePalette`)
+- **Theme Palettes (`AppThemePalettes`)**: Defines 5 curated HSL-tailored theme presets (`Slate Indigo`, `Emerald Mint`, `Midnight Amber`, `Royal Amethyst`, `Ocean Cobalt`).
+- **Theme Cubit (`ThemeCubit`)**: Persists theme selections to local Hive storage (`app_settings`), providing real-time dynamic theme updates across all UI screens.
+- **Adaptive App Shell (`AppShell`)**: Provides a responsive layout component that renders a floating glass bottom navigation dock on mobile displays (< 750px) and a collapsible modern navigation rail on tablet/desktop viewports (>= 750px).
+
+### Google Play Store Release & Deployment Pipeline
+- **Signing Keystore**: Signed release compilation using `upload-keystore.jks` and `key.properties` loaded in `android/app/build.gradle.kts`.
+- **Android App Bundle (.aab)**: Produced via `flutter build appbundle --release` at `build/app/outputs/bundle/release/app-release.aab`.
+- **Google Play Compliance**: Pre-configured Data Safety declarations (Location, Name, Email collection), IARC Content Rating certificate (`PEGI 3` / `Everyone 3+`), App Access demo credentials, and public Account Deletion link ([`PRIVACY_POLICY.md`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/PRIVACY_POLICY.md)).
+- **Store Listing Visual Assets**: Includes 512x512 vector launcher icon (`app_icon_512.jpg`) and 1024x500 Figma-style Feature Graphic banner (`feature_graphic.jpg`).
+

@@ -19,6 +19,7 @@ Welcome to the comprehensive feature and architecture documentation for the **En
 | **08** | [Reports & Multi-Format Data Export Feature](08_reports_and_data_export.md) | 3-Tab Analytics Suite (Directory 3-Level Drilldown, Cumulative Attendance Summary, Site/Client Man-Hours Analytics with Date Filters & Client Grouping), Cloud Log Sync (`_loadCloudAttendanceRecords`), CSV data generation, Excel (.xlsx) spreadsheet creation, and multi-page PDF document rendering & printing services. |
 | **09** | [Employee Timesheet & Work Site Management Feature](09_timesheet_and_work_site_management.md) | Daily work shift hour calculation (`TimesheetCalculator`), regular hours (capped at 8.0h), overtime hours tracking (>8.0h), individual site visit duration breakdown (`SiteVisitSummary`), timesheet PDF export, and work site registry (`work_sites`). |
 | **10** | [Hardware Device Binding & Organization Ownership Transfer Feature](10_security_device_binding_and_ownership_transfer.md) | Multi-platform hardware device fingerprinting (`DeviceBindingService`), Supabase device registration (`devices`), and atomic organization ownership transfer procedure (`transfer_organization_ownership`). |
+| **11** | [Google Play Store Deployment & Publishing Infrastructure](11_google_play_store_deployment_and_publishing.md) | Keystore signing setup (`upload-keystore.jks`, `key.properties`), Android App Bundle (`.aab`) compilation, Play Console Data Safety & IARC compliance declarations, store listing assets (512x512 icon, 1024x500 banner), & testing track release workflows. |
 
 ---
 

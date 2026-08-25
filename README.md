@@ -73,6 +73,17 @@ Enterprise-grade, offline-first mobile and web application built using **Flutter
 ### 15. Analytics & Multi-Format Report Export
 - Generates downloadable compliance reports in **PDF**, **Excel (.xlsx)**, and **CSV** formats with customizable filters.
 
+### 16. Multi-Preset Dynamic Theme Engine & Adaptive UI Shell
+- **5 Curated Color Palettes (`AppThemePalette`)**: `Slate Indigo`, `Emerald Mint`, `Midnight Amber`, `Royal Amethyst`, and `Ocean Cobalt`.
+- **Interactive Theme Selector Modal (`ThemeSelectorModal`)**: Allows users and administrators to switch color presets dynamically with real-time UI previews.
+- **Adaptive Application Shell (`AppShell`)**: Automatically renders a floating glass bottom navigation dock on mobile screens (< 750px) and a collapsible modern navigation rail on tablet/desktop displays (>= 750px).
+- **Glassmorphic Design System**: Uses backdrop glass blur cards (`AppGlassCard`) and smooth micro-animations (`AppBounceable`, `StaggeredAnimatedItem`).
+
+### 17. Google Play Store Release & Publishing Infrastructure
+- **Production Android App Bundle (`.aab`)**: Signed compilation pipeline configured via `upload-keystore.jks`, `key.properties`, and `build.gradle.kts`.
+- **Play Console Compliance Declarations**: Configured Data Safety (Location, Name, Email collection), IARC Content Rating (PEGI 3 / Everyone 3+), App Access credentials, and Public Account Deletion Link.
+- **Store Listing Visual Assets**: Includes customized 512x512 PNG App Icon (`app_icon_512.jpg`) and 1024x500 Figma-style Feature Graphic banner (`feature_graphic.jpg`).
+
 ---
 
 ## 💻 Running the Admin Web Application
@@ -109,7 +120,7 @@ attendance_app/
 │   ├── styles.css                  # Enterprise Design System & CSS Variables
 │   ├── app.js                      # JavaScript Controller, Supabase JS SDK & Leaflet Integration
 │   └── package.json                # Local web server script
-├── docs/                           # Comprehensive System & Feature Documentation (Modules 00–10)
+├── docs/                           # Comprehensive System & Feature Documentation (Modules 00–11)
 │   ├── 00_system_architecture.md
 │   ├── 01_auth_and_password_management.md
 │   ├── 02_organization_setup.md
@@ -121,15 +132,17 @@ attendance_app/
 │   ├── 08_reports_and_data_export.md
 │   ├── 09_timesheet_and_work_site_management.md
 │   ├── 10_security_device_binding_and_ownership_transfer.md
+│   ├── 11_google_play_store_deployment_and_publishing.md
 │   └── README.md                   # Documentation Index
 ├── lib/
 │   ├── main.dart                   # Role-Based Router Entry Point (Web & Mobile)
 │   ├── app_config.dart             # Global environment configurations
 │   ├── core/                       # Shared utilities, constants, & themes
 │   │   ├── constants/              # Colors, Themes, Enums (UserRole, WorkflowStep, ActivityLogAction)
+│   │   ├── theme/                  # AppThemePreset, AppThemePalette, ThemeCubit, ThemeSelectorModal
 │   │   ├── services/               # LocationService, CameraService, SupabaseService, ExportServices
 │   │   ├── utils/                  # GeofenceCalculator, TimesheetCalculator
-│   │   └── widgets/                # AppButton, CustomTextField, StatusBadge, OfflineBanner
+│   │   └── widgets/                # AppButton, CustomTextField, StatusBadge, OfflineBanner, AppShell
 │   ├── database/                   # Hive Local Database Persistence
 │   └── features/                   # Clean Architecture Features
 │       ├── setup/                  # First-Time Wizard Screen & Cubit
