@@ -35,6 +35,10 @@ class DailyTimesheetEntry extends Equatable {
   final bool isCompleted;
   final bool isAutoCompleted;
   final List<SiteVisitSummary> siteVisits;
+  final double? manualOvertimeHours;
+  final String? remarks;
+  final bool isEdited;
+  final String? editedBy;
 
   const DailyTimesheetEntry({
     required this.date,
@@ -51,6 +55,10 @@ class DailyTimesheetEntry extends Equatable {
     this.isCompleted = false,
     this.isAutoCompleted = false,
     this.siteVisits = const [],
+    this.manualOvertimeHours,
+    this.remarks,
+    this.isEdited = false,
+    this.editedBy,
   });
 
   /// Net worked hours (excluding break time & travel tolerance)
@@ -81,6 +89,10 @@ class DailyTimesheetEntry extends Equatable {
         isCompleted,
         isAutoCompleted,
         siteVisits,
+        manualOvertimeHours,
+        remarks,
+        isEdited,
+        editedBy,
       ];
 }
 

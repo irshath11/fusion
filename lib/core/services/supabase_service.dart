@@ -1467,6 +1467,13 @@ class SupabaseService {
           'work_site_id': record.workSiteId,
         if (record.siteName != null && record.siteName!.isNotEmpty)
           'site_name': record.siteName,
+        if (record.manualOvertimeHours != null)
+          'manual_overtime_hours': record.manualOvertimeHours,
+        if (record.remarks != null && record.remarks!.isNotEmpty)
+          'remarks': record.remarks,
+        'is_edited': record.isEdited,
+        if (record.editedBy != null && record.editedBy!.isNotEmpty)
+          'edited_by': record.editedBy,
         'device_id': record.deviceId.isEmpty ? 'DEV-CLIENT' : record.deviceId,
         'created_at': DateTime.now().toIso8601String(),
       };
@@ -1476,9 +1483,13 @@ class SupabaseService {
         return true;
       } catch (e) {
         final errStr = e.toString();
-        // Fallback: If site_name column is missing in user's Supabase table schema (PGRST204), retry without site_name
-        if (errStr.contains('site_name') || errStr.contains('PGRST204')) {
+        // Fallback: If newer columns are missing in user's Supabase table schema (PGRST204), retry without optional columns
+        if (errStr.contains('site_name') || errStr.contains('manual_overtime_hours') || errStr.contains('remarks') || errStr.contains('is_edited') || errStr.contains('PGRST204')) {
           payload.remove('site_name');
+          payload.remove('manual_overtime_hours');
+          payload.remove('remarks');
+          payload.remove('is_edited');
+          payload.remove('edited_by');
           try {
             await client!.from('attendance_records').upsert(payload);
             return true;
@@ -1494,6 +1505,20 @@ class SupabaseService {
       debugPrint('Supabase insertAttendanceEntry outer error: $outerErr');
       return false;
     }
+  }
+
+  /// Save or update admin attendance override records directly in Supabase DB
+  Future<bool> saveAdminAttendanceOverride({
+    required List<AttendanceRecord> records,
+  }) async {
+    if (!_isInitialized || client == null || records.isEmpty) return false;
+
+    bool allSuccess = true;
+    for (final rec in records) {
+      final ok = await insertAttendanceEntry(record: rec);
+      if (!ok) allSuccess = false;
+    }
+    return allSuccess;
   }
 
   /// Fetch all attendance records from Supabase cloud database

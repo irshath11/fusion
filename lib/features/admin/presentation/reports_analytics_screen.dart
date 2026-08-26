@@ -13,6 +13,7 @@ import '../../../core/utils/timesheet_calculator.dart';
 import '../../../core/widgets/app_animated_tab_switcher.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../attendance/domain/attendance_record.dart';
+import 'admin_edit_attendance_dialog.dart';
 
 class ReportsAnalyticsScreen extends StatefulWidget {
   const ReportsAnalyticsScreen({super.key});
@@ -47,12 +48,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       final cloudRecords =
           await SupabaseService().fetchAttendanceRecordsFromSupabase();
       if (cloudRecords.isNotEmpty) {
-        final existingRecords = _db.getAttendanceRecords();
-        final existingIds = existingRecords.map((r) => r.id).toSet();
         for (final record in cloudRecords) {
-          if (!existingIds.contains(record.id)) {
-            _db.addAttendanceRecord(record);
-          }
+          _db.saveAttendanceRecord(record);
         }
       }
 
@@ -1255,6 +1252,27 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                   ),
                                 ),
                               ),
+                              if (dayEntry != null && dayEntry.isEdited) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.purple.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                        color: Colors.purple.withValues(alpha: 0.3)),
+                                  ),
+                                  child: const Text(
+                                    'ADMIN MODIFIED',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.purple,
+                                    ),
+                                  ),
+                                ),
+                              ],
                               const SizedBox(width: 8),
                               Text(
                                 '${dateRecords.where((r) => r.photoBase64.isNotEmpty).length} Photo(s)',
@@ -1266,11 +1284,74 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               )
                             ],
                           ),
+                          if (dayEntry != null &&
+                              dayEntry.remarks != null &&
+                              dayEntry.remarks!.trim().isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Icon(Icons.note_alt_rounded,
+                                    size: 13, color: Colors.purple.shade400),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    'Remarks: ${dayEntry.remarks}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontStyle: FontStyle.italic,
+                                      color: isDark
+                                          ? AppColors.textSecondaryDark
+                                          : Colors.grey.shade800,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
-                    trailing: const Icon(Icons.arrow_forward_ios_rounded,
-                        size: 16, color: AppColors.textSecondaryLight),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final ok = await AdminEditAttendanceDialog.show(
+                              context,
+                              employeeId: emp.id,
+                              employeeName: emp.name,
+                              date: parsedDate,
+                              initialCheckIn: dayEntry?.checkInTime,
+                              initialCheckOut: dayEntry?.checkOutTime,
+                              initialOtHours: dayEntry?.manualOvertimeHours ??
+                                  dayEntry?.overtimeHours,
+                              initialRemarks: dayEntry?.remarks,
+                            );
+                            if (ok == true && mounted) {
+                              setState(() {});
+                            }
+                          },
+                          icon: const Icon(Icons.edit_calendar_rounded, size: 15),
+                          label: const Text('Adjust Shift',
+                              style: TextStyle(
+                                  fontSize: 11, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: activePrimary,
+                            foregroundColor: Colors.white,
+                            elevation: 2,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 8),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                     onTap: () {
                       setState(() {
                         _selectedDate = parsedDate;
@@ -1372,6 +1453,38 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               : palette.textSecondaryLight),
                     ),
                   ],
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final tEntry = dayTimesheets.isNotEmpty ? dayTimesheets.first : null;
+                  final ok = await AdminEditAttendanceDialog.show(
+                    context,
+                    employeeId: emp.id,
+                    employeeName: emp.name,
+                    date: _selectedDate!,
+                    initialCheckIn: tEntry?.checkInTime,
+                    initialCheckOut: tEntry?.checkOutTime,
+                    initialOtHours: tEntry?.manualOvertimeHours ?? tEntry?.overtimeHours,
+                    initialRemarks: tEntry?.remarks,
+                  );
+                  if (ok == true && mounted) {
+                    setState(() {});
+                  }
+                },
+                icon: const Icon(Icons.edit_calendar_rounded, size: 18),
+                label: const Text('Adjust Shift & OT',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: activePrimary,
+                  foregroundColor: Colors.white,
+                  elevation: 3,
+                  shadowColor: activePrimary.withValues(alpha: 0.4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ],

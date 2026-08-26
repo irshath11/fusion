@@ -18,6 +18,10 @@ class AttendanceRecord {
   final String? workSiteId;
   final String? siteName;
   final SyncStatus syncStatus;
+  final double? manualOvertimeHours;
+  final String? remarks;
+  final bool isEdited;
+  final String? editedBy;
 
   AttendanceRecord({
     required this.id,
@@ -37,6 +41,10 @@ class AttendanceRecord {
     this.workSiteId,
     this.siteName,
     this.syncStatus = SyncStatus.pending,
+    this.manualOvertimeHours,
+    this.remarks,
+    this.isEdited = false,
+    this.editedBy,
   });
 
   AttendanceRecord copyWith({
@@ -45,13 +53,19 @@ class AttendanceRecord {
     DateTime? syncTimestamp,
     String? siteName,
     String? photoBase64,
+    DateTime? eventTimestamp,
+    double? manualOvertimeHours,
+    bool overrideManualOvertimeHours = false,
+    String? remarks,
+    bool? isEdited,
+    String? editedBy,
   }) {
     return AttendanceRecord(
       id: id,
       employeeId: employeeId,
       employeeName: employeeName,
       workflowStep: workflowStep,
-      eventTimestamp: eventTimestamp,
+      eventTimestamp: eventTimestamp ?? this.eventTimestamp,
       syncTimestamp: syncTimestamp ?? this.syncTimestamp,
       latitude: latitude,
       longitude: longitude,
@@ -64,6 +78,12 @@ class AttendanceRecord {
       workSiteId: workSiteId,
       siteName: siteName ?? this.siteName,
       syncStatus: syncStatus ?? this.syncStatus,
+      manualOvertimeHours: overrideManualOvertimeHours
+          ? manualOvertimeHours
+          : (manualOvertimeHours ?? this.manualOvertimeHours),
+      remarks: remarks ?? this.remarks,
+      isEdited: isEdited ?? this.isEdited,
+      editedBy: editedBy ?? this.editedBy,
     );
   }
 
@@ -85,6 +105,10 @@ class AttendanceRecord {
         'workSiteId': workSiteId,
         'siteName': siteName,
         'syncStatus': syncStatus.name,
+        'manualOvertimeHours': manualOvertimeHours,
+        'remarks': remarks,
+        'isEdited': isEdited,
+        'editedBy': editedBy,
       };
 
   factory AttendanceRecord.fromJson(Map<String, dynamic> json) {
@@ -110,6 +134,9 @@ class AttendanceRecord {
       orElse: () => SyncStatus.pending,
     );
 
+    final rawOt = json['manualOvertimeHours'] ?? json['manual_overtime_hours'];
+    final otHours = rawOt != null ? (rawOt as num).toDouble() : null;
+
     return AttendanceRecord(
       id: json['id']?.toString() ?? '',
       employeeId: json['employeeId']?.toString() ?? json['employee_id']?.toString() ?? '',
@@ -128,6 +155,10 @@ class AttendanceRecord {
       workSiteId: json['workSiteId']?.toString() ?? json['work_site_id']?.toString(),
       siteName: json['siteName']?.toString() ?? json['site_name']?.toString(),
       syncStatus: status,
+      manualOvertimeHours: otHours,
+      remarks: json['remarks']?.toString(),
+      isEdited: json['isEdited'] ?? json['is_edited'] ?? false,
+      editedBy: json['editedBy']?.toString() ?? json['edited_by']?.toString(),
     );
   }
 }

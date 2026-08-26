@@ -319,6 +319,55 @@ class TimesheetCalculator {
         }
       }
 
+      // Check for manual OT override, remarks, and edited status from records
+      double? dayManualOt;
+      String? dayRemarks;
+      bool dayIsEdited = false;
+      String? dayEditedBy;
+
+      final editedRecords = dayRecords.where((r) => r.isEdited).toList();
+      if (editedRecords.isNotEmpty) {
+        dayIsEdited = true;
+        for (final r in editedRecords) {
+          if (r.manualOvertimeHours != null) {
+            dayManualOt = r.manualOvertimeHours;
+          }
+          if (r.remarks != null && r.remarks!.trim().isNotEmpty) {
+            dayRemarks = r.remarks;
+          }
+          if (r.editedBy != null && r.editedBy!.isNotEmpty) {
+            dayEditedBy = r.editedBy;
+          }
+        }
+      } else {
+        for (final r in dayRecords) {
+          if (r.manualOvertimeHours != null) {
+            dayManualOt = r.manualOvertimeHours;
+          }
+          if (r.remarks != null && r.remarks!.trim().isNotEmpty) {
+            dayRemarks = r.remarks;
+          }
+        }
+      }
+
+      if (dayManualOt != null) {
+        overtimeHours = dayManualOt;
+
+        // When OT is manually modified by Admin, fix regular duty to 8.0h for standard shifts (>= 5 gross hours)
+        if (checkInTimestamp != null && checkOutTimestamp != null) {
+          final grossMins = checkOutTimestamp.difference(checkInTimestamp).inMinutes;
+          if (grossMins >= 360) {
+            regularHours = standardRegularHoursPerDay;
+          }
+        } else {
+          regularHours = standardRegularHoursPerDay;
+        }
+
+        // Recalculate net worked duration so total hours equals regularHours + overtimeHours
+        final double effectiveTotalHours = regularHours + overtimeHours;
+        netWorkedDuration = Duration(minutes: (effectiveTotalHours * 60).round());
+      }
+
       entries.add(
         DailyTimesheetEntry(
           date: date,
@@ -335,6 +384,10 @@ class TimesheetCalculator {
           isCompleted: isCompleted,
           isAutoCompleted: isAutoCompleted,
           siteVisits: siteVisits,
+          manualOvertimeHours: dayManualOt,
+          remarks: dayRemarks,
+          isEdited: dayIsEdited,
+          editedBy: dayEditedBy,
         ),
       );
     });

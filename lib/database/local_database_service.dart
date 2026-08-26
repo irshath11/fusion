@@ -436,11 +436,183 @@ class LocalDatabaseService {
     _persistAttendanceRecords();
   }
 
-  void updateAttendanceRecord(AttendanceRecord updatedRecord) {
-    final index = _attendanceRecords.indexWhere((r) => r.id == updatedRecord.id);
+  void saveAttendanceRecord(AttendanceRecord record) {
+    final index = _attendanceRecords.indexWhere((r) => r.id == record.id);
     if (index >= 0) {
-      _attendanceRecords[index] = updatedRecord;
-      _persistAttendanceRecords();
+      final existing = _attendanceRecords[index];
+      if (existing.isEdited && record.manualOvertimeHours == null && existing.manualOvertimeHours != null) {
+        _attendanceRecords[index] = record.copyWith(
+          manualOvertimeHours: existing.manualOvertimeHours,
+          overrideManualOvertimeHours: true,
+          remarks: (existing.remarks != null && existing.remarks!.isNotEmpty) ? existing.remarks : record.remarks,
+          isEdited: true,
+          editedBy: existing.editedBy,
+        );
+      } else {
+        _attendanceRecords[index] = record;
+      }
+    } else {
+      _attendanceRecords.add(record);
+    }
+    _persistAttendanceRecords();
+  }
+
+  void updateAttendanceRecord(AttendanceRecord updatedRecord) {
+    saveAttendanceRecord(updatedRecord);
+  }
+
+  /// Admin method to update or insert Check-In, Check-Out, and Overtime (OT) with Remarks for an employee on a given date.
+  Future<bool> updateOrAddAdminAttendanceOverride({
+    required String employeeId,
+    required String employeeName,
+    required DateTime date,
+    required DateTime checkInTime,
+    required DateTime checkOutTime,
+    double? manualOvertimeHours,
+    String? remarks,
+    String? adminName,
+  }) async {
+    final dateStr =
+        "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+
+    // Filter existing records for this employee on this date
+    final dayRecords = _attendanceRecords.where((r) {
+      final isEmp = r.employeeId == employeeId ||
+          r.employeeName.trim().toLowerCase() == employeeName.trim().toLowerCase();
+      final rDateStr =
+          "${r.eventTimestamp.year}-${r.eventTimestamp.month.toString().padLeft(2, '0')}-${r.eventTimestamp.day.toString().padLeft(2, '0')}";
+      return isEmp && rDateStr == dateStr;
+    }).toList();
+
+    final List<AttendanceRecord> updatedOrCreated = [];
+
+    // 1. Check-In Record
+    int inIndex = dayRecords.indexWhere(
+      (r) => r.workflowStep == WorkflowStep.officeCheckIn,
+    );
+    if (inIndex < 0) {
+      inIndex = dayRecords.indexWhere(
+        (r) => r.workflowStep == WorkflowStep.siteCheckIn,
+      );
+    }
+
+    if (inIndex >= 0) {
+      final orig = dayRecords[inIndex];
+      final updated = orig.copyWith(
+        eventTimestamp: checkInTime,
+        manualOvertimeHours: manualOvertimeHours,
+        overrideManualOvertimeHours: true,
+        remarks: remarks,
+        isEdited: true,
+        editedBy: adminName,
+        syncStatus: SyncStatus.pending,
+      );
+      updateAttendanceRecord(updated);
+      updatedOrCreated.add(updated);
+    } else {
+      final newCheckIn = AttendanceRecord(
+        id: _uuid.v4(),
+        employeeId: employeeId,
+        employeeName: employeeName,
+        workflowStep: WorkflowStep.officeCheckIn,
+        eventTimestamp: checkInTime,
+        latitude: 0.0,
+        longitude: 0.0,
+        gpsAccuracy: 5.0,
+        address: 'Admin Manual Entry',
+        deviceId: 'DEV-ADMIN-OVERRIDE',
+        photoBase64: '',
+        isGeofenceValid: true,
+        siteName: 'Main Office',
+        manualOvertimeHours: manualOvertimeHours,
+        remarks: remarks,
+        isEdited: true,
+        editedBy: adminName,
+        syncStatus: SyncStatus.pending,
+      );
+      addAttendanceRecord(newCheckIn);
+      updatedOrCreated.add(newCheckIn);
+    }
+
+    // 2. Check-Out Record
+    int outIndex = dayRecords.lastIndexWhere(
+      (r) => r.workflowStep == WorkflowStep.officeCheckOut,
+    );
+    if (outIndex < 0) {
+      outIndex = dayRecords.lastIndexWhere(
+        (r) => r.workflowStep == WorkflowStep.siteCheckOut,
+      );
+    }
+
+    if (outIndex >= 0) {
+      final orig = dayRecords[outIndex];
+      final updated = orig.copyWith(
+        eventTimestamp: checkOutTime,
+        manualOvertimeHours: manualOvertimeHours,
+        overrideManualOvertimeHours: true,
+        remarks: remarks,
+        isEdited: true,
+        editedBy: adminName,
+        syncStatus: SyncStatus.pending,
+      );
+      updateAttendanceRecord(updated);
+      updatedOrCreated.add(updated);
+    } else {
+      final newCheckOut = AttendanceRecord(
+        id: _uuid.v4(),
+        employeeId: employeeId,
+        employeeName: employeeName,
+        workflowStep: WorkflowStep.officeCheckOut,
+        eventTimestamp: checkOutTime,
+        latitude: 0.0,
+        longitude: 0.0,
+        gpsAccuracy: 5.0,
+        address: 'Admin Manual Entry',
+        deviceId: 'DEV-ADMIN-OVERRIDE',
+        photoBase64: '',
+        isGeofenceValid: true,
+        siteName: 'Main Office',
+        manualOvertimeHours: manualOvertimeHours,
+        remarks: remarks,
+        isEdited: true,
+        editedBy: adminName,
+        syncStatus: SyncStatus.pending,
+      );
+      addAttendanceRecord(newCheckOut);
+      updatedOrCreated.add(newCheckOut);
+    }
+
+    // 3. Update all intermediate site/break logs for this date to maintain OT override & remarks consistency
+    for (int i = 0; i < dayRecords.length; i++) {
+      if (i != inIndex && i != outIndex) {
+        final orig = dayRecords[i];
+        final updated = orig.copyWith(
+          manualOvertimeHours: manualOvertimeHours,
+          overrideManualOvertimeHours: true,
+          remarks: remarks,
+          isEdited: true,
+          editedBy: adminName,
+          syncStatus: SyncStatus.pending,
+        );
+        updateAttendanceRecord(updated);
+        updatedOrCreated.add(updated);
+      }
+    }
+
+    _persistAttendanceRecords();
+
+    // Trigger Cloud DB sync
+    try {
+      final cloudOk = await SupabaseService().saveAdminAttendanceOverride(records: updatedOrCreated);
+      if (cloudOk) {
+        for (final rec in updatedOrCreated) {
+          updateAttendanceRecord(rec.copyWith(syncStatus: SyncStatus.synced));
+        }
+      }
+      return cloudOk;
+    } catch (e) {
+      debugPrint('Cloud sync note during admin override: $e');
+      return false;
     }
   }
 
