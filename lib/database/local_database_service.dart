@@ -472,15 +472,17 @@ class LocalDatabaseService {
     String? remarks,
     String? adminName,
   }) async {
+    final localDate = date.toLocal();
     final dateStr =
-        "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+        "${localDate.year}-${localDate.month.toString().padLeft(2, '0')}-${localDate.day.toString().padLeft(2, '0')}";
 
     // Filter existing records for this employee on this date
     final dayRecords = _attendanceRecords.where((r) {
       final isEmp = r.employeeId == employeeId ||
           r.employeeName.trim().toLowerCase() == employeeName.trim().toLowerCase();
+      final localEv = r.eventTimestamp.toLocal();
       final rDateStr =
-          "${r.eventTimestamp.year}-${r.eventTimestamp.month.toString().padLeft(2, '0')}-${r.eventTimestamp.day.toString().padLeft(2, '0')}";
+          "${localEv.year}-${localEv.month.toString().padLeft(2, '0')}-${localEv.day.toString().padLeft(2, '0')}";
       return isEmp && rDateStr == dateStr;
     }).toList();
 
@@ -709,7 +711,7 @@ class LocalDatabaseService {
     final targetId = employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
     if (targetId == null || targetId.isEmpty) return [];
 
-    final now = DateTime.now();
+    final now = DateTime.now().toLocal();
     final today = DateTime(now.year, now.month, now.day);
 
     return _attendanceRecords.where((r) {
@@ -718,7 +720,8 @@ class LocalDatabaseService {
               (r.employeeId == _currentUser!.id ||
                r.employeeId == _currentUser!.firebaseUid ||
                r.employeeName.trim().toLowerCase() == _currentUser!.fullName.trim().toLowerCase())));
-      final rDate = DateTime(r.eventTimestamp.year, r.eventTimestamp.month, r.eventTimestamp.day);
+      final localEv = r.eventTimestamp.toLocal();
+      final rDate = DateTime(localEv.year, localEv.month, localEv.day);
       return matchesUser && rDate.isAtSameMomentAs(today);
     }).toList();
   }

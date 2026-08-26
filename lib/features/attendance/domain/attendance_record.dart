@@ -111,6 +111,25 @@ class AttendanceRecord {
         'editedBy': editedBy,
       };
 
+  static DateTime _parseAsWallClockLocal(dynamic rawTime) {
+    if (rawTime == null) return DateTime.now();
+    final str = rawTime.toString().trim();
+    if (str.isEmpty) return DateTime.now();
+    try {
+      final dt = DateTime.parse(str);
+      return DateTime(
+        dt.year,
+        dt.month,
+        dt.day,
+        dt.hour,
+        dt.minute,
+        dt.second,
+      );
+    } catch (_) {
+      return DateTime.now();
+    }
+  }
+
   factory AttendanceRecord.fromJson(Map<String, dynamic> json) {
     final stepVal = json['workflowStep'] ?? json['workflow_step'] ?? 'officeCheckIn';
     final step = WorkflowStep.values.firstWhere(
@@ -119,14 +138,10 @@ class AttendanceRecord {
     );
 
     final rawEventTime = json['eventTimestamp'] ?? json['event_timestamp'];
-    final eventTime = rawEventTime != null
-        ? DateTime.parse(rawEventTime.toString())
-        : DateTime.now();
+    final eventTime = _parseAsWallClockLocal(rawEventTime);
 
     final rawSyncTime = json['syncTimestamp'] ?? json['sync_timestamp'];
-    final syncTime = rawSyncTime != null
-        ? DateTime.parse(rawSyncTime.toString())
-        : null;
+    final syncTime = rawSyncTime != null ? _parseAsWallClockLocal(rawSyncTime) : null;
 
     final rawSyncStatus = json['syncStatus'] ?? json['sync_status'];
     final status = SyncStatus.values.firstWhere(

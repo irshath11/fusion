@@ -18,6 +18,8 @@ import '../../sync/data/sync_engine.dart';
 import '../../auth/presentation/auth_cubit.dart';
 import '../../auth/presentation/login_screen.dart';
 import '../../timesheet/presentation/employee_timesheet_screen.dart';
+import '../../timesheet/domain/timesheet_entry.dart';
+import '../../../core/utils/timesheet_calculator.dart';
 import '../../../core/constants/app_theme.dart';
 import '../../../core/widgets/app_shell.dart';
 import 'package:intl/intl.dart';
@@ -487,6 +489,29 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     final now = DateTime.now();
 
     final empId = user?.id ?? user?.firebaseUid;
+    final allRecords = _db.getAttendanceRecords();
+
+    // Use TimesheetCalculator to guarantee 100% exact parity with Employee Timesheet & Admin Reports
+    final dailyEntries = TimesheetCalculator.calculateDailyTimesheets(
+      allRecords,
+      targetEmployeeId: empId,
+      targetFirebaseUid: user?.firebaseUid,
+      targetEmployeeName: user?.fullName,
+    );
+
+    final localNow = now.toLocal();
+    final todayStr = "${localNow.year}-${localNow.month.toString().padLeft(2, '0')}-${localNow.day.toString().padLeft(2, '0')}";
+
+    DailyTimesheetEntry? todayTimesheetEntry;
+    for (final entry in dailyEntries) {
+      final entryLocal = entry.date.toLocal();
+      final entryDateStr = "${entryLocal.year}-${entryLocal.month.toString().padLeft(2, '0')}-${entryLocal.day.toString().padLeft(2, '0')}";
+      if (entryDateStr == todayStr) {
+        todayTimesheetEntry = entry;
+        break;
+      }
+    }
+
     final userTodayRecords = _db.getTodayAttendanceRecords(empId);
 
     String workingTime = '00h 00m';
@@ -496,35 +521,23 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     final Duration totalBreakToday =
         _db.getTodayBreakDuration(user?.id ?? user?.firebaseUid);
 
-    if (userTodayRecords.isNotEmpty) {
-      final checkInMatches = userTodayRecords
-          .where((r) => r.workflowStep == WorkflowStep.officeCheckIn);
-      if (checkInMatches.isNotEmpty) {
-        final checkInTime = checkInMatches.first.eventTimestamp;
-        final lastRecord = userTodayRecords.last;
-
-        DateTime endTime;
-        bool isAutoCompleted = false;
-
-        if (lastRecord.workflowStep == WorkflowStep.officeCheckOut) {
-          endTime = lastRecord.eventTimestamp;
-          isAutoCompleted = lastRecord.address.contains('Auto Check-Out');
-        } else if (now.difference(checkInTime) >= const Duration(hours: 24)) {
-          endTime = checkInTime.add(const Duration(hours: 8));
-          isAutoCompleted = true;
-        } else if (lastRecord.workflowStep == WorkflowStep.siteCheckOut) {
-          endTime = lastRecord.eventTimestamp;
-        } else {
-          // officeCheckIn, siteCheckIn, or break: Duty is currently active!
-          endTime = now;
-        }
-
-        if (isAutoCompleted) {
-          workingTime = '08h 00m (Auto)';
-        } else {
-          final grossDiff = endTime.isAfter(checkInTime)
-              ? endTime.difference(checkInTime)
-              : Duration.zero;
+    if (todayTimesheetEntry != null) {
+      if (todayTimesheetEntry.isAutoCompleted) {
+        workingTime = '08h 00m (Auto)';
+      } else {
+        final totalHrs = todayTimesheetEntry.totalHours;
+        final int hrs = totalHrs.floor();
+        final int mins = ((totalHrs - hrs) * 60).round();
+        workingTime = '${hrs.toString().padLeft(2, '0')}h ${mins.toString().padLeft(2, '0')}m';
+      }
+    } else {
+      final userTodayRecords = _db.getTodayAttendanceRecords(empId);
+      if (userTodayRecords.isNotEmpty) {
+        final checkInMatches = userTodayRecords
+            .where((r) => r.workflowStep == WorkflowStep.officeCheckIn);
+        if (checkInMatches.isNotEmpty) {
+          final checkInTime = checkInMatches.first.eventTimestamp;
+          final grossDiff = now.difference(checkInTime);
           final netDiff = grossDiff > totalBreakToday
               ? (grossDiff - totalBreakToday)
               : Duration.zero;

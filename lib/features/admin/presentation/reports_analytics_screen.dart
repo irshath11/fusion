@@ -474,7 +474,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   // Distinct dates count
                   final datesCount = empRecords
                       .map((r) =>
-                          DateFormat('yyyy-MM-dd').format(r.eventTimestamp))
+                          DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()))
                       .toSet()
                       .length;
 
@@ -580,7 +580,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     // Group records by date (yyyy-MM-dd)
     final Map<String, List<AttendanceRecord>> groupedByDate = {};
     for (final r in empRecords) {
-      final dateKey = DateFormat('yyyy-MM-dd').format(r.eventTimestamp);
+      final dateKey = DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal());
       groupedByDate.putIfAbsent(dateKey, () => []).add(r);
     }
 
@@ -987,7 +987,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                 final allValidGeofence =
                     dateRecords.every((r) => r.isGeofenceValid);
                 final firstTime = DateFormat('hh:mm a')
-                    .format(dateRecords.first.eventTimestamp);
+                    .format(dateRecords.first.eventTimestamp.toLocal());
 
                 final siteOutRecs = dateRecords
                     .where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
@@ -998,7 +998,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     : (siteOutRecs.isNotEmpty
                         ? siteOutRecs.last.eventTimestamp
                         : dateRecords.last.eventTimestamp);
-                final lastTime = DateFormat('hh:mm a').format(endRecordTime);
+                final lastTime = DateFormat('hh:mm a').format(endRecordTime.toLocal());
 
                 final siteCheckIns = dateRecords.where((r) =>
                     r.workflowStep == WorkflowStep.siteCheckIn ||
@@ -1388,7 +1388,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           (eName.isNotEmpty &&
               (rEmpName.contains(eName) || eName.contains(rEmpName)));
       final matchesDate =
-          DateFormat('yyyy-MM-dd').format(r.eventTimestamp) == selectedDateStr;
+          DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()) == selectedDateStr;
       return matchesUser && matchesDate;
     }).toList();
 
@@ -1947,7 +1947,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               itemBuilder: (context, index) {
                 final r = dateRecords[index];
                 final timeStr =
-                    DateFormat('hh:mm:ss a').format(r.eventTimestamp);
+                    DateFormat('hh:mm:ss a').format(r.eventTimestamp.toLocal());
 
                 return Card(
                   margin: const EdgeInsets.only(bottom: 16),
@@ -2401,7 +2401,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Timestamp: ${DateFormat('dd MMM yyyy hh:mm:ss a').format(record.eventTimestamp)}',
+                'Timestamp: ${DateFormat('dd MMM yyyy hh:mm:ss a').format(record.eventTimestamp.toLocal())}',
                 style:
                     const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
               ),

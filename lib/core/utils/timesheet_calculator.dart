@@ -109,8 +109,9 @@ class TimesheetCalculator {
     final Map<String, List<AttendanceRecord>> groupedMap = {};
 
     for (final record in filteredRecords) {
+      final localEv = record.eventTimestamp.toLocal();
       final dateStr =
-          "${record.eventTimestamp.year}-${record.eventTimestamp.month.toString().padLeft(2, '0')}-${record.eventTimestamp.day.toString().padLeft(2, '0')}";
+          "${localEv.year}-${localEv.month.toString().padLeft(2, '0')}-${localEv.day.toString().padLeft(2, '0')}";
       groupedMap.putIfAbsent(dateStr, () => []).add(record);
     }
 
@@ -125,10 +126,11 @@ class TimesheetCalculator {
       final firstRecord = dayRecords.first;
       final empId = firstRecord.employeeId;
       final empName = firstRecord.employeeName;
+      final firstLocal = firstRecord.eventTimestamp.toLocal();
       final date = DateTime(
-        firstRecord.eventTimestamp.year,
-        firstRecord.eventTimestamp.month,
-        firstRecord.eventTimestamp.day,
+        firstLocal.year,
+        firstLocal.month,
+        firstLocal.day,
       );
 
       // 1. Office Check-In as primary start time
