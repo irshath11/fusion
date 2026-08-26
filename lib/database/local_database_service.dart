@@ -437,7 +437,23 @@ class LocalDatabaseService {
   }
 
   void saveAttendanceRecord(AttendanceRecord record) {
-    final index = _attendanceRecords.indexWhere((r) => r.id == record.id);
+    int index = _attendanceRecords.indexWhere((r) => r.id == record.id);
+
+    // Fallback matching by employeeId/name + workflowStep + eventTimestamp if IDs differ
+    if (index < 0) {
+      index = _attendanceRecords.indexWhere((r) {
+        final empMatch = r.employeeId == record.employeeId ||
+            (r.employeeName.trim().isNotEmpty &&
+                record.employeeName.trim().isNotEmpty &&
+                r.employeeName.trim().toLowerCase() ==
+                    record.employeeName.trim().toLowerCase());
+        final stepMatch = r.workflowStep == record.workflowStep;
+        final timeMatch = r.eventTimestamp.isAtSameMomentAs(record.eventTimestamp) ||
+            r.eventTimestamp.difference(record.eventTimestamp).inSeconds.abs() < 5;
+        return empMatch && stepMatch && timeMatch;
+      });
+    }
+
     if (index >= 0) {
       final existing = _attendanceRecords[index];
       if (existing.isEdited && record.manualOvertimeHours == null && existing.manualOvertimeHours != null) {
@@ -479,7 +495,10 @@ class LocalDatabaseService {
     // Filter existing records for this employee on this date
     final dayRecords = _attendanceRecords.where((r) {
       final isEmp = r.employeeId == employeeId ||
-          r.employeeName.trim().toLowerCase() == employeeName.trim().toLowerCase();
+          (r.employeeName.trim().isNotEmpty &&
+              employeeName.trim().isNotEmpty &&
+              r.employeeName.trim().toLowerCase() ==
+                  employeeName.trim().toLowerCase());
       final localEv = r.eventTimestamp.toLocal();
       final rDateStr =
           "${localEv.year}-${localEv.month.toString().padLeft(2, '0')}-${localEv.day.toString().padLeft(2, '0')}";

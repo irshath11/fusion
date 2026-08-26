@@ -7,6 +7,7 @@ import '../../../core/services/pdf_export_service.dart';
 import '../../../core/utils/timesheet_calculator.dart';
 import '../../../database/local_database_service.dart';
 import '../../admin/domain/employee_entity.dart';
+import '../../admin/presentation/admin_edit_attendance_dialog.dart';
 import 'timesheet_cubit.dart';
 import '../domain/timesheet_entry.dart';
 
@@ -979,6 +980,41 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                               color: AppColors.success),
                         ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        final ok = await AdminEditAttendanceDialog.show(
+                          context,
+                          employeeId: entry.employeeId,
+                          employeeName: entry.employeeName,
+                          date: entry.date,
+                          initialCheckIn: entry.checkInTime,
+                          initialCheckOut: entry.checkOutTime,
+                          initialOtHours: entry.manualOvertimeHours ?? entry.overtimeHours,
+                          initialRemarks: entry.remarks,
+                        );
+                        if (ok == true && context.mounted) {
+                          context.read<TimesheetCubit>().fetchEmployeeTimesheet(
+                                employeeId: widget.employeeId,
+                              );
+                        }
+                      },
+                      icon: const Icon(Icons.edit_calendar_rounded, size: 18),
+                      label: const Text('Adjust Shift & OT Hours',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: activePrimaryModal,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),

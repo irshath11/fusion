@@ -1448,8 +1448,29 @@ class SupabaseService {
         return false;
       }
 
+      String? targetRecordUuid = _isValidUuid(record.id) ? record.id : null;
+
+      // If local ID is not a valid UUID, search Supabase for an existing row for this employee & timestamp / step
+      if (targetRecordUuid == null) {
+        try {
+          final isoTime = record.eventTimestamp.toIso8601String();
+          final existingRow = await client!
+              .from('attendance_records')
+              .select('id')
+              .eq('employee_id', validEmployeeId)
+              .eq('workflow_step', record.workflowStep.name)
+              .eq('event_timestamp', isoTime)
+              .maybeSingle();
+
+          if (existingRow != null && existingRow['id'] != null) {
+            targetRecordUuid = existingRow['id'].toString();
+          }
+        } catch (_) {}
+      }
+
       final payload = <String, dynamic>{
-        if (_isValidUuid(record.id)) 'id': record.id,
+        if (targetRecordUuid != null && _isValidUuid(targetRecordUuid))
+          'id': targetRecordUuid,
         'organization_id': validOrgId,
         'employee_id': validEmployeeId,
         'employee_name': record.employeeName,
@@ -1461,46 +1482,50 @@ class SupabaseService {
         'photo_url': photoPublicUrl ??
             (record.photoBase64.isNotEmpty ? record.photoBase64 : null),
         'address': record.address,
-        if (record.officeId != null && record.officeId!.isNotEmpty && _isValidUuid(record.officeId))
+        if (record.officeId != null &&
+            record.officeId!.isNotEmpty &&
+            _isValidUuid(record.officeId))
           'office_id': record.officeId,
-        if (record.workSiteId != null && record.workSiteId!.isNotEmpty && _isValidUuid(record.workSiteId))
+        if (record.workSiteId != null &&
+            record.workSiteId!.isNotEmpty &&
+            _isValidUuid(record.workSiteId))
           'work_site_id': record.workSiteId,
         if (record.siteName != null && record.siteName!.isNotEmpty)
           'site_name': record.siteName,
-        if (record.manualOvertimeHours != null)
-          'manual_overtime_hours': record.manualOvertimeHours,
-        if (record.remarks != null && record.remarks!.isNotEmpty)
-          'remarks': record.remarks,
+        'manual_overtime_hours': record.manualOvertimeHours,
+        'remarks': record.remarks,
         'is_edited': record.isEdited,
-        if (record.editedBy != null && record.editedBy!.isNotEmpty)
-          'edited_by': record.editedBy,
+        'edited_by': record.editedBy,
         'device_id': record.deviceId.isEmpty ? 'DEV-CLIENT' : record.deviceId,
         'created_at': DateTime.now().toIso8601String(),
       };
 
-      try {
-        await client!.from('attendance_records').upsert(payload);
-        return true;
-      } catch (e) {
-        final errStr = e.toString();
-        // Fallback: If newer columns are missing in user's Supabase table schema (PGRST204), retry without optional columns
-        if (errStr.contains('site_name') || errStr.contains('manual_overtime_hours') || errStr.contains('remarks') || errStr.contains('is_edited') || errStr.contains('PGRST204')) {
-          payload.remove('site_name');
-          payload.remove('manual_overtime_hours');
-          payload.remove('remarks');
-          payload.remove('is_edited');
-          payload.remove('edited_by');
-          try {
-            await client!.from('attendance_records').upsert(payload);
-            return true;
-          } catch (retryErr) {
-            debugPrint('Supabase DB insert retry error: $retryErr');
-            return false;
+      int retries = 0;
+      while (retries < 5) {
+        try {
+          await client!.from('attendance_records').upsert(payload);
+          return true;
+        } catch (e) {
+          final errStr = e.toString();
+          if (errStr.contains('PGRST204') || errStr.contains('Could not find the')) {
+            final RegExp regExp = RegExp(r"Could not find the '([^']+)' column");
+            final match = regExp.firstMatch(errStr);
+            if (match != null) {
+              final missingCol = match.group(1);
+              if (missingCol != null && payload.containsKey(missingCol)) {
+                debugPrint(
+                    'Supabase table "attendance_records" missing column "$missingCol". Removing "$missingCol" and retrying...');
+                payload.remove(missingCol);
+                retries++;
+                continue;
+              }
+            }
           }
+          debugPrint('Supabase DB insert note: $e');
+          return false;
         }
-        debugPrint('Supabase DB insert note: $e');
-        return false;
       }
+      return false;
     } catch (outerErr) {
       debugPrint('Supabase insertAttendanceEntry outer error: $outerErr');
       return false;
