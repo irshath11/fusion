@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:intl/intl.dart';
 import 'admin_cubit.dart';
 import 'employee_management_screen.dart';
 import 'office_management_screen.dart';
@@ -185,52 +184,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
           );
         },
-      ),
-      ),
-    );
-  }
-
-  void _showResetCacheDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.cleaning_services_rounded, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('Reset Local Cache'),
-          ],
-        ),
-        content: const Text(
-          'This will purge all locally cached attendance records from this device.\n\n'
-          'Use this if you deleted logs directly in Supabase or want to clear old offline data.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () {
-              Navigator.pop(dialogCtx);
-              LocalDatabaseService().clearLocalAttendanceRecords();
-              try {
-                context.read<AdminCubit>().loadDashboardData('Local attendance cache reset.');
-              } catch (_) {}
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Local attendance records cleared successfully.'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            child: const Text('Reset Cache'),
-          ),
-        ],
       ),
     );
   }

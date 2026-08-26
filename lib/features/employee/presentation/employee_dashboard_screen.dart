@@ -481,50 +481,6 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     );
   }
 
-  void _showResetCacheDialog() {
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.cleaning_services_rounded, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('Reset Local Cache'),
-          ],
-        ),
-        content: const Text(
-          'This will purge all locally cached attendance records from this device.\n\n'
-          'Use this if you deleted logs directly in Supabase or want to clear old offline data.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () {
-              Navigator.pop(dialogCtx);
-              _db.clearLocalAttendanceRecords();
-              _refreshSyncCount();
-              if (mounted) setState(() {});
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Local attendance records cleared successfully.'),
-                  backgroundColor: AppColors.success,
-                ),
-              );
-            },
-            child: const Text('Reset Cache'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final user = _db.currentUser;
@@ -604,13 +560,6 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
         icon: Icons.radar_outlined,
         activeIcon: Icons.radar_rounded,
         label: 'Duty Radar',
-      ),
-      NavDestinationItem(
-        icon: Icons.receipt_long_outlined,
-        activeIcon: Icons.receipt_long_rounded,
-        label: 'Timesheet',
-      ),
-    ];
       ),
       NavDestinationItem(
         icon: Icons.receipt_long_outlined,

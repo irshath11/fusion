@@ -224,7 +224,6 @@ class _UserFormDialogState extends State<UserFormDialog> {
           _isLoadingDetails = false;
         });
       }
->>>>>>> admin_web
     }
   }
 

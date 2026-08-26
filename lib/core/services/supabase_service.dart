@@ -928,6 +928,10 @@ class SupabaseService {
           ? existingUser.id
           : cleanId;
 
+      final updates = <String, dynamic>{
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
       if (email != null && email.trim().isNotEmpty) updates['email'] = email.trim();
       if (phoneNumber != null) updates['phone_number'] = phoneNumber.trim();
       if (role != null) updates['role'] = role.nameString;

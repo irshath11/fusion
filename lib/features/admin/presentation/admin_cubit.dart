@@ -60,6 +60,7 @@ class AdminCubit extends Cubit<AdminState> {
 
     final combinedOffices = officeMap.values.toList();
 
+    final orgId = _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
     try {
       final cloudEmployees = await _supabase.fetchEmployeesFromSupabase(orgId);
       final cloudUsers = await _supabase.fetchOrganizationUsers(orgId);
