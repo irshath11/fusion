@@ -23,7 +23,8 @@ class PdfExportService {
     for (final emp in employees) {
       final empRecords = records.where((r) {
         return r.employeeId == emp.id ||
-            r.employeeName.toLowerCase() == emp.name.toLowerCase();
+            r.employeeName.toLowerCase() == emp.name.toLowerCase() ||
+            (emp.employeeCode != null && r.employeeId == emp.employeeCode);
       }).toList();
 
       final timesheets = TimesheetCalculator.calculateDailyTimesheets(empRecords);
@@ -520,9 +521,12 @@ class PdfExportService {
                     .toSet()
                     .where((s) => s.isNotEmpty && s != 'Work Site')
                     .join(', ');
+                final assignedName = (employee.assignedOfficeName != null && employee.assignedOfficeName.toString().trim().isNotEmpty)
+                    ? employee.assignedOfficeName.toString().trim()
+                    : 'Main Location';
                 final sitesStr = entry.siteVisits.isNotEmpty
-                    ? entry.siteVisits.map((sv) => sv.siteName).join(', ')
-                    : (resolvedSites.isNotEmpty ? resolvedSites : 'Main Office');
+                    ? entry.siteVisits.map((sv) => sv.siteName).toSet().join(', ')
+                    : (resolvedSites.isNotEmpty ? resolvedSites : assignedName);
                 final status = entry.isCompleted ? 'Complete' : 'In Progress';
                 return [dateStr, inTime, outTime, reg, ot, breakStr, sitesStr, status];
               }).toList(),

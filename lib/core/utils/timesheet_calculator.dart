@@ -1,4 +1,5 @@
 import '../../database/local_database_service.dart';
+import '../../features/admin/domain/employee_entity.dart';
 import '../../features/attendance/domain/attendance_record.dart';
 import '../../features/timesheet/domain/timesheet_entry.dart';
 import '../constants/app_enums.dart';
@@ -46,6 +47,44 @@ class TimesheetCalculator {
     return 'Work Site';
   }
 
+  /// Resolves exact human-readable full address for an attendance record
+  static String resolveFullAddress(AttendanceRecord r) {
+    if (r.address.trim().isNotEmpty &&
+        !r.address.contains('Live Field Location') &&
+        !r.address.contains('Timeout') &&
+        !r.address.contains('Error') &&
+        !r.address.contains('Permission Denied')) {
+      return r.address.trim();
+    }
+    final db = LocalDatabaseService();
+    if (r.workSiteId != null && r.workSiteId!.isNotEmpty) {
+      final siteMatches = db.getWorkSites().where((w) => w.id == r.workSiteId);
+      if (siteMatches.isNotEmpty &&
+          siteMatches.first.address.trim().isNotEmpty) {
+        return siteMatches.first.address.trim();
+      }
+    }
+    if (r.officeId != null && r.officeId!.isNotEmpty) {
+      final officeMatches = db.getOffices().where((o) => o.id == r.officeId);
+      if (officeMatches.isNotEmpty &&
+          officeMatches.first.address.trim().isNotEmpty) {
+        return officeMatches.first.address.trim();
+      }
+    }
+    if (r.siteName != null && r.siteName!.trim().isNotEmpty) {
+      final siteMatches = db.getWorkSites().where(
+          (w) => w.siteName.toLowerCase() == r.siteName!.trim().toLowerCase());
+      if (siteMatches.isNotEmpty &&
+          siteMatches.first.address.trim().isNotEmpty) {
+        return siteMatches.first.address.trim();
+      }
+    }
+    if (r.address.trim().isNotEmpty) {
+      return r.address.trim();
+    }
+    return 'N/A';
+  }
+
   /// Calculates daily timesheet entries from raw attendance records for an employee or all employees
   static List<DailyTimesheetEntry> calculateDailyTimesheets(
     List<AttendanceRecord> records, {
@@ -70,8 +109,9 @@ class TimesheetCalculator {
     final Map<String, List<AttendanceRecord>> groupedMap = {};
 
     for (final record in filteredRecords) {
+      final localEv = record.eventTimestamp.toLocal();
       final dateStr =
-          "${record.eventTimestamp.year}-${record.eventTimestamp.month.toString().padLeft(2, '0')}-${record.eventTimestamp.day.toString().padLeft(2, '0')}";
+          "${localEv.year}-${localEv.month.toString().padLeft(2, '0')}-${localEv.day.toString().padLeft(2, '0')}";
       groupedMap.putIfAbsent(dateStr, () => []).add(record);
     }
 
@@ -86,10 +126,11 @@ class TimesheetCalculator {
       final firstRecord = dayRecords.first;
       final empId = firstRecord.employeeId;
       final empName = firstRecord.employeeName;
+      final firstLocal = firstRecord.eventTimestamp.toLocal();
       final date = DateTime(
-        firstRecord.eventTimestamp.year,
-        firstRecord.eventTimestamp.month,
-        firstRecord.eventTimestamp.day,
+        firstLocal.year,
+        firstLocal.month,
+        firstLocal.day,
       );
 
       // 1. Office Check-In as primary start time
@@ -174,11 +215,14 @@ class TimesheetCalculator {
             }
           }
 
-          siteVisits.add(SiteVisitSummary(
-            siteName: sName,
-            checkInTime: sIn,
-            checkOutTime: sOut,
-          ));
+          if (!siteVisits
+              .any((sv) => sv.siteName == sName && sv.checkInTime == sIn)) {
+            siteVisits.add(SiteVisitSummary(
+              siteName: sName,
+              checkInTime: sIn,
+              checkOutTime: sOut,
+            ));
+          }
         }
       }
 
@@ -277,6 +321,55 @@ class TimesheetCalculator {
         }
       }
 
+      // Check for manual OT override, remarks, and edited status from records
+      double? dayManualOt;
+      String? dayRemarks;
+      bool dayIsEdited = false;
+      String? dayEditedBy;
+
+      final editedRecords = dayRecords.where((r) => r.isEdited).toList();
+      if (editedRecords.isNotEmpty) {
+        dayIsEdited = true;
+        for (final r in editedRecords) {
+          if (r.manualOvertimeHours != null) {
+            dayManualOt = r.manualOvertimeHours;
+          }
+          if (r.remarks != null && r.remarks!.trim().isNotEmpty) {
+            dayRemarks = r.remarks;
+          }
+          if (r.editedBy != null && r.editedBy!.isNotEmpty) {
+            dayEditedBy = r.editedBy;
+          }
+        }
+      } else {
+        for (final r in dayRecords) {
+          if (r.manualOvertimeHours != null) {
+            dayManualOt = r.manualOvertimeHours;
+          }
+          if (r.remarks != null && r.remarks!.trim().isNotEmpty) {
+            dayRemarks = r.remarks;
+          }
+        }
+      }
+
+      if (dayManualOt != null) {
+        overtimeHours = dayManualOt;
+
+        // When OT is manually modified by Admin, fix regular duty to 8.0h for standard shifts (>= 5 gross hours)
+        if (checkInTimestamp != null && checkOutTimestamp != null) {
+          final grossMins = checkOutTimestamp.difference(checkInTimestamp).inMinutes;
+          if (grossMins >= 360) {
+            regularHours = standardRegularHoursPerDay;
+          }
+        } else {
+          regularHours = standardRegularHoursPerDay;
+        }
+
+        // Recalculate net worked duration so total hours equals regularHours + overtimeHours
+        final double effectiveTotalHours = regularHours + overtimeHours;
+        netWorkedDuration = Duration(minutes: (effectiveTotalHours * 60).round());
+      }
+
       entries.add(
         DailyTimesheetEntry(
           date: date,
@@ -293,6 +386,10 @@ class TimesheetCalculator {
           isCompleted: isCompleted,
           isAutoCompleted: isAutoCompleted,
           siteVisits: siteVisits,
+          manualOvertimeHours: dayManualOt,
+          remarks: dayRemarks,
+          isEdited: dayIsEdited,
+          editedBy: dayEditedBy,
         ),
       );
     });
@@ -351,9 +448,25 @@ class TimesheetCalculator {
   }) {
     final db = LocalDatabaseService();
     final allEmployees = db.getEmployees();
-    final Map<String, dynamic> empLookup = {
-      for (final e in allEmployees) e.id: e,
-    };
+    final allUsers = db.getUsers();
+    final Map<String, dynamic> empLookup = {};
+    for (final u in allUsers) {
+      if (u.id.isNotEmpty) empLookup[u.id] = u;
+      if (u.firebaseUid.isNotEmpty) empLookup[u.firebaseUid] = u;
+      if (u.fullName.isNotEmpty) empLookup[u.fullName.toLowerCase().trim()] = u;
+      if (u.email.isNotEmpty) empLookup[u.email.toLowerCase().trim()] = u;
+      if (u.employeeCode != null && u.employeeCode!.isNotEmpty) {
+        empLookup[u.employeeCode!.toLowerCase().trim()] = u;
+      }
+    }
+    for (final e in allEmployees) {
+      if (e.id.isNotEmpty) empLookup[e.id] = e;
+      if (e.name.isNotEmpty) empLookup[e.name.toLowerCase().trim()] = e;
+      if (e.email.isNotEmpty) empLookup[e.email.toLowerCase().trim()] = e;
+      if (e.employeeCode.isNotEmpty && e.employeeCode != 'EMP-000') {
+        empLookup[e.employeeCode.toLowerCase().trim()] = e;
+      }
+    }
 
     // Filter records by date range if specified
     final filtered = records.where((r) {
@@ -387,14 +500,32 @@ class TimesheetCalculator {
       final firstRecord = dayRecords.first;
       final empId = firstRecord.employeeId;
       final empName = firstRecord.employeeName;
-      final empEntity = empLookup[empId];
-      final empCode = empEntity != null
-          ? empEntity.employeeCode
-          : (empId.length >= 4
-              ? 'EMP-${empId.substring(0, 4).toUpperCase()}'
-              : 'EMP');
-      final department =
-          empEntity != null ? empEntity.department : 'Operations';
+      final empEntity =
+          empLookup[empId] ?? empLookup[empName.toLowerCase().trim()];
+
+      String empCode = '';
+      String department = 'Operations';
+
+      if (empEntity != null) {
+        if (empEntity is EmployeeEntity) {
+          empCode = empEntity.employeeCode;
+          department = empEntity.department.isNotEmpty
+              ? empEntity.department
+              : 'Operations';
+        } else {
+          // UserEntity
+          empCode = empEntity.employeeCode ?? '';
+          department = empEntity.department ?? 'Operations';
+        }
+      }
+
+      if (empCode.isEmpty || empCode == 'EMP-000') {
+        empCode = firstRecord.employeeId.startsWith('EMP-')
+            ? firstRecord.employeeId
+            : (empId.length >= 4
+                ? 'EMP-${empId.substring(0, 4).toUpperCase()}'
+                : 'EMP');
+      }
 
       DateTime? checkOutTimestamp;
       final officeOutMatches = dayRecords

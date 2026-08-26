@@ -167,6 +167,10 @@ CREATE TABLE IF NOT EXISTS public.attendance_records (
     photo_url TEXT,
     site_name TEXT,
     employee_name TEXT,
+    manual_overtime_hours DOUBLE PRECISION,
+    remarks TEXT,
+    is_edited BOOLEAN NOT NULL DEFAULT FALSE,
+    edited_by TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

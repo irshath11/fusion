@@ -63,68 +63,41 @@ class UserManagementCubit extends Cubit<UserManagementState> {
       final orgId =
           _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
       final remoteUsers = await _supabase.fetchOrganizationUsers(orgId);
+      if (_supabase.isInitialized) {
+        _db.setUsers(remoteUsers);
+      }
 
-      final localEmployees = _db.getEmployees();
       final Map<String, UserEntity> userMap = {};
 
       for (final u in remoteUsers) {
-        // Match local employee record by ID or email
-        final localMatchIndex = localEmployees.indexWhere((e) =>
-            (e.id.isNotEmpty && e.id == u.id) ||
-            (e.email.isNotEmpty &&
-                u.email.isNotEmpty &&
-                e.email.trim().toLowerCase() == u.email.trim().toLowerCase()));
-
-        UserEntity userToUse = u;
-        if (localMatchIndex >= 0) {
-          final localEmp = localEmployees[localMatchIndex];
-          userToUse = UserEntity(
-            id: u.id,
-            firebaseUid: u.firebaseUid,
-            email: localEmp.email.isNotEmpty ? localEmp.email : u.email,
-            fullName: localEmp.name.isNotEmpty ? localEmp.name : u.fullName,
-            phoneNumber: localEmp.mobileNumber.isNotEmpty
-                ? localEmp.mobileNumber
-                : u.phoneNumber,
-            role: u.role,
-            organizationId: u.organizationId,
-            isActive: localEmp.isActive,
-          );
-        }
-
-        final key = userToUse.id.isNotEmpty
-            ? userToUse.id
-            : (userToUse.email.trim().isNotEmpty
-                ? userToUse.email.trim().toLowerCase()
-                : userToUse.fullName.trim().toLowerCase());
-        userMap[key] = userToUse;
+        final key = u.email.trim().isNotEmpty
+            ? u.email.trim().toLowerCase()
+            : (u.fullName.trim().isNotEmpty
+                ? u.fullName.trim().toLowerCase()
+                : u.id);
+        userMap[key] = u;
       }
 
-      for (final localEmp in localEmployees) {
-        final key = localEmp.id.isNotEmpty
-            ? localEmp.id
-            : (localEmp.email.trim().isNotEmpty
-                ? localEmp.email.trim().toLowerCase()
-                : localEmp.name.trim().toLowerCase());
-
-        if (!userMap.containsKey(key) &&
-            !userMap.values.any((u) =>
-                (u.email.isNotEmpty &&
-                    u.email.trim().toLowerCase() ==
-                        localEmp.email.trim().toLowerCase()) ||
-                (u.fullName.isNotEmpty &&
-                    u.fullName.trim().toLowerCase() ==
-                        localEmp.name.trim().toLowerCase()))) {
-          userMap[key] = UserEntity(
-            id: localEmp.id,
-            firebaseUid: localEmp.id,
-            email: localEmp.email,
-            fullName: localEmp.name,
-            phoneNumber: localEmp.mobileNumber,
+      // If remote was unreachable (offline mode and uninitialized), fallback to local cache
+      if (remoteUsers.isEmpty && !_supabase.isInitialized) {
+        final localEmployees = _db.getEmployees();
+        for (final e in localEmployees) {
+          final localUser = UserEntity(
+            id: e.id,
+            firebaseUid: e.id,
+            email: e.email,
+            fullName: e.name,
+            phoneNumber: e.mobileNumber,
             role: UserRole.employee,
             organizationId: orgId,
-            isActive: localEmp.isActive,
+            isActive: e.isActive,
           );
+          final key = localUser.email.trim().isNotEmpty
+              ? localUser.email.trim().toLowerCase()
+              : (localUser.fullName.trim().isNotEmpty
+                  ? localUser.fullName.trim().toLowerCase()
+                  : localUser.id);
+          userMap[key] = localUser;
         }
       }
 
@@ -279,6 +252,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
   Future<void> updateUser({
     required String userId,
     required String fullName,
+    String? email,
     String? phoneNumber,
     UserRole? role,
     String? employeeCode,
@@ -294,16 +268,32 @@ class UserManagementCubit extends Cubit<UserManagementState> {
           _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
       final actorUserId = _db.currentUser?.id;
 
-      // Update local storage
+      // Update local UserEntity if present
+      final localUsers = _db.getUsers();
+      final userIndex = localUsers.indexWhere((u) => u.id == userId || u.email == userId);
+      if (userIndex >= 0) {
+        final existingUser = localUsers[userIndex];
+        final updatedUser = existingUser.copyWith(
+          fullName: fullName.trim(),
+          email: (email != null && email.trim().isNotEmpty) ? email.trim() : existingUser.email,
+          phoneNumber: phoneNumber?.trim() ?? existingUser.phoneNumber,
+          role: role ?? existingUser.role,
+        );
+        _db.saveUser(updatedUser);
+      }
+
+      // Update local EmployeeEntity
       final localEmployees = _db.getEmployees();
       final existingEmp = localEmployees.firstWhere(
         (e) => e.id == userId || e.email == userId,
         orElse: () => EmployeeEntity(
           id: userId,
-          employeeCode: employeeCode ?? 'EMP-000',
+          employeeCode: employeeCode?.trim().isNotEmpty == true
+              ? employeeCode!.trim()
+              : 'EMP-000',
           name: fullName,
           mobileNumber: phoneNumber ?? '',
-          email: '',
+          email: email?.trim() ?? '',
           designation: designation ?? 'Team Member',
           department: department ?? 'Operations',
         ),
@@ -316,7 +306,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
             : existingEmp.employeeCode,
         name: fullName.trim(),
         mobileNumber: phoneNumber?.trim() ?? existingEmp.mobileNumber,
-        email: existingEmp.email,
+        email: (email != null && email.trim().isNotEmpty) ? email.trim() : existingEmp.email,
         designation: designation?.trim() ?? existingEmp.designation,
         department: department?.trim() ?? existingEmp.department,
         useDefaultOffice: useDefaultOffice ?? existingEmp.useDefaultOffice,
@@ -331,6 +321,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         userId: userId,
         orgId: orgId,
         fullName: fullName,
+        email: email,
         phoneNumber: phoneNumber,
         role: role,
         employeeCode: employeeCode,
@@ -392,20 +383,37 @@ class UserManagementCubit extends Cubit<UserManagementState> {
     }
   }
 
-  Future<void> softDeleteUser(String userId) async {
+  Future<void> softDeleteUser(String userId, {String? email, String? fullName}) async {
     emit(UserManagementLoading());
     try {
       final orgId =
           _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
       final actorUserId = _db.currentUser?.id;
 
+      // 1. Purge from local Hive storage immediately so user is removed from UI
+      _db.deleteEmployee(userId);
+      _db.deleteUser(userId);
+      if (email != null && email.isNotEmpty) {
+        _db.deleteEmployee(email);
+        _db.deleteUser(email);
+      }
+      if (fullName != null && fullName.isNotEmpty) {
+        _db.deleteEmployee(fullName);
+        _db.deleteUser(fullName);
+      }
+
+      // 2. Soft delete in Supabase cloud database
       await _supabase.softDeleteUser(
         userId: userId,
+        email: email,
         orgId: orgId,
         actorUserId: actorUserId,
       );
 
-      emit(UserManagementActionSuccess('User soft-deleted successfully.'));
+      // 3. Synchronize local DB cache with cloud
+      await _supabase.syncCloudDataToLocal();
+
+      emit(UserManagementActionSuccess('User deleted successfully.'));
       await fetchUsers();
     } catch (e) {
       emit(UserManagementError('Failed to delete user: ${e.toString()}'));

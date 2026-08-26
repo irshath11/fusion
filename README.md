@@ -109,6 +109,29 @@ Open `http://localhost:3000` in your browser.
 
 ---
 
+## 💻 Running the Admin Web Application
+
+### Option A: Running as a Flutter Web App
+You can run the Flutter Web application directly using Flutter:
+```bash
+# Run in Chrome browser
+flutter run -d chrome
+```
+
+### Option B: Running the Standalone Web Admin Site (`web_admin`)
+A dedicated, ultra-fast web admin portal constructed with HTML5/CSS3/JS, Supabase SDK, and Leaflet Maps is located in `web_admin/`:
+```bash
+cd web_admin
+npm start
+```
+Or serve via any web server / Python server:
+```bash
+npx serve -s . -l 3000
+```
+Open `http://localhost:3000` in your browser.
+
+---
+
 ## 📁 Project Architecture & Folder Structure
 
 ```
@@ -149,7 +172,7 @@ attendance_app/
 │       ├── auth/                   # Login Screen, Firebase/Supabase Auth & Cubit
 │       ├── attendance/             # Attendance Workflow Stepper, Camera Modal, SiteNameDialog, Cubit
 │       ├── employee/               # Employee Duty Portal & Timeline
-│       ├── admin/                  # Dashboard, Employee & Office Management, Work Sites, Ownership Transfer
+│       ├── admin/                  # Dashboard, Employee & Office Management, Work Sites, Ownership Transfer & Responsive Desktop Web View
 │       ├── timesheet/              # Employee Timesheet Portal, Daily Entry Calculation, PDF Export
 │       ├── security/               # Hardware Device Binding Service
 │       └── sync/                   # Offline Sync Engine

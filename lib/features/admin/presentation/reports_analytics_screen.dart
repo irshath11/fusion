@@ -8,13 +8,14 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_theme.dart';
 import '../../../core/constants/app_enums.dart';
 import '../../../core/services/pdf_export_service.dart';
-import '../../../core/services/location_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/utils/timesheet_calculator.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'admin_cubit.dart';
+import '../../../core/widgets/app_animated_tab_switcher.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../attendance/domain/attendance_record.dart';
+import 'admin_edit_attendance_dialog.dart';
 
 class ReportsAnalyticsScreen extends StatefulWidget {
   const ReportsAnalyticsScreen({super.key});
@@ -50,13 +51,23 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       final cloudRecords =
           await SupabaseService().fetchAttendanceRecordsFromSupabase();
       if (cloudRecords.isNotEmpty) {
-        final existingRecords = _db.getAttendanceRecords();
-        final existingIds = existingRecords.map((r) => r.id).toSet();
         for (final record in cloudRecords) {
-          if (!existingIds.contains(record.id)) {
-            _db.addAttendanceRecord(record);
-          }
+          _db.saveAttendanceRecord(record);
         }
+      }
+
+      // Also ensure latest employee records and codes from Supabase are synced
+      final orgId =
+          _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
+      final cloudUsers =
+          await SupabaseService().fetchOrganizationUsers(orgId);
+      if (cloudUsers.isNotEmpty) {
+        _db.setUsers(cloudUsers);
+      }
+      final cloudEmployees =
+          await SupabaseService().fetchEmployeesFromSupabase(orgId);
+      if (cloudEmployees.isNotEmpty) {
+        _db.setEmployees(cloudEmployees);
       }
     } catch (e) {
       debugPrint('Cloud attendance fetch error: $e');
@@ -65,6 +76,210 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         setState(() => _isLoadingCloud = false);
       }
     }
+  }
+
+  List<EmployeeEntity> _getSynthesizedEmployees() {
+    final dbEmployees = _db.getEmployees();
+    final dbUsers = _db.getUsers();
+    final allRecords = _db.getAttendanceRecords();
+
+    final Map<String, EmployeeEntity> employeeMap = {};
+
+    bool isHexFallback(String code, String id) {
+      if (id.length >= 4 &&
+          code.toUpperCase() == 'EMP-${id.substring(0, 4).toUpperCase()}') {
+        return true;
+      }
+      final reg = RegExp(r'^EMP-[0-9A-Fa-f]{4}$');
+      if (reg.hasMatch(code) &&
+          id.toLowerCase().startsWith(code.substring(4).toLowerCase())) {
+        return true;
+      }
+      return false;
+    }
+
+    String resolveBestCode(String? rawCode, String name, String id) {
+      if (rawCode != null &&
+          rawCode.trim().isNotEmpty &&
+          rawCode.trim() != 'EMP-000' &&
+          !isHexFallback(rawCode.trim(), id)) {
+        return rawCode.trim();
+      }
+      final cleanName =
+          name.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+      if (cleanName.isNotEmpty) {
+        final prefix = cleanName.length >= 4
+            ? cleanName.substring(0, 4)
+            : (cleanName.length >= 3 ? cleanName.substring(0, 3) : cleanName);
+        return 'EMP-$prefix';
+      }
+      return id.length >= 4
+          ? 'EMP-${id.substring(0, 4).toUpperCase()}'
+          : 'EMP-001';
+    }
+
+    String? findMatchingKey(String id, String email, String name) {
+      if (id.isNotEmpty && employeeMap.containsKey(id)) return id;
+      for (final entry in employeeMap.entries) {
+        final e = entry.value;
+        if (id.isNotEmpty && e.id == id) return entry.key;
+        if (email.isNotEmpty &&
+            e.email.trim().toLowerCase() == email.trim().toLowerCase()) {
+          return entry.key;
+        }
+        if (name.isNotEmpty &&
+            e.name.trim().toLowerCase() == name.trim().toLowerCase()) {
+          return entry.key;
+        }
+      }
+      return null;
+    }
+
+    // 1. Add from dbUsers (which carry employeeCode, designation, department)
+    for (final u in dbUsers) {
+      final code = resolveBestCode(u.employeeCode, u.fullName, u.id);
+      final emp = EmployeeEntity(
+        id: u.id,
+        employeeCode: code,
+        name: u.fullName,
+        mobileNumber: u.phoneNumber ?? '',
+        email: u.email,
+        designation: u.designation ?? 'Staff',
+        department: u.department ?? 'General',
+        isActive: u.isActive,
+      );
+      final key = u.id.isNotEmpty
+          ? u.id
+          : (u.email.trim().isNotEmpty
+              ? u.email.trim().toLowerCase()
+              : u.fullName.trim().toLowerCase());
+      employeeMap[key] = emp;
+    }
+
+    // 2. Overlay / Merge with dbEmployees from Supabase employees table
+    for (final e in dbEmployees) {
+      final matchedKey = findMatchingKey(e.id, e.email, e.name);
+      if (matchedKey != null && employeeMap.containsKey(matchedKey)) {
+        final existing = employeeMap[matchedKey]!;
+        final isECodeValid = e.employeeCode.isNotEmpty &&
+            e.employeeCode != 'EMP-000' &&
+            !isHexFallback(e.employeeCode, e.id);
+        final isExistingCodeValid = existing.employeeCode.isNotEmpty &&
+            existing.employeeCode != 'EMP-000' &&
+            !isHexFallback(existing.employeeCode, existing.id);
+
+        final finalCode = isECodeValid
+            ? e.employeeCode
+            : (isExistingCodeValid
+                ? existing.employeeCode
+                : resolveBestCode(e.employeeCode, e.name, e.id));
+
+        employeeMap[matchedKey] = EmployeeEntity(
+          id: e.id.isNotEmpty ? e.id : existing.id,
+          employeeCode: finalCode,
+          name: e.name.isNotEmpty ? e.name : existing.name,
+          mobileNumber: e.mobileNumber.isNotEmpty
+              ? e.mobileNumber
+              : existing.mobileNumber,
+          email: e.email.isNotEmpty ? e.email : existing.email,
+          designation: e.designation.isNotEmpty
+              ? e.designation
+              : existing.designation,
+          department:
+              e.department.isNotEmpty ? e.department : existing.department,
+          useDefaultOffice: e.useDefaultOffice,
+          assignedOfficeId: e.assignedOfficeId ?? existing.assignedOfficeId,
+          assignedOfficeName:
+              e.assignedOfficeName ?? existing.assignedOfficeName,
+          isActive: e.isActive,
+        );
+      } else {
+        final code = resolveBestCode(e.employeeCode, e.name, e.id);
+        final key = e.id.isNotEmpty
+            ? e.id
+            : (e.email.trim().isNotEmpty
+                ? e.email.trim().toLowerCase()
+                : e.name.trim().toLowerCase());
+        employeeMap[key] = EmployeeEntity(
+          id: e.id,
+          employeeCode: code,
+          name: e.name,
+          mobileNumber: e.mobileNumber,
+          email: e.email,
+          designation: e.designation,
+          department: e.department,
+          useDefaultOffice: e.useDefaultOffice,
+          assignedOfficeId: e.assignedOfficeId,
+          assignedOfficeName: e.assignedOfficeName,
+          isActive: e.isActive,
+        );
+      }
+    }
+
+    // 3. Check any attendance records that might have been logged by employee
+    for (final r in allRecords) {
+      final nameKey = r.employeeName.trim().toLowerCase();
+      final idKey = r.employeeId;
+
+      bool alreadyExists = employeeMap.values.any((e) =>
+          e.id == idKey ||
+          (e.employeeCode.isNotEmpty &&
+              e.employeeCode.toLowerCase() == idKey.toLowerCase()) ||
+          (e.name.trim().toLowerCase() == nameKey && nameKey.isNotEmpty));
+
+      if (!alreadyExists && r.employeeName.trim().isNotEmpty) {
+        final code = resolveBestCode(null, r.employeeName, r.employeeId);
+        employeeMap[idKey.isNotEmpty ? idKey : nameKey] = EmployeeEntity(
+          id: r.employeeId,
+          employeeCode: code,
+          name: r.employeeName,
+          mobileNumber: '',
+          email: '',
+          designation: 'Field Staff',
+          department: 'Operations',
+        );
+      }
+    }
+
+    return employeeMap.values.toList();
+  }
+
+  EmployeeEntity _resolveEmployee(String? employeeId) {
+    if (employeeId == null || employeeId.isEmpty) {
+      return EmployeeEntity(
+        id: '',
+        employeeCode: 'EMP',
+        name: 'Employee',
+        mobileNumber: '',
+        email: '',
+        designation: 'Staff',
+        department: 'General',
+      );
+    }
+    final all = _getSynthesizedEmployees();
+    final cleanId = employeeId.trim().toLowerCase();
+    final match = all.where((e) =>
+        e.id.toLowerCase() == cleanId ||
+        e.employeeCode.toLowerCase() == cleanId ||
+        e.name.toLowerCase().trim() == cleanId ||
+        e.email.toLowerCase().trim() == cleanId ||
+        (cleanId.length >= 4 && e.id.toLowerCase().startsWith(cleanId)) ||
+        (cleanId.length >= 4 &&
+            e.employeeCode.toLowerCase().contains(cleanId)) ||
+        (cleanId.isNotEmpty && e.name.toLowerCase().trim().contains(cleanId)) ||
+        (cleanId.isNotEmpty &&
+            cleanId.contains(e.name.toLowerCase().trim())));
+    if (match.isNotEmpty) return match.first;
+
+    return EmployeeEntity(
+      id: employeeId,
+      employeeCode: employeeId.startsWith('EMP-') ? employeeId : 'EMP',
+      name: 'Employee',
+      mobileNumber: '',
+      email: '',
+      designation: 'Staff',
+      department: 'General',
+    );
   }
 
   @override
@@ -173,224 +388,39 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    icon: Icon(Icons.refresh_rounded,
-                        color: AppTheme.currentColors
-                            .primaryFor(Theme.of(context).brightness)),
+                    icon: _isLoadingCloud
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppTheme.currentColors
+                                  .primaryFor(Theme.of(context).brightness),
+                            ),
+                          )
+                        : Icon(Icons.refresh_rounded,
+                            color: AppTheme.currentColors
+                                .primaryFor(Theme.of(context).brightness)),
                     tooltip: 'Refresh Cloud Logs',
-                    onPressed: _loadCloudAttendanceRecords,
+                    onPressed:
+                        _isLoadingCloud ? null : _loadCloudAttendanceRecords,
                   ),
                 ],
-              )
+              ),
             ],
           ),
-          if (_isLoadingCloud)
-            const Padding(
-              padding: EdgeInsets.only(top: 8.0),
-              child: LinearProgressIndicator(minHeight: 2),
-            ),
           const SizedBox(height: 12),
 
           // Tab Bar Switcher (Directory vs Cumulative Record vs Site Man-Hours)
-          Builder(
-            builder: (context) {
-              final isDark = Theme.of(context).brightness == Brightness.dark;
-              final palette = AppTheme.currentColors;
-              final activePrimary = palette
-                  .primaryFor(isDark ? Brightness.dark : Brightness.light);
-
-              return Container(
-                decoration: BoxDecoration(
-                  color: isDark ? palette.surfaceDark : Colors.grey.shade200,
-                  borderRadius:
-                      BorderRadius.circular(palette.cardRadius * 0.75),
-                  border: Border.all(
-                    color: isDark ? palette.cardBorderDark : Colors.transparent,
-                  ),
-                ),
-                padding: const EdgeInsets.all(4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _activeTab = 0),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            color: _activeTab == 0
-                                ? (isDark
-                                    ? activePrimary.withValues(alpha: 0.22)
-                                    : Colors.white)
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(
-                                palette.buttonRadius * 0.7),
-                            border: _activeTab == 0 && isDark
-                                ? Border.all(
-                                    color:
-                                        activePrimary.withValues(alpha: 0.45))
-                                : null,
-                            boxShadow: _activeTab == 0
-                                ? [
-                                    BoxShadow(
-                                      color: palette.accentGlow,
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    )
-                                  ]
-                                : [],
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.people_alt_rounded,
-                                size: 16,
-                                color: _activeTab == 0
-                                    ? activePrimary
-                                    : (isDark
-                                        ? palette.textSecondaryDark
-                                        : Colors.grey.shade700),
-                              ),
-                              const SizedBox(width: 5),
-                              Text(
-                                'Directory',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: _activeTab == 0
-                                      ? activePrimary
-                                      : (isDark
-                                          ? palette.textSecondaryDark
-                                          : Colors.grey.shade700),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _activeTab = 1),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            color: _activeTab == 1
-                                ? (isDark
-                                    ? activePrimary.withValues(alpha: 0.22)
-                                    : Colors.white)
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(
-                                palette.buttonRadius * 0.7),
-                            border: _activeTab == 1 && isDark
-                                ? Border.all(
-                                    color:
-                                        activePrimary.withValues(alpha: 0.45))
-                                : null,
-                            boxShadow: _activeTab == 1
-                                ? [
-                                    BoxShadow(
-                                      color: palette.accentGlow,
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    )
-                                  ]
-                                : [],
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.analytics_rounded,
-                                size: 16,
-                                color: _activeTab == 1
-                                    ? activePrimary
-                                    : (isDark
-                                        ? palette.textSecondaryDark
-                                        : Colors.grey.shade700),
-                              ),
-                              const SizedBox(width: 5),
-                              Text(
-                                'Cumulative',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: _activeTab == 1
-                                      ? activePrimary
-                                      : (isDark
-                                          ? palette.textSecondaryDark
-                                          : Colors.grey.shade700),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _activeTab = 2),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            color: _activeTab == 2
-                                ? (isDark
-                                    ? activePrimary.withValues(alpha: 0.22)
-                                    : Colors.white)
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(
-                                palette.buttonRadius * 0.7),
-                            border: _activeTab == 2 && isDark
-                                ? Border.all(
-                                    color:
-                                        activePrimary.withValues(alpha: 0.45))
-                                : null,
-                            boxShadow: _activeTab == 2
-                                ? [
-                                    BoxShadow(
-                                      color: palette.accentGlow,
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    )
-                                  ]
-                                : [],
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.location_city_rounded,
-                                size: 16,
-                                color: _activeTab == 2
-                                    ? activePrimary
-                                    : (isDark
-                                        ? palette.textSecondaryDark
-                                        : Colors.grey.shade700),
-                              ),
-                              const SizedBox(width: 5),
-                              Text(
-                                'Site Hours',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: _activeTab == 2
-                                      ? activePrimary
-                                      : (isDark
-                                          ? palette.textSecondaryDark
-                                          : Colors.grey.shade700),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+          AppAnimatedTabSwitcher(
+            selectedIndex: _activeTab,
+            tabs: const [
+              TabItemData(label: 'Directory', icon: Icons.people_alt_rounded),
+              TabItemData(label: 'Cumulative', icon: Icons.analytics_rounded),
+              TabItemData(
+                  label: 'Site Hours', icon: Icons.location_city_rounded),
+            ],
+            onTabChanged: (index) => setState(() => _activeTab = index),
           ),
           const SizedBox(height: 14),
 
@@ -491,7 +521,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   // Distinct dates count
                   final datesCount = empRecords
                       .map((r) =>
-                          DateFormat('yyyy-MM-dd').format(r.eventTimestamp))
+                          DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()))
                       .toSet()
                       .length;
 
@@ -577,28 +607,27 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   // LEVEL 2: DATE LIST VIEW FOR SELECTED EMPLOYEE
   // ==========================================
   Widget _buildLevel2DateListView() {
-    final emp = _db.getEmployees().firstWhere(
-          (e) => e.id == _selectedEmployeeId,
-          orElse: () => EmployeeEntity(
-            id: _selectedEmployeeId!,
-            employeeCode: 'EMP',
-            name: 'Employee',
-            mobileNumber: '',
-            email: '',
-            designation: 'Staff',
-            department: 'General',
-          ),
-        );
+    final emp = _resolveEmployee(_selectedEmployeeId);
 
     final empRecords = _db.getAttendanceRecords().where((r) {
-      return r.employeeId == emp.id ||
-          r.employeeName.toLowerCase() == emp.name.toLowerCase();
+      final rEmpId = r.employeeId.trim().toLowerCase();
+      final rEmpName = r.employeeName.trim().toLowerCase();
+      final eId = emp.id.trim().toLowerCase();
+      final eName = emp.name.trim().toLowerCase();
+      final eCode = emp.employeeCode.trim().toLowerCase();
+      return (eId.isNotEmpty && rEmpId == eId) ||
+          (eName.isNotEmpty && rEmpName == eName) ||
+          (eCode.isNotEmpty && rEmpId == eCode) ||
+          (eId.length >= 4 && rEmpId.startsWith(eId)) ||
+          (rEmpId.length >= 4 && eId.startsWith(rEmpId)) ||
+          (eName.isNotEmpty &&
+              (rEmpName.contains(eName) || eName.contains(rEmpName)));
     }).toList();
 
     // Group records by date (yyyy-MM-dd)
     final Map<String, List<AttendanceRecord>> groupedByDate = {};
     for (final r in empRecords) {
-      final dateKey = DateFormat('yyyy-MM-dd').format(r.eventTimestamp);
+      final dateKey = DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal());
       groupedByDate.putIfAbsent(dateKey, () => []).add(r);
     }
 
@@ -1005,12 +1034,22 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                 final allValidGeofence =
                     dateRecords.every((r) => r.isGeofenceValid);
                 final firstTime = DateFormat('hh:mm a')
-                    .format(dateRecords.first.eventTimestamp);
-                final lastTime = DateFormat('hh:mm a')
-                    .format(dateRecords.last.eventTimestamp);
+                    .format(dateRecords.first.eventTimestamp.toLocal());
 
-                final siteCheckIns = dateRecords
-                    .where((r) => r.workflowStep == WorkflowStep.siteCheckIn);
+                final siteOutRecs = dateRecords
+                    .where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
+                final officeOutRecs = dateRecords.where(
+                    (r) => r.workflowStep == WorkflowStep.officeCheckOut);
+                final endRecordTime = officeOutRecs.isNotEmpty
+                    ? officeOutRecs.last.eventTimestamp
+                    : (siteOutRecs.isNotEmpty
+                        ? siteOutRecs.last.eventTimestamp
+                        : dateRecords.last.eventTimestamp);
+                final lastTime = DateFormat('hh:mm a').format(endRecordTime.toLocal());
+
+                final siteCheckIns = dateRecords.where((r) =>
+                    r.workflowStep == WorkflowStep.siteCheckIn ||
+                    (r.siteName != null && r.siteName!.trim().isNotEmpty));
                 final siteNamesStr = siteCheckIns.isNotEmpty
                     ? siteCheckIns
                         .map((r) => TimesheetCalculator.resolveSiteName(r))
@@ -1256,6 +1295,27 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                   ),
                                 ),
                               ),
+                              if (dayEntry != null && dayEntry.isEdited) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.purple.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                        color: Colors.purple.withValues(alpha: 0.3)),
+                                  ),
+                                  child: const Text(
+                                    'ADMIN MODIFIED',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.purple,
+                                    ),
+                                  ),
+                                ),
+                              ],
                               const SizedBox(width: 8),
                               Text(
                                 '${dateRecords.where((r) => r.photoBase64.isNotEmpty).length} Photo(s)',
@@ -1267,11 +1327,74 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               )
                             ],
                           ),
+                          if (dayEntry != null &&
+                              dayEntry.remarks != null &&
+                              dayEntry.remarks!.trim().isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Icon(Icons.note_alt_rounded,
+                                    size: 13, color: Colors.purple.shade400),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    'Remarks: ${dayEntry.remarks}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontStyle: FontStyle.italic,
+                                      color: isDark
+                                          ? AppColors.textSecondaryDark
+                                          : Colors.grey.shade800,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
-                    trailing: const Icon(Icons.arrow_forward_ios_rounded,
-                        size: 16, color: AppColors.textSecondaryLight),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final ok = await AdminEditAttendanceDialog.show(
+                              context,
+                              employeeId: emp.id,
+                              employeeName: emp.name,
+                              date: parsedDate,
+                              initialCheckIn: dayEntry?.checkInTime,
+                              initialCheckOut: dayEntry?.checkOutTime,
+                              initialOtHours: dayEntry?.manualOvertimeHours ??
+                                  dayEntry?.overtimeHours,
+                              initialRemarks: dayEntry?.remarks,
+                            );
+                            if (ok == true && mounted) {
+                              setState(() {});
+                            }
+                          },
+                          icon: const Icon(Icons.edit_calendar_rounded, size: 15),
+                          label: const Text('Adjust Shift',
+                              style: TextStyle(
+                                  fontSize: 11, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: activePrimary,
+                            foregroundColor: Colors.white,
+                            elevation: 2,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 8),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                     onTap: () {
                       setState(() {
                         _selectedDate = parsedDate;
@@ -1290,26 +1413,25 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   // LEVEL 3: DETAILED RECORD & PHOTO VIEW FOR SELECTED DATE
   // ==========================================
   Widget _buildLevel3DateDetailView() {
-    final emp = _db.getEmployees().firstWhere(
-          (e) => e.id == _selectedEmployeeId,
-          orElse: () => EmployeeEntity(
-            id: _selectedEmployeeId!,
-            employeeCode: 'EMP',
-            name: 'Employee',
-            mobileNumber: '',
-            email: '',
-            designation: 'Staff',
-            department: 'General',
-          ),
-        );
+    final emp = _resolveEmployee(_selectedEmployeeId);
 
     final selectedDateStr = DateFormat('yyyy-MM-dd').format(_selectedDate!);
 
     final dateRecords = _db.getAttendanceRecords().where((r) {
-      final matchesUser = r.employeeId == emp.id ||
-          r.employeeName.toLowerCase() == emp.name.toLowerCase();
+      final rEmpId = r.employeeId.trim().toLowerCase();
+      final rEmpName = r.employeeName.trim().toLowerCase();
+      final eId = emp.id.trim().toLowerCase();
+      final eName = emp.name.trim().toLowerCase();
+      final eCode = emp.employeeCode.trim().toLowerCase();
+      final matchesUser = (eId.isNotEmpty && rEmpId == eId) ||
+          (eName.isNotEmpty && rEmpName == eName) ||
+          (eCode.isNotEmpty && rEmpId == eCode) ||
+          (eId.length >= 4 && rEmpId.startsWith(eId)) ||
+          (rEmpId.length >= 4 && eId.startsWith(rEmpId)) ||
+          (eName.isNotEmpty &&
+              (rEmpName.contains(eName) || eName.contains(rEmpName)));
       final matchesDate =
-          DateFormat('yyyy-MM-dd').format(r.eventTimestamp) == selectedDateStr;
+          DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()) == selectedDateStr;
       return matchesUser && matchesDate;
     }).toList();
 
@@ -1374,6 +1496,38 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               : palette.textSecondaryLight),
                     ),
                   ],
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final tEntry = dayTimesheets.isNotEmpty ? dayTimesheets.first : null;
+                  final ok = await AdminEditAttendanceDialog.show(
+                    context,
+                    employeeId: emp.id,
+                    employeeName: emp.name,
+                    date: _selectedDate!,
+                    initialCheckIn: tEntry?.checkInTime,
+                    initialCheckOut: tEntry?.checkOutTime,
+                    initialOtHours: tEntry?.manualOvertimeHours ?? tEntry?.overtimeHours,
+                    initialRemarks: tEntry?.remarks,
+                  );
+                  if (ok == true && mounted) {
+                    setState(() {});
+                  }
+                },
+                icon: const Icon(Icons.edit_calendar_rounded, size: 18),
+                label: const Text('Adjust Shift & OT',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: activePrimary,
+                  foregroundColor: Colors.white,
+                  elevation: 3,
+                  shadowColor: activePrimary.withValues(alpha: 0.4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ],
@@ -1836,7 +1990,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               itemBuilder: (context, index) {
                 final r = dateRecords[index];
                 final timeStr =
-                    DateFormat('hh:mm:ss a').format(r.eventTimestamp);
+                    DateFormat('hh:mm:ss a').format(r.eventTimestamp.toLocal());
 
                 return Card(
                   margin: const EdgeInsets.only(bottom: 16),
@@ -1932,14 +2086,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    (r.address.trim().isNotEmpty &&
-                                            !r.address.contains(
-                                                'Live Field Location') &&
-                                            !r.address.contains('Timeout') &&
-                                            !r.address.contains('Error'))
-                                        ? r.address.trim()
-                                        : LocationService.resolvePlaceName(
-                                            r.latitude, r.longitude),
+                                    TimesheetCalculator.resolveSiteName(r),
                                     style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.bold,
@@ -1948,6 +2095,20 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                             : AppColors.textPrimaryLight),
                                   ),
                                   const SizedBox(height: 2),
+                                  if (kIsWeb ||
+                                      MediaQuery.of(context).size.width >
+                                          600) ...[
+                                    Text(
+                                      'Address: ${TimesheetCalculator.resolveFullAddress(r)}',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                          color: isDark
+                                              ? AppColors.textPrimaryDark
+                                              : AppColors.textPrimaryLight),
+                                    ),
+                                    const SizedBox(height: 2),
+                                  ],
                                   Text(
                                     'GPS Coordinates: ${r.latitude.toStringAsFixed(6)}, ${r.longitude.toStringAsFixed(6)} (Accuracy: ${r.gpsAccuracy.toStringAsFixed(1)}m)',
                                     style: TextStyle(
@@ -1991,54 +2152,44 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
+                                      Icon(Icons.camera_alt_rounded,
+                                          size: 16, color: activePrimary),
+                                      const SizedBox(width: 6),
                                       Expanded(
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.camera_alt_rounded,
-                                                size: 16, color: activePrimary),
-                                            const SizedBox(width: 6),
-                                            Flexible(
-                                              child: Text(
-                                                'Verified Live Camera Snapshot',
-                                                style: TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: activePrimary),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                          ],
+                                        child: Text(
+                                          'Verified Live Camera Snapshot',
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                              color: activePrimary),
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
                                       const SizedBox(width: 8),
-                                      Flexible(
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: activePrimary.withValues(
-                                                alpha: isDark ? 0.2 : 0.1),
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(Icons.place_rounded,
-                                                  size: 12, color: activePrimary),
-                                              const SizedBox(width: 3),
-                                              Flexible(
-                                                child: Text(
-                                                  siteNameText,
-                                                  style: TextStyle(
-                                                      fontSize: 10,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: activePrimary),
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: activePrimary.withValues(
+                                              alpha: isDark ? 0.2 : 0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.place_rounded,
+                                                size: 12, color: activePrimary),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              siteNameText,
+                                              style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: activePrimary),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ],
@@ -2304,7 +2455,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Timestamp: ${DateFormat('dd MMM yyyy hh:mm:ss a').format(record.eventTimestamp)}',
+                'Timestamp: ${DateFormat('dd MMM yyyy hh:mm:ss a').format(record.eventTimestamp.toLocal())}',
                 style:
                     const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
               ),
@@ -2433,8 +2584,18 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
     for (final emp in employees) {
       final empRecords = allRecords.where((r) {
-        return r.employeeId == emp.id ||
-            r.employeeName.toLowerCase() == emp.name.toLowerCase();
+        final rEmpId = r.employeeId.trim().toLowerCase();
+        final rEmpName = r.employeeName.trim().toLowerCase();
+        final eId = emp.id.trim().toLowerCase();
+        final eName = emp.name.trim().toLowerCase();
+        final eCode = emp.employeeCode.trim().toLowerCase();
+        return (eId.isNotEmpty && rEmpId == eId) ||
+            (eName.isNotEmpty && rEmpName == eName) ||
+            (eCode.isNotEmpty && rEmpId == eCode) ||
+            (eId.length >= 4 && rEmpId.startsWith(eId)) ||
+            (rEmpId.length >= 4 && eId.startsWith(rEmpId)) ||
+            (eName.isNotEmpty &&
+                (rEmpName.contains(eName) || eName.contains(rEmpName)));
       }).toList();
 
       final timesheets =
@@ -3803,6 +3964,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       }
     }
   }
+
 }
 
 class _EmpCumulativeData {

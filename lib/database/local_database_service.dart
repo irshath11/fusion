@@ -24,6 +24,7 @@ class LocalDatabaseService {
   UserEntity? _currentUser;
   Box? _settingsBox;
 
+  final List<UserEntity> _users = [];
   final List<EmployeeEntity> _employees = [];
   final List<OfficeEntity> _offices = [];
   final List<WorkSiteEntity> _workSites = [];
@@ -49,6 +50,17 @@ class LocalDatabaseService {
       if (savedUserJson != null && savedUserJson.toString().isNotEmpty) {
         try {
           _currentUser = UserEntity.fromJson(jsonDecode(savedUserJson));
+        } catch (_) {}
+      }
+
+      final savedUsersJson = _settingsBox?.get('users_json');
+      if (savedUsersJson != null && savedUsersJson.toString().isNotEmpty) {
+        try {
+          final List<dynamic> decoded = jsonDecode(savedUsersJson);
+          _users.clear();
+          for (final item in decoded) {
+            _users.add(UserEntity.fromJson(item));
+          }
         } catch (_) {}
       }
 
@@ -187,8 +199,97 @@ class LocalDatabaseService {
     } catch (_) {}
   }
 
+  // Users CRUD
+  List<UserEntity> getUsers() {
+    final Map<String, UserEntity> uniqueMap = {};
+    for (final u in _users) {
+      final key = u.email.trim().isNotEmpty
+          ? u.email.trim().toLowerCase()
+          : (u.fullName.trim().isNotEmpty ? u.fullName.trim().toLowerCase() : u.id);
+      uniqueMap[key] = u;
+    }
+    for (final e in _employees) {
+      final key = e.email.trim().isNotEmpty
+          ? e.email.trim().toLowerCase()
+          : (e.name.trim().isNotEmpty ? e.name.trim().toLowerCase() : e.id);
+      if (!uniqueMap.containsKey(key)) {
+        uniqueMap[key] = UserEntity(
+          id: e.id,
+          firebaseUid: e.id,
+          email: e.email,
+          fullName: e.name,
+          phoneNumber: e.mobileNumber,
+          role: UserRole.employee,
+          organizationId: _organization?.id ?? '00000000-0000-0000-0000-000000000001',
+          isActive: e.isActive,
+        );
+      }
+    }
+    if (_currentUser != null) {
+      final key = _currentUser!.email.trim().isNotEmpty
+          ? _currentUser!.email.trim().toLowerCase()
+          : (_currentUser!.fullName.trim().isNotEmpty ? _currentUser!.fullName.trim().toLowerCase() : _currentUser!.id);
+      if (!uniqueMap.containsKey(key) || _currentUser!.role == UserRole.superAdmin || _currentUser!.role == UserRole.admin) {
+        uniqueMap[key] = _currentUser!;
+      }
+    }
+    return List.unmodifiable(uniqueMap.values.toList());
+  }
+
+  void saveUser(UserEntity user) {
+    int index = _users.indexWhere((u) =>
+        u.id == user.id ||
+        (u.email.isNotEmpty &&
+            user.email.isNotEmpty &&
+            u.email.trim().toLowerCase() == user.email.trim().toLowerCase()));
+    if (index >= 0) {
+      _users[index] = user;
+    } else {
+      _users.add(user);
+    }
+    _persistUsers();
+  }
+
+  void setUsers(List<UserEntity> users) {
+    _users.clear();
+    _users.addAll(users);
+    _persistUsers();
+  }
+
+  void saveUsers(List<UserEntity> users) {
+    for (final user in users) {
+      saveUser(user);
+    }
+  }
+
+  void deleteUser(String idOrEmail) {
+    final clean = idOrEmail.trim().toLowerCase();
+    _users.removeWhere((u) =>
+        u.id == idOrEmail ||
+        u.id.toLowerCase() == clean ||
+        (u.firebaseUid.isNotEmpty && u.firebaseUid.toLowerCase() == clean) ||
+        (u.email.isNotEmpty && u.email.trim().toLowerCase() == clean) ||
+        (clean.isNotEmpty && u.fullName.trim().toLowerCase() == clean));
+    _persistUsers();
+  }
+
+  void _persistUsers() {
+    try {
+      final jsonList = _users.map((u) => u.toJson()).toList();
+      _settingsBox?.put('users_json', jsonEncode(jsonList));
+    } catch (e) {
+      debugPrint('Error persisting users to Hive: $e');
+    }
+  }
+
   // Offices CRUD
   List<OfficeEntity> getOffices() => List.unmodifiable(_offices);
+
+  void setOffices(List<OfficeEntity> offices) {
+    _offices.clear();
+    _offices.addAll(offices);
+    _persistOffices();
+  }
 
   void saveOffice(OfficeEntity office) {
     int index = _offices.indexWhere((o) => o.id == office.id);
@@ -246,6 +347,12 @@ class LocalDatabaseService {
     return List.unmodifiable(uniqueMap.values.toList());
   }
 
+  void setEmployees(List<EmployeeEntity> employees) {
+    _employees.clear();
+    _employees.addAll(employees);
+    _persistEmployees();
+  }
+
   void saveEmployee(EmployeeEntity employee) {
     int index = _employees.indexWhere((e) =>
         e.id == employee.id ||
@@ -261,8 +368,14 @@ class LocalDatabaseService {
     _persistEmployees();
   }
 
-  void deleteEmployee(String id) {
-    _employees.removeWhere((e) => e.id == id);
+  void deleteEmployee(String idOrEmail) {
+    final clean = idOrEmail.trim().toLowerCase();
+    _employees.removeWhere((e) =>
+        e.id == idOrEmail ||
+        e.id.toLowerCase() == clean ||
+        e.employeeCode.toLowerCase() == clean ||
+        (e.email.isNotEmpty && e.email.trim().toLowerCase() == clean) ||
+        (clean.isNotEmpty && e.name.trim().toLowerCase() == clean));
     _persistEmployees();
   }
 
@@ -277,6 +390,12 @@ class LocalDatabaseService {
 
   // Work Sites CRUD
   List<WorkSiteEntity> getWorkSites() => List.unmodifiable(_workSites);
+
+  void setWorkSites(List<WorkSiteEntity> sites) {
+    _workSites.clear();
+    _workSites.addAll(sites);
+    _persistWorkSites();
+  }
 
   void saveWorkSite(WorkSiteEntity site) {
     int index = _workSites.indexWhere((s) => s.id == site.id);
@@ -312,11 +431,209 @@ class LocalDatabaseService {
     _persistAttendanceRecords();
   }
 
-  void updateAttendanceRecord(AttendanceRecord updatedRecord) {
-    final index = _attendanceRecords.indexWhere((r) => r.id == updatedRecord.id);
+  void clearAttendanceCache() {
+    _attendanceRecords.clear();
+    _persistAttendanceRecords();
+  }
+
+  void saveAttendanceRecord(AttendanceRecord record) {
+    int index = _attendanceRecords.indexWhere((r) => r.id == record.id);
+
+    // Fallback matching by employeeId/name + workflowStep + eventTimestamp if IDs differ
+    if (index < 0) {
+      index = _attendanceRecords.indexWhere((r) {
+        final empMatch = r.employeeId == record.employeeId ||
+            (r.employeeName.trim().isNotEmpty &&
+                record.employeeName.trim().isNotEmpty &&
+                r.employeeName.trim().toLowerCase() ==
+                    record.employeeName.trim().toLowerCase());
+        final stepMatch = r.workflowStep == record.workflowStep;
+        final timeMatch = r.eventTimestamp.isAtSameMomentAs(record.eventTimestamp) ||
+            r.eventTimestamp.difference(record.eventTimestamp).inSeconds.abs() < 5;
+        return empMatch && stepMatch && timeMatch;
+      });
+    }
+
     if (index >= 0) {
-      _attendanceRecords[index] = updatedRecord;
-      _persistAttendanceRecords();
+      final existing = _attendanceRecords[index];
+      if (existing.isEdited && record.manualOvertimeHours == null && existing.manualOvertimeHours != null) {
+        _attendanceRecords[index] = record.copyWith(
+          manualOvertimeHours: existing.manualOvertimeHours,
+          overrideManualOvertimeHours: true,
+          remarks: (existing.remarks != null && existing.remarks!.isNotEmpty) ? existing.remarks : record.remarks,
+          isEdited: true,
+          editedBy: existing.editedBy,
+        );
+      } else {
+        _attendanceRecords[index] = record;
+      }
+    } else {
+      _attendanceRecords.add(record);
+    }
+    _persistAttendanceRecords();
+  }
+
+  void updateAttendanceRecord(AttendanceRecord updatedRecord) {
+    saveAttendanceRecord(updatedRecord);
+  }
+
+  /// Admin method to update or insert Check-In, Check-Out, and Overtime (OT) with Remarks for an employee on a given date.
+  Future<bool> updateOrAddAdminAttendanceOverride({
+    required String employeeId,
+    required String employeeName,
+    required DateTime date,
+    required DateTime checkInTime,
+    required DateTime checkOutTime,
+    double? manualOvertimeHours,
+    String? remarks,
+    String? adminName,
+  }) async {
+    final localDate = date.toLocal();
+    final dateStr =
+        "${localDate.year}-${localDate.month.toString().padLeft(2, '0')}-${localDate.day.toString().padLeft(2, '0')}";
+
+    // Filter existing records for this employee on this date
+    final dayRecords = _attendanceRecords.where((r) {
+      final isEmp = r.employeeId == employeeId ||
+          (r.employeeName.trim().isNotEmpty &&
+              employeeName.trim().isNotEmpty &&
+              r.employeeName.trim().toLowerCase() ==
+                  employeeName.trim().toLowerCase());
+      final localEv = r.eventTimestamp.toLocal();
+      final rDateStr =
+          "${localEv.year}-${localEv.month.toString().padLeft(2, '0')}-${localEv.day.toString().padLeft(2, '0')}";
+      return isEmp && rDateStr == dateStr;
+    }).toList();
+
+    final List<AttendanceRecord> updatedOrCreated = [];
+
+    // 1. Check-In Record
+    int inIndex = dayRecords.indexWhere(
+      (r) => r.workflowStep == WorkflowStep.officeCheckIn,
+    );
+    if (inIndex < 0) {
+      inIndex = dayRecords.indexWhere(
+        (r) => r.workflowStep == WorkflowStep.siteCheckIn,
+      );
+    }
+
+    if (inIndex >= 0) {
+      final orig = dayRecords[inIndex];
+      final updated = orig.copyWith(
+        eventTimestamp: checkInTime,
+        manualOvertimeHours: manualOvertimeHours,
+        overrideManualOvertimeHours: true,
+        remarks: remarks,
+        isEdited: true,
+        editedBy: adminName,
+        syncStatus: SyncStatus.pending,
+      );
+      updateAttendanceRecord(updated);
+      updatedOrCreated.add(updated);
+    } else {
+      final newCheckIn = AttendanceRecord(
+        id: _uuid.v4(),
+        employeeId: employeeId,
+        employeeName: employeeName,
+        workflowStep: WorkflowStep.officeCheckIn,
+        eventTimestamp: checkInTime,
+        latitude: 0.0,
+        longitude: 0.0,
+        gpsAccuracy: 5.0,
+        address: 'Admin Manual Entry',
+        deviceId: 'DEV-ADMIN-OVERRIDE',
+        photoBase64: '',
+        isGeofenceValid: true,
+        siteName: 'Main Office',
+        manualOvertimeHours: manualOvertimeHours,
+        remarks: remarks,
+        isEdited: true,
+        editedBy: adminName,
+        syncStatus: SyncStatus.pending,
+      );
+      addAttendanceRecord(newCheckIn);
+      updatedOrCreated.add(newCheckIn);
+    }
+
+    // 2. Check-Out Record
+    int outIndex = dayRecords.lastIndexWhere(
+      (r) => r.workflowStep == WorkflowStep.officeCheckOut,
+    );
+    if (outIndex < 0) {
+      outIndex = dayRecords.lastIndexWhere(
+        (r) => r.workflowStep == WorkflowStep.siteCheckOut,
+      );
+    }
+
+    if (outIndex >= 0) {
+      final orig = dayRecords[outIndex];
+      final updated = orig.copyWith(
+        eventTimestamp: checkOutTime,
+        manualOvertimeHours: manualOvertimeHours,
+        overrideManualOvertimeHours: true,
+        remarks: remarks,
+        isEdited: true,
+        editedBy: adminName,
+        syncStatus: SyncStatus.pending,
+      );
+      updateAttendanceRecord(updated);
+      updatedOrCreated.add(updated);
+    } else {
+      final newCheckOut = AttendanceRecord(
+        id: _uuid.v4(),
+        employeeId: employeeId,
+        employeeName: employeeName,
+        workflowStep: WorkflowStep.officeCheckOut,
+        eventTimestamp: checkOutTime,
+        latitude: 0.0,
+        longitude: 0.0,
+        gpsAccuracy: 5.0,
+        address: 'Admin Manual Entry',
+        deviceId: 'DEV-ADMIN-OVERRIDE',
+        photoBase64: '',
+        isGeofenceValid: true,
+        siteName: 'Main Office',
+        manualOvertimeHours: manualOvertimeHours,
+        remarks: remarks,
+        isEdited: true,
+        editedBy: adminName,
+        syncStatus: SyncStatus.pending,
+      );
+      addAttendanceRecord(newCheckOut);
+      updatedOrCreated.add(newCheckOut);
+    }
+
+    // 3. Update all intermediate site/break logs for this date to maintain OT override & remarks consistency
+    for (int i = 0; i < dayRecords.length; i++) {
+      if (i != inIndex && i != outIndex) {
+        final orig = dayRecords[i];
+        final updated = orig.copyWith(
+          manualOvertimeHours: manualOvertimeHours,
+          overrideManualOvertimeHours: true,
+          remarks: remarks,
+          isEdited: true,
+          editedBy: adminName,
+          syncStatus: SyncStatus.pending,
+        );
+        updateAttendanceRecord(updated);
+        updatedOrCreated.add(updated);
+      }
+    }
+
+    _persistAttendanceRecords();
+
+    // Trigger Cloud DB sync
+    try {
+      final cloudOk = await SupabaseService().saveAdminAttendanceOverride(records: updatedOrCreated);
+      if (cloudOk) {
+        for (final rec in updatedOrCreated) {
+          updateAttendanceRecord(rec.copyWith(syncStatus: SyncStatus.synced));
+        }
+      }
+      return cloudOk;
+    } catch (e) {
+      debugPrint('Cloud sync note during admin override: $e');
+      return false;
     }
   }
 
@@ -413,7 +730,7 @@ class LocalDatabaseService {
     final targetId = employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
     if (targetId == null || targetId.isEmpty) return [];
 
-    final now = DateTime.now();
+    final now = DateTime.now().toLocal();
     final today = DateTime(now.year, now.month, now.day);
 
     return _attendanceRecords.where((r) {
@@ -422,7 +739,8 @@ class LocalDatabaseService {
               (r.employeeId == _currentUser!.id ||
                r.employeeId == _currentUser!.firebaseUid ||
                r.employeeName.trim().toLowerCase() == _currentUser!.fullName.trim().toLowerCase())));
-      final rDate = DateTime(r.eventTimestamp.year, r.eventTimestamp.month, r.eventTimestamp.day);
+      final localEv = r.eventTimestamp.toLocal();
+      final rDate = DateTime(localEv.year, localEv.month, localEv.day);
       return matchesUser && rDate.isAtSameMomentAs(today);
     }).toList();
   }

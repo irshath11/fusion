@@ -206,14 +206,26 @@ class AttendanceCubit extends Cubit<AttendanceState> {
       } else if (step == WorkflowStep.officeCheckIn || step == WorkflowStep.officeCheckOut) {
         if (!emp.useDefaultOffice && emp.assignedOfficeId != null) {
           final customOfficeMatches = offices.where((o) => o.id == emp.assignedOfficeId);
-          resolvedLocationName = customOfficeMatches.isNotEmpty
-              ? customOfficeMatches.first.name
-              : defaultOffice.name;
+          final siteMatches = workSites.where((s) => s.id == emp.assignedOfficeId);
+          if (customOfficeMatches.isNotEmpty) {
+            resolvedLocationName = customOfficeMatches.first.name;
+          } else if (siteMatches.isNotEmpty) {
+            resolvedLocationName = siteMatches.first.siteName;
+          } else if (emp.assignedOfficeName != null && emp.assignedOfficeName!.trim().isNotEmpty) {
+            resolvedLocationName = emp.assignedOfficeName!.trim();
+          } else {
+            resolvedLocationName = defaultOffice.name;
+          }
         } else {
-          resolvedLocationName = defaultOffice.name;
+          resolvedLocationName = (emp.assignedOfficeName != null && emp.assignedOfficeName!.trim().isNotEmpty)
+              ? emp.assignedOfficeName!.trim()
+              : defaultOffice.name;
         }
       } else {
-        resolvedLocationName = workSites.isNotEmpty ? workSites.first.siteName : 'Work Site';
+        final activeSite = _db.getActiveSiteNameToday(emp.id);
+        resolvedLocationName = (activeSite != null && activeSite.trim().isNotEmpty)
+            ? activeSite.trim()
+            : (workSites.isNotEmpty ? workSites.first.siteName : 'Work Site');
       }
 
       String? matchedWorkSiteId;
@@ -222,6 +234,14 @@ class AttendanceCubit extends Cubit<AttendanceState> {
           final matches = workSites.where((s) =>
               s.siteName.trim().toLowerCase() == siteName.trim().toLowerCase() ||
               siteName.trim().toLowerCase().startsWith(s.siteName.trim().toLowerCase()));
+          if (matches.isNotEmpty) {
+            matchedWorkSiteId = matches.first.id;
+          }
+        }
+        if (matchedWorkSiteId == null && resolvedLocationName.isNotEmpty) {
+          final matches = workSites.where((s) =>
+              resolvedLocationName.toLowerCase().contains(s.siteName.toLowerCase()) ||
+              s.siteName.toLowerCase().contains(resolvedLocationName.toLowerCase()));
           if (matches.isNotEmpty) {
             matchedWorkSiteId = matches.first.id;
           }

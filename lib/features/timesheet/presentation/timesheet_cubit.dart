@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../database/local_database_service.dart';
+import '../../../core/services/supabase_service.dart';
 import '../../../core/utils/timesheet_calculator.dart';
 import '../domain/timesheet_entry.dart';
 
@@ -60,6 +61,15 @@ class TimesheetCubit extends Cubit<TimesheetState> {
         emit(TimesheetError('User identity not found.'));
         return;
       }
+
+      try {
+        final cloudRecords = await SupabaseService().fetchAttendanceRecordsFromSupabase();
+        if (cloudRecords.isNotEmpty) {
+          for (final record in cloudRecords) {
+            _db.saveAttendanceRecord(record);
+          }
+        }
+      } catch (_) {}
 
       final allRecords = _db.getAttendanceRecords();
       final entries = TimesheetCalculator.calculateDailyTimesheets(

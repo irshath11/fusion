@@ -7,6 +7,7 @@ import '../../../core/services/pdf_export_service.dart';
 import '../../../core/utils/timesheet_calculator.dart';
 import '../../../database/local_database_service.dart';
 import '../../admin/domain/employee_entity.dart';
+import '../../admin/presentation/admin_edit_attendance_dialog.dart';
 import 'timesheet_cubit.dart';
 import '../domain/timesheet_entry.dart';
 
@@ -549,35 +550,60 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                     ),
                   ],
                 ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: entry.isAutoCompleted
-                        ? activePrimary.withValues(alpha: isDark ? 0.2 : 0.1)
-                        : (entry.isCompleted
-                            ? palette.success.withValues(alpha: 0.1)
-                            : (isDark
-                                ? palette.surfaceDark
-                                : Colors.grey.shade200)),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    entry.isAutoCompleted
-                        ? 'Auto Checked-Out (8h)'
-                        : (entry.isCompleted ? 'Shift Complete' : 'In Progress'),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: entry.isAutoCompleted
-                          ? activePrimary
-                          : (entry.isCompleted
-                              ? palette.success
-                              : (isDark
-                                  ? palette.textSecondaryDark
-                                  : Colors.grey.shade700)),
+                Row(
+                  children: [
+                    if (entry.isEdited) ...[
+                      Container(
+                        margin: const EdgeInsets.only(right: 6),
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                              color: Colors.purple.withValues(alpha: 0.3)),
+                        ),
+                        child: const Text(
+                          'ADMIN MODIFIED',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.purple,
+                          ),
+                        ),
+                      ),
+                    ],
+                    Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: entry.isAutoCompleted
+                            ? activePrimary.withValues(alpha: isDark ? 0.2 : 0.1)
+                            : (entry.isCompleted
+                                ? palette.success.withValues(alpha: 0.1)
+                                : (isDark
+                                    ? palette.surfaceDark
+                                    : Colors.grey.shade200)),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        entry.isAutoCompleted
+                            ? 'Auto Checked-Out (8h)'
+                            : (entry.isCompleted ? 'Shift Complete' : 'In Progress'),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: entry.isAutoCompleted
+                              ? activePrimary
+                              : (entry.isCompleted
+                                  ? palette.success
+                                  : (isDark
+                                      ? palette.textSecondaryDark
+                                      : Colors.grey.shade700)),
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 )
               ],
             ),
@@ -700,6 +726,38 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                 ],
               ],
             ),
+            if (entry.remarks != null && entry.remarks!.trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.purple.withValues(alpha: isDark ? 0.15 : 0.06),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color: Colors.purple.withValues(alpha: isDark ? 0.3 : 0.15)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.note_alt_rounded,
+                        size: 14, color: Colors.purple.shade400),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Remarks: ${entry.remarks}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                          color: isDark
+                              ? AppColors.textSecondaryDark
+                              : Colors.grey.shade800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -883,6 +941,41 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                               color: AppColors.success),
                         ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        final ok = await AdminEditAttendanceDialog.show(
+                          context,
+                          employeeId: entry.employeeId,
+                          employeeName: entry.employeeName,
+                          date: entry.date,
+                          initialCheckIn: entry.checkInTime,
+                          initialCheckOut: entry.checkOutTime,
+                          initialOtHours: entry.manualOvertimeHours ?? entry.overtimeHours,
+                          initialRemarks: entry.remarks,
+                        );
+                        if (ok == true && context.mounted) {
+                          context.read<TimesheetCubit>().fetchEmployeeTimesheet(
+                                employeeId: widget.employeeId,
+                              );
+                        }
+                      },
+                      icon: const Icon(Icons.edit_calendar_rounded, size: 18),
+                      label: const Text('Adjust Shift & OT Hours',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: activePrimaryModal,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
