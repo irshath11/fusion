@@ -646,6 +646,32 @@ class SupabaseService {
     }
   }
 
+  /// Synchronizes Cloud Data (Users, Employees, Offices, WorkSites) to Local Database Cache
+  Future<void> syncCloudDataToLocal([String? orgId]) async {
+    if (!_isInitialized || client == null) return;
+    try {
+      final targetOrgId = orgId ?? LocalDatabaseService().organization?.id;
+      final remoteUsers = await fetchOrganizationUsers(targetOrgId ?? '00000000-0000-0000-0000-000000000001');
+      if (remoteUsers.isNotEmpty) {
+        LocalDatabaseService().setUsers(remoteUsers);
+      }
+      final remoteEmployees = await fetchEmployeesFromSupabase(targetOrgId);
+      if (remoteEmployees.isNotEmpty) {
+        LocalDatabaseService().setEmployees(remoteEmployees);
+      }
+      final remoteOffices = await fetchOfficesFromSupabase();
+      if (remoteOffices.isNotEmpty) {
+        LocalDatabaseService().setOffices(remoteOffices);
+      }
+      final remoteSites = await fetchWorkSitesFromSupabase();
+      if (remoteSites.isNotEmpty) {
+        LocalDatabaseService().setWorkSites(remoteSites);
+      }
+    } catch (e) {
+      debugPrint('Error syncing cloud data to local cache: $e');
+    }
+  }
+
   /// Fetch complete Employee Details (from users + employees + offices tables) by User ID or Email
   Future<EmployeeEntity?> fetchEmployeeDetails(String userIdOrEmail) async {
     if (!_isInitialized || client == null) return null;
@@ -1219,6 +1245,25 @@ class SupabaseService {
               .update({'is_deleted': true, 'is_active': false})
               .eq('email', targetEmail);
         } catch (_) {}
+      }
+
+      // 3. Fallback: Perform hard deletion to guarantee removal if soft delete flag is bypassed
+      try {
+        if (actualUuid != null && _isValidUuid(actualUuid)) {
+          await client!.from('employees').delete().eq('user_id', actualUuid);
+          await client!.from('employees').delete().eq('id', actualUuid);
+          await client!.from('users').delete().eq('id', actualUuid);
+        }
+        if (userId.isNotEmpty) {
+          await client!.from('employees').delete().eq('user_id', userId);
+          await client!.from('users').delete().eq('firebase_uid', userId);
+        }
+        if (targetEmail.isNotEmpty) {
+          await client!.from('employees').delete().eq('email', targetEmail);
+          await client!.from('users').delete().eq('email', targetEmail);
+        }
+      } catch (e) {
+        debugPrint('Hard delete fallback note: $e');
       }
 
       if (_isValidUuid(orgId)) {

@@ -411,10 +411,10 @@ class UserManagementCubit extends Cubit<UserManagementState> {
       );
 
       // 3. Synchronize local DB cache with cloud
-      await _supabase.syncCloudDataToLocal();
+      await _supabase.syncCloudDataToLocal(orgId);
 
-      emit(UserManagementActionSuccess('User deleted successfully.'));
       await fetchUsers();
+      emit(UserManagementActionSuccess('User deleted successfully.'));
     } catch (e) {
       emit(UserManagementError('Failed to delete user: ${e.toString()}'));
     }
