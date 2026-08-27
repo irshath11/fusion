@@ -68,6 +68,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
     final user = widget.userToEdit;
     _nameController = TextEditingController(text: user?.fullName ?? '');
     _emailController = TextEditingController(text: user?.email ?? '');
+    _phoneController = TextEditingController(text: user?.phoneNumber ?? '');
     _codeController = TextEditingController(
         text: _resolveCleanCode(user?.employeeCode, user?.fullName, user?.id));
     _designationController = TextEditingController(
