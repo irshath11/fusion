@@ -31,13 +31,16 @@ class WorkSiteEntity {
       };
 
   factory WorkSiteEntity.fromJson(Map<String, dynamic> json) => WorkSiteEntity(
-        id: json['id'],
-        siteName: json['siteName'],
-        clientName: json['clientName'],
-        address: json['address'],
-        latitude: (json['latitude'] as num).toDouble(),
-        longitude: (json['longitude'] as num).toDouble(),
-        radiusMeters: (json['radiusMeters'] as num?)?.toDouble() ?? 200.0,
-        assignedEmployeeIds: List<String>.from(json['assignedEmployeeIds'] ?? []),
+        id: json['id']?.toString() ?? '',
+        siteName: json['siteName']?.toString() ?? json['site_name']?.toString() ?? '',
+        clientName: json['clientName']?.toString() ?? json['client_name']?.toString() ?? '',
+        address: json['address']?.toString() ?? '',
+        latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
+        longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
+        radiusMeters: (json['radiusMeters'] as num?)?.toDouble() ??
+            (json['radius_meters'] as num?)?.toDouble() ??
+            200.0,
+        assignedEmployeeIds: List<String>.from(
+            json['assignedEmployeeIds'] ?? json['assigned_employee_ids'] ?? []),
       );
 }

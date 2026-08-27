@@ -8,6 +8,7 @@ import '../../features/setup/domain/organization_setup.dart';
 import '../../features/auth/domain/user_entity.dart';
 import '../../features/admin/domain/office_entity.dart';
 import '../../features/admin/domain/employee_entity.dart';
+import '../../features/admin/domain/work_site_entity.dart';
 import '../../database/local_database_service.dart';
 import '../constants/app_enums.dart';
 
@@ -191,6 +192,50 @@ class SupabaseService {
       return response.map((json) => OfficeEntity.fromJson(json)).toList();
     } catch (e) {
       debugPrint('Supabase fetchOfficesFromSupabase error: $e');
+      return [];
+    }
+  }
+
+  /// Save or Update Work Site in Supabase
+  Future<void> saveWorkSiteToSupabase(WorkSiteEntity site) async {
+    if (!_isInitialized || client == null) return;
+    try {
+      final localOrg = LocalDatabaseService().organization;
+      final orgId = localOrg?.id ?? '00000000-0000-0000-0000-000000000001';
+      final validOrgId = await ensureOrganizationExistsInCloud(orgId) ?? orgId;
+
+      final sitePayload = {
+        if (_isValidUuid(site.id)) 'id': site.id,
+        'organization_id': validOrgId,
+        'site_name': site.siteName,
+        'client_name': site.clientName,
+        'address': site.address,
+        'latitude': site.latitude,
+        'longitude': site.longitude,
+        'radius_meters': site.radiusMeters,
+        'is_deleted': false,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+      await client!.from('work_sites').upsert(sitePayload);
+    } catch (e) {
+      debugPrint('Supabase saveWorkSiteToSupabase error: $e');
+    }
+  }
+
+  /// Fetch Work Sites from Supabase
+  Future<List<WorkSiteEntity>> fetchWorkSitesFromSupabase() async {
+    if (!_isInitialized || client == null) return [];
+    try {
+      final List<dynamic> response = await client!
+          .from('work_sites')
+          .select()
+          .eq('is_deleted', false)
+          .order('created_at', ascending: true);
+      return response
+          .map((json) => WorkSiteEntity.fromJson(Map<String, dynamic>.from(json)))
+          .toList();
+    } catch (e) {
+      debugPrint('Supabase fetchWorkSitesFromSupabase error: $e');
       return [];
     }
   }
@@ -1027,21 +1072,6 @@ class SupabaseService {
     }
   }
 
-  /// Sync all cloud offices and employees down to LocalDatabaseService
-  Future<void> syncCloudDataToLocal() async {
-    if (!_isInitialized || client == null) return;
-    try {
-      final cloudOffices = await fetchOfficesFromSupabase();
-      if (cloudOffices.isNotEmpty) {
-        LocalDatabaseService().setOffices(cloudOffices);
-      }
-
-      final cloudEmployees = await fetchEmployeesFromSupabase();
-      LocalDatabaseService().setEmployees(cloudEmployees);
-    } catch (e) {
-      debugPrint('Supabase syncCloudDataToLocal note: $e');
-    }
-  }
 
   /// Activate or Disable User
   Future<bool> setUserActiveStatus({

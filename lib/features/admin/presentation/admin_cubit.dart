@@ -60,6 +60,21 @@ class AdminCubit extends Cubit<AdminState> {
 
     final combinedOffices = officeMap.values.toList();
 
+    List<WorkSiteEntity> cloudWorkSites = [];
+    try {
+      cloudWorkSites = await _supabase.fetchWorkSitesFromSupabase();
+    } catch (_) {}
+
+    final siteMap = <String, WorkSiteEntity>{};
+    for (final site in cloudWorkSites) {
+      siteMap[site.id] = site;
+    }
+    for (final site in _db.getWorkSites()) {
+      siteMap[site.id] = site;
+    }
+
+    final combinedWorkSites = siteMap.values.toList();
+
     final orgId = _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
     try {
       final cloudEmployees = await _supabase.fetchEmployeesFromSupabase(orgId);
@@ -136,7 +151,7 @@ class AdminCubit extends Cubit<AdminState> {
     emit(AdminDataLoaded(
       employees: _db.getEmployees(),
       offices: combinedOffices.isNotEmpty ? combinedOffices : localOffices,
-      workSites: _db.getWorkSites(),
+      workSites: combinedWorkSites.isNotEmpty ? combinedWorkSites : _db.getWorkSites(),
       statusMessage: message,
     ));
   }
@@ -255,7 +270,7 @@ class AdminCubit extends Cubit<AdminState> {
     required double latitude,
     required double longitude,
     required double radius,
-  }) {
+  }) async {
     final site = WorkSiteEntity(
       id: id ?? _uuid.v4(),
       siteName: name.trim(),
@@ -268,7 +283,8 @@ class AdminCubit extends Cubit<AdminState> {
     );
 
     _db.saveWorkSite(site);
-    loadDashboardData('Work site saved.');
+    await _supabase.saveWorkSiteToSupabase(site);
+    await loadDashboardData('Work site saved.');
   }
 
   void deleteWorkSite(String id) {
