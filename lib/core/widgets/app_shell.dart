@@ -110,9 +110,14 @@ class _AppShellState extends State<AppShell> {
     Color primary,
     bool isWide,
   ) {
+    final topPadding = MediaQuery.of(context).padding.top;
+
     return Container(
-      height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: EdgeInsets.only(
+        top: topPadding,
+        left: isWide ? 20 : 12,
+        right: isWide ? 20 : 12,
+      ),
       decoration: BoxDecoration(
         color: isDark
             ? palette.surfaceDark.withValues(alpha: 0.75)
@@ -132,8 +137,10 @@ class _AppShellState extends State<AppShell> {
           ),
         ],
       ),
-      child: Row(
-        children: [
+      child: SizedBox(
+        height: 60,
+        child: Row(
+          children: [
           if (isWide) ...[
             IconButton(
               icon: Icon(
@@ -280,6 +287,7 @@ class _AppShellState extends State<AppShell> {
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -472,76 +480,106 @@ class _AppShellState extends State<AppShell> {
     AppThemePalette palette,
     Color primary,
   ) {
-    final double itemPaddingH = widget.destinations.length > 4 ? 6.0 : 10.0;
-
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
       child: SafeArea(
         top: false,
         child: AppGlassCard(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
           borderRadius: 24,
           blurAmount: 16,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: List.generate(widget.destinations.length, (index) {
-              final isSelected = widget.selectedIndex == index;
-              final dest = widget.destinations[index];
+          child: LayoutBuilder(
+            builder: (context, dockConstraints) {
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: dockConstraints.maxWidth - 12,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: List.generate(widget.destinations.length, (index) {
+                      final isSelected = widget.selectedIndex == index;
+                      final dest = widget.destinations[index];
 
-              return Expanded(
-                child: AppBounceable(
-                  onTap: () => widget.onDestinationSelected(index),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: itemPaddingH,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? primary.withValues(alpha: isDark ? 0.25 : 0.15)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(16),
-                      border: isSelected
-                          ? Border.all(
-                              color: primary.withValues(alpha: 0.4),
-                            )
-                          : null,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isSelected ? dest.activeIcon : dest.icon,
-                          size: widget.destinations.length > 4 ? 19 : 22,
-                          color: isSelected
-                              ? primary
-                              : (isDark ? Colors.white54 : AppColors.slate500),
-                        ),
-                        if (isSelected) ...[
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                dest.label,
-                                maxLines: 1,
-                                style: TextStyle(
-                                  fontSize: widget.destinations.length > 4 ? 10 : 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: primary,
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        child: AppBounceable(
+                          onTap: () => widget.onDestinationSelected(index),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? primary.withValues(alpha: isDark ? 0.25 : 0.15)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(18),
+                              border: isSelected
+                                  ? Border.all(
+                                      color: primary.withValues(alpha: 0.4),
+                                      width: 1.5,
+                                    )
+                                  : null,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  isSelected ? dest.activeIcon : dest.icon,
+                                  size: 22,
+                                  color: isSelected
+                                      ? primary
+                                      : (isDark ? Colors.white60 : AppColors.slate600),
                                 ),
-                              ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  dest.label,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.w600,
+                                    color: isSelected
+                                        ? primary
+                                        : (isDark ? Colors.white70 : AppColors.slate700),
+                                  ),
+                                ),
+                                if (dest.badge != null) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.error,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(
+                                      dest.badge!,
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
-                        ],
-                      ],
-                    ),
+                        ),
+                      );
+                    }),
                   ),
                 ),
               );
-            }),
+            },
           ),
         ),
       ),
