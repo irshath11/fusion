@@ -14,6 +14,8 @@ class UserEntity {
   final String? employeeCode;
   final String? designation;
   final String? department;
+  final String? assignedOfficeId;
+  final String? assignedOfficeName;
 
   UserEntity({
     required this.id,
@@ -29,7 +31,12 @@ class UserEntity {
     this.employeeCode,
     this.designation,
     this.department,
+    this.assignedOfficeId,
+    this.assignedOfficeName,
   });
+
+  /// Convenience getter for name
+  String get name => fullName;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -45,6 +52,8 @@ class UserEntity {
         'employee_code': employeeCode,
         'designation': designation,
         'department': department,
+        'assigned_office_id': assignedOfficeId,
+        'assigned_office_name': assignedOfficeName,
       };
 
   factory UserEntity.fromJson(Map<String, dynamic> json) => UserEntity(
@@ -62,6 +71,8 @@ class UserEntity {
         employeeCode: json['employee_code'] ?? json['employeeCode'],
         designation: json['designation'],
         department: json['department'],
+        assignedOfficeId: json['assigned_office_id'] ?? json['assignedOfficeId'],
+        assignedOfficeName: json['assigned_office_name'] ?? json['assignedOfficeName'],
       );
 
   UserEntity copyWith({
@@ -78,6 +89,8 @@ class UserEntity {
     String? employeeCode,
     String? designation,
     String? department,
+    String? assignedOfficeId,
+    String? assignedOfficeName,
   }) {
     return UserEntity(
       id: id ?? this.id,
@@ -93,6 +106,8 @@ class UserEntity {
       employeeCode: employeeCode ?? this.employeeCode,
       designation: designation ?? this.designation,
       department: department ?? this.department,
+      assignedOfficeId: assignedOfficeId ?? this.assignedOfficeId,
+      assignedOfficeName: assignedOfficeName ?? this.assignedOfficeName,
     );
   }
 }
