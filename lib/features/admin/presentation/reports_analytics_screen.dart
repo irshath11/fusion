@@ -665,7 +665,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   });
                 },
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -676,22 +676,27 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                           .textTheme
                           .titleLarge
                           ?.copyWith(fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     Text(
-                      '${emp.employeeCode} • ${emp.department} • Work Timesheet',
+                      '${emp.employeeCode} • ${emp.department}',
                       style: TextStyle(
                           fontSize: 12,
                           color: isDark
                               ? AppColors.textSecondaryDark
                               : AppColors.textSecondaryLight),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
+              const SizedBox(width: 6),
               ElevatedButton.icon(
                 onPressed: () => _exportPdfForEmployee(emp, empRecords),
                 icon: const Icon(Icons.picture_as_pdf_rounded, size: 14),
-                label: const Text('Download PDF',
+                label: const Text('PDF',
                     style:
                         TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
@@ -715,7 +720,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             children: [
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
                   decoration: BoxDecoration(
                     color: isDark
                         ? palette.surfaceDark
@@ -729,31 +734,40 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   ),
                   child: Column(
                     children: [
-                      Text('Regular',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: activePrimary,
-                              fontWeight: FontWeight.bold)),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Regular',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: activePrimary,
+                                fontWeight: FontWeight.bold)),
+                      ),
                       const SizedBox(height: 2),
-                      Text('${totalRegHours.toStringAsFixed(1)} hrs',
-                          style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: activePrimary)),
-                      Text('Max 8.0h/day',
-                          style: TextStyle(
-                              fontSize: 10,
-                              color: isDark
-                                  ? palette.textSecondaryDark
-                                  : palette.textSecondaryLight)),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('${totalRegHours.toStringAsFixed(1)} hrs',
+                            style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: activePrimary)),
+                      ),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Max 8.0h/day',
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: isDark
+                                    ? palette.textSecondaryDark
+                                    : palette.textSecondaryLight)),
+                      ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
                   decoration: BoxDecoration(
                     color: isDark
                         ? AppColors.surfaceDark
@@ -767,35 +781,44 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   ),
                   child: Column(
                     children: [
-                      Text('Overtime (OT)',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: isDark
-                                  ? Colors.orange.shade300
-                                  : Colors.orange.shade900,
-                              fontWeight: FontWeight.bold)),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Overtime (OT)',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: isDark
+                                    ? Colors.orange.shade300
+                                    : Colors.orange.shade900,
+                                fontWeight: FontWeight.bold)),
+                      ),
                       const SizedBox(height: 2),
-                      Text('${totalOtHours.toStringAsFixed(1)} hrs',
-                          style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: isDark
-                                  ? Colors.orange.shade300
-                                  : Colors.orange.shade900)),
-                      Text('Beyond 10.0h/day',
-                          style: TextStyle(
-                              fontSize: 10,
-                              color: isDark
-                                  ? AppColors.textSecondaryDark
-                                  : AppColors.textSecondaryLight)),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('${totalOtHours.toStringAsFixed(1)} hrs',
+                            style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? Colors.orange.shade300
+                                    : Colors.orange.shade900)),
+                      ),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Beyond 10.0h/day',
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : AppColors.textSecondaryLight)),
+                      ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
                   decoration: BoxDecoration(
                     color: isDark
                         ? AppColors.surfaceDark
@@ -809,24 +832,33 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   ),
                   child: Column(
                     children: [
-                      const Text('Combined',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.success,
-                              fontWeight: FontWeight.bold)),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: const Text('Combined',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: AppColors.success,
+                                fontWeight: FontWeight.bold)),
+                      ),
                       const SizedBox(height: 2),
-                      Text(
-                          '${(totalRegHours + totalOtHours).toStringAsFixed(1)} hrs',
-                          style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.success)),
-                      Text('${sortedDateKeys.length} Days Worked',
-                          style: TextStyle(
-                              fontSize: 10,
-                              color: isDark
-                                  ? AppColors.textSecondaryDark
-                                  : AppColors.textSecondaryLight)),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                            '${(totalRegHours + totalOtHours).toStringAsFixed(1)} hrs',
+                            style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.success)),
+                      ),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('${sortedDateKeys.length} Days Worked',
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : AppColors.textSecondaryLight)),
+                      ),
                     ],
                   ),
                 ),
@@ -867,23 +899,29 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Icon(Icons.location_city_rounded,
-                              color: activePrimary, size: 18),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Site / Client Man-Hours Spent',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color: isDark
-                                  ? palette.textPrimaryDark
-                                  : palette.textPrimaryLight,
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Icon(Icons.location_city_rounded,
+                                color: activePrimary, size: 18),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Site / Client Man-Hours Spent',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: isDark
+                                      ? palette.textPrimaryDark
+                                      : palette.textPrimaryLight,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 2),
@@ -1065,164 +1103,206 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                 final dayOt = dayEntry?.overtimeHours ?? 0.0;
                 final dayBreakMin = dayEntry?.breakDuration.inMinutes ?? 0;
 
+                final dateSiteSummaries =
+                    TimesheetCalculator.calculateSiteManHours(dateRecords);
+
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14)),
                   elevation: 1.5,
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
-                    leading: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: activePrimary.withValues(
-                            alpha: isDark ? 0.2 : 0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.calendar_month_rounded,
-                          color: activePrimary),
-                    ),
-                    title: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          formattedDateStr,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 15),
-                        ),
-                        const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: activePrimary.withValues(
-                                    alpha: isDark ? 0.2 : 0.12),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                '${dayReg.toStringAsFixed(1)}h Reg',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: activePrimary),
-                              ),
-                            ),
-                            if (dayOt > 0)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? Colors.orange.withValues(alpha: 0.2)
-                                      : Colors.orange.shade100,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: isDark
-                                      ? Border.all(
-                                          color: Colors.orange.shade800)
-                                      : null,
-                                ),
-                                child: Text(
-                                  '+${dayOt.toStringAsFixed(1)}h OT',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: isDark
-                                          ? Colors.orange.shade300
-                                          : Colors.orange.shade900),
-                                ),
-                              ),
-                            if (dayBreakMin > 0)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? Colors.amber.withValues(alpha: 0.2)
-                                      : Colors.amber.shade100,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: isDark
-                                      ? Border.all(color: Colors.amber.shade800)
-                                      : null,
-                                ),
-                                child: Text(
-                                  '☕ ${dayBreakMin}m Break',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: isDark
-                                          ? Colors.amber.shade300
-                                          : Colors.amber.shade900),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    subtitle: Padding(
-                      padding: const EdgeInsets.only(top: 6.0),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () {
+                      setState(() {
+                        _selectedDate = parsedDate;
+                      });
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(14.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              Icon(Icons.schedule_rounded,
-                                  size: 14,
-                                  color: isDark
-                                      ? AppColors.textSecondaryDark
-                                      : Colors.grey.shade600),
-                              const SizedBox(width: 4),
-                              Text(
-                                '$firstTime - $lastTime (${dateRecords.length} Step Logs)',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isDark
-                                      ? AppColors.textSecondaryDark
-                                      : Colors.grey.shade700,
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: activePrimary.withValues(
+                                      alpha: isDark ? 0.2 : 0.12),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(Icons.calendar_month_rounded,
+                                    color: activePrimary, size: 18),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      formattedDateStr,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold, fontSize: 14),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '$firstTime - $lastTime (${dateRecords.length} Step Logs)',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: isDark
+                                            ? AppColors.textSecondaryDark
+                                            : Colors.grey.shade700,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              ElevatedButton.icon(
+                                onPressed: () async {
+                                  final ok =
+                                      await AdminEditAttendanceDialog.show(
+                                    context,
+                                    employeeId: emp.id,
+                                    employeeName: emp.name,
+                                    date: parsedDate,
+                                    initialCheckIn: dayEntry?.checkInTime,
+                                    initialCheckOut: dayEntry?.checkOutTime,
+                                    initialOtHours:
+                                        dayEntry?.manualOvertimeHours ??
+                                            dayEntry?.overtimeHours,
+                                    initialRemarks: dayEntry?.remarks,
+                                  );
+                                  if (ok == true && mounted) {
+                                    setState(() {});
+                                  }
+                                },
+                                icon: const Icon(Icons.edit_calendar_rounded,
+                                    size: 14),
+                                label: const Text('Adjust',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: activePrimary,
+                                  foregroundColor: Colors.white,
+                                  elevation: 1,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 6),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                          // Date-Specific Site Hours Chips
-                          () {
-                            final dateSiteSummaries =
-                                TimesheetCalculator.calculateSiteManHours(
-                                    dateRecords);
-                            if (dateSiteSummaries.isEmpty) {
-                              if (siteNamesStr != null) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 3.0),
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.place_rounded,
-                                          size: 14, color: activePrimary),
-                                      const SizedBox(width: 4),
-                                      Expanded(
-                                        child: Text(
-                                          'Sites: $siteNamesStr',
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                              color: activePrimary),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }
-                              return const SizedBox.shrink();
-                            }
+                          const SizedBox(height: 10),
 
-                            return Padding(
-                              padding:
-                                  const EdgeInsets.only(top: 5.0, bottom: 2.0),
-                              child: Wrap(
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 7, vertical: 2.5),
+                                decoration: BoxDecoration(
+                                  color: activePrimary.withValues(
+                                      alpha: isDark ? 0.2 : 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '${dayReg.toStringAsFixed(1)}h Reg',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: activePrimary),
+                                ),
+                              ),
+                              if (dayOt > 0)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 7, vertical: 2.5),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.orange.withValues(alpha: 0.2)
+                                        : Colors.orange.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: isDark
+                                        ? Border.all(
+                                            color: Colors.orange.shade800)
+                                        : null,
+                                  ),
+                                  child: Text(
+                                    '+${dayOt.toStringAsFixed(1)}h OT',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark
+                                            ? Colors.orange.shade300
+                                            : Colors.orange.shade900),
+                                  ),
+                                ),
+                              if (dayBreakMin > 0)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 7, vertical: 2.5),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.amber.withValues(alpha: 0.2)
+                                        : Colors.amber.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: isDark
+                                        ? Border.all(
+                                            color: Colors.amber.shade800)
+                                        : null,
+                                  ),
+                                  child: Text(
+                                    '☕ ${dayBreakMin}m Break',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark
+                                            ? Colors.amber.shade300
+                                            : Colors.amber.shade900),
+                                  ),
+                                ),
+                            ],
+                          ),
+
+                          if (dateSiteSummaries.isNotEmpty ||
+                              siteNamesStr != null) ...[
+                            const SizedBox(height: 6),
+                            if (dateSiteSummaries.isEmpty &&
+                                siteNamesStr != null)
+                              Row(
+                                children: [
+                                  Icon(Icons.place_rounded,
+                                      size: 14, color: activePrimary),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      'Sites: $siteNamesStr',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: activePrimary),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            else
+                              Wrap(
                                 spacing: 6,
                                 runSpacing: 4,
                                 children: dateSiteSummaries.map((s) {
@@ -1267,14 +1347,17 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                   );
                                 }).toList(),
                               ),
-                            );
-                          }(),
-                          const SizedBox(height: 4),
-                          Row(
+                          ],
+
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
+                                    horizontal: 8, vertical: 2.5),
                                 decoration: BoxDecoration(
                                   color: (allValidGeofence
                                           ? AppColors.success
@@ -1295,16 +1378,17 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                   ),
                                 ),
                               ),
-                              if (dayEntry != null && dayEntry.isEdited) ...[
-                                const SizedBox(width: 6),
+                              if (dayEntry != null && dayEntry.isEdited)
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
+                                      horizontal: 6, vertical: 2.5),
                                   decoration: BoxDecoration(
-                                    color: Colors.purple.withValues(alpha: 0.15),
+                                    color:
+                                        Colors.purple.withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(6),
                                     border: Border.all(
-                                        color: Colors.purple.withValues(alpha: 0.3)),
+                                        color: Colors.purple
+                                            .withValues(alpha: 0.3)),
                                   ),
                                   child: const Text(
                                     'ADMIN MODIFIED',
@@ -1315,8 +1399,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                     ),
                                   ),
                                 ),
-                              ],
-                              const SizedBox(width: 8),
                               Text(
                                 '${dateRecords.where((r) => r.photoBase64.isNotEmpty).length} Photo(s)',
                                 style: TextStyle(
@@ -1324,13 +1406,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                     color: isDark
                                         ? AppColors.textSecondaryDark
                                         : Colors.grey),
-                              )
+                              ),
                             ],
                           ),
+
                           if (dayEntry != null &&
                               dayEntry.remarks != null &&
                               dayEntry.remarks!.trim().isNotEmpty) ...[
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 6),
                             Row(
                               children: [
                                 Icon(Icons.note_alt_rounded,
@@ -1356,50 +1439,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         ],
                       ),
                     ),
-                    trailing: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: () async {
-                            final ok = await AdminEditAttendanceDialog.show(
-                              context,
-                              employeeId: emp.id,
-                              employeeName: emp.name,
-                              date: parsedDate,
-                              initialCheckIn: dayEntry?.checkInTime,
-                              initialCheckOut: dayEntry?.checkOutTime,
-                              initialOtHours: dayEntry?.manualOvertimeHours ??
-                                  dayEntry?.overtimeHours,
-                              initialRemarks: dayEntry?.remarks,
-                            );
-                            if (ok == true && mounted) {
-                              setState(() {});
-                            }
-                          },
-                          icon: const Icon(Icons.edit_calendar_rounded, size: 15),
-                          label: const Text('Adjust Shift',
-                              style: TextStyle(
-                                  fontSize: 11, fontWeight: FontWeight.bold)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: activePrimary,
-                            foregroundColor: Colors.white,
-                            elevation: 2,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 8),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    onTap: () {
-                      setState(() {
-                        _selectedDate = parsedDate;
-                      });
-                    },
                   ),
                 );
               },
@@ -1475,7 +1514,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   });
                 },
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1486,18 +1525,23 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                           .textTheme
                           .titleMedium
                           ?.copyWith(fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     Text(
                       formattedDateTitle,
                       style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 11,
                           color: isDark
                               ? palette.textSecondaryDark
                               : palette.textSecondaryLight),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
+              const SizedBox(width: 6),
               ElevatedButton.icon(
                 onPressed: () async {
                   final tEntry = dayTimesheets.isNotEmpty ? dayTimesheets.first : null;
@@ -1515,18 +1559,19 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     setState(() {});
                   }
                 },
-                icon: const Icon(Icons.edit_calendar_rounded, size: 18),
-                label: const Text('Adjust Shift & OT',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                icon: const Icon(Icons.edit_calendar_rounded, size: 14),
+                label: const Text('Adjust',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: activePrimary,
                   foregroundColor: Colors.white,
-                  elevation: 3,
-                  shadowColor: activePrimary.withValues(alpha: 0.4),
+                  elevation: 2,
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
               ),
@@ -1571,41 +1616,50 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     Expanded(
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 8),
+                            horizontal: 4, vertical: 8),
                         decoration: BoxDecoration(
                           color: activePrimary.withValues(
                               alpha: isDark ? 0.2 : 0.12),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Text('Regular',
-                                style: TextStyle(
-                                    fontSize: 10,
-                                    color: activePrimary,
-                                    fontWeight: FontWeight.w600)),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text('Regular',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      color: activePrimary,
+                                      fontWeight: FontWeight.w600)),
+                            ),
                             const SizedBox(height: 2),
-                            Text('${regHrs.toStringAsFixed(1)}h',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    color: activePrimary)),
-                            Text('Max 8.0h',
-                                style: TextStyle(
-                                    fontSize: 8.5,
-                                    color: isDark
-                                        ? palette.textSecondaryDark
-                                        : Colors.grey)),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text('${regHrs.toStringAsFixed(1)}h',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      color: activePrimary)),
+                            ),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text('Max 8.0h',
+                                  style: TextStyle(
+                                      fontSize: 8.5,
+                                      color: isDark
+                                          ? palette.textSecondaryDark
+                                          : Colors.grey)),
+                            ),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 4),
                     Expanded(
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 8),
+                            horizontal: 4, vertical: 8),
                         decoration: BoxDecoration(
                           color: otHrs > 0
                               ? (isDark
@@ -1620,47 +1674,56 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               : null,
                         ),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Text('Overtime',
-                                style: TextStyle(
-                                    fontSize: 10,
-                                    color: otHrs > 0
-                                        ? (isDark
-                                            ? Colors.orange.shade300
-                                            : Colors.orange.shade900)
-                                        : (isDark
-                                            ? AppColors.textSecondaryDark
-                                            : Colors.grey.shade700),
-                                    fontWeight: FontWeight.w600)),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text('Overtime',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      color: otHrs > 0
+                                          ? (isDark
+                                              ? Colors.orange.shade300
+                                              : Colors.orange.shade900)
+                                          : (isDark
+                                              ? AppColors.textSecondaryDark
+                                              : Colors.grey.shade700),
+                                      fontWeight: FontWeight.w600)),
+                            ),
                             const SizedBox(height: 2),
-                            Text('+${otHrs.toStringAsFixed(1)}h',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    color: otHrs > 0
-                                        ? (isDark
-                                            ? Colors.orange.shade300
-                                            : Colors.orange.shade900)
-                                        : (isDark
-                                            ? AppColors.textSecondaryDark
-                                            : Colors.grey.shade700))),
-                            Text('Beyond 10.0h',
-                                style: TextStyle(
-                                    fontSize: 8.5,
-                                    color: isDark
-                                        ? AppColors.textSecondaryDark
-                                        : Colors.grey)),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text('+${otHrs.toStringAsFixed(1)}h',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      color: otHrs > 0
+                                          ? (isDark
+                                              ? Colors.orange.shade300
+                                              : Colors.orange.shade900)
+                                          : (isDark
+                                              ? AppColors.textSecondaryDark
+                                              : Colors.grey.shade700))),
+                            ),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text('Beyond 10h',
+                                  style: TextStyle(
+                                      fontSize: 8.5,
+                                      color: isDark
+                                          ? AppColors.textSecondaryDark
+                                          : Colors.grey)),
+                            ),
                           ],
                         ),
                       ),
                     ),
                     if (breakMin > 0) ...[
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 4),
                       Expanded(
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 8),
+                              horizontal: 4, vertical: 8),
                           decoration: BoxDecoration(
                             color: isDark
                                 ? Colors.amber.withValues(alpha: 0.2)
@@ -1673,64 +1736,82 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                             ),
                           ),
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              Text('Break',
-                                  style: TextStyle(
-                                      fontSize: 10,
-                                      color: isDark
-                                          ? Colors.amber.shade300
-                                          : Colors.amber.shade900,
-                                      fontWeight: FontWeight.w600)),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text('Break',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        color: isDark
+                                            ? Colors.amber.shade300
+                                            : Colors.amber.shade900,
+                                        fontWeight: FontWeight.w600)),
+                              ),
                               const SizedBox(height: 2),
-                              Text('${breakMin}m',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                      color: isDark
-                                          ? Colors.amber.shade300
-                                          : Colors.amber.shade900)),
-                              Text('Excluded',
-                                  style: TextStyle(
-                                      fontSize: 8.5,
-                                      color: isDark
-                                          ? AppColors.textSecondaryDark
-                                          : Colors.grey)),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text('${breakMin}m',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        color: isDark
+                                            ? Colors.amber.shade300
+                                            : Colors.amber.shade900)),
+                              ),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text('Excluded',
+                                    style: TextStyle(
+                                        fontSize: 8.5,
+                                        color: isDark
+                                            ? AppColors.textSecondaryDark
+                                            : Colors.grey)),
+                              ),
                             ],
                           ),
                         ),
                       ),
                     ],
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 4),
                     Expanded(
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 8),
+                            horizontal: 4, vertical: 8),
                         decoration: BoxDecoration(
                           color: AppColors.success
                               .withValues(alpha: isDark ? 0.2 : 0.1),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            const Text('Net Time',
-                                style: TextStyle(
-                                    fontSize: 10,
-                                    color: AppColors.success,
-                                    fontWeight: FontWeight.w600)),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: const Text('Net Time',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      color: AppColors.success,
+                                      fontWeight: FontWeight.w600)),
+                            ),
                             const SizedBox(height: 2),
-                            Text('${totalHrs.toStringAsFixed(1)}h',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    color: AppColors.success)),
-                            Text('Reg + OT',
-                                style: TextStyle(
-                                    fontSize: 8.5,
-                                    color: isDark
-                                        ? AppColors.textSecondaryDark
-                                        : Colors.grey)),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text('${totalHrs.toStringAsFixed(1)}h',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      color: AppColors.success)),
+                            ),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text('Reg + OT',
+                                  style: TextStyle(
+                                      fontSize: 8.5,
+                                      color: isDark
+                                          ? AppColors.textSecondaryDark
+                                          : Colors.grey)),
+                            ),
                           ],
                         ),
                       ),
@@ -1773,31 +1854,37 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: activePrimary.withValues(
-                                  alpha: isDark ? 0.2 : 0.12),
-                              shape: BoxShape.circle,
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: activePrimary.withValues(
+                                    alpha: isDark ? 0.2 : 0.12),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(Icons.location_city_rounded,
+                                  color: activePrimary, size: 16),
                             ),
-                            child: Icon(Icons.location_city_rounded,
-                                color: activePrimary, size: 16),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Site-Wise Hours Spent on this Date',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color: isDark
-                                  ? palette.textPrimaryDark
-                                  : palette.textPrimaryLight,
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Site-Wise Hours Spent on this Date',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: isDark
+                                      ? palette.textPrimaryDark
+                                      : palette.textPrimaryLight,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 2.5),
@@ -2166,30 +2253,35 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                         ),
                                       ),
                                       const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: activePrimary.withValues(
-                                              alpha: isDark ? 0.2 : 0.1),
-                                          borderRadius:
-                                              BorderRadius.circular(6),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.place_rounded,
-                                                size: 12, color: activePrimary),
-                                            const SizedBox(width: 3),
-                                            Text(
-                                              siteNameText,
-                                              style: TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: activePrimary),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ],
+                                      Flexible(
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: activePrimary.withValues(
+                                                alpha: isDark ? 0.2 : 0.1),
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.place_rounded,
+                                                  size: 12, color: activePrimary),
+                                              const SizedBox(width: 3),
+                                              Flexible(
+                                                child: Text(
+                                                  siteNameText,
+                                                  style: TextStyle(
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: activePrimary),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ],
