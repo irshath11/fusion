@@ -776,6 +776,8 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                           ),
                                           Text(
                                             activeLocationDisplay,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                             style: TextStyle(
                                                 fontWeight: FontWeight.bold,
                                                 fontSize: 16,
@@ -786,20 +788,23 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                         ],
                                       ),
                                     ),
-                                    StatusBadge(
-                                      label:
-                                          currentStep == WorkflowStep.completed
-                                              ? 'Shift Complete'
-                                              : (isOnBreak
-                                                  ? '☕ On Break'
-                                                  : 'On Duty'),
-                                      color:
-                                          currentStep == WorkflowStep.completed
-                                              ? Colors.grey
-                                              : (isOnBreak
-                                                  ? Colors.amber.shade800
-                                                  : palette.success),
-                                    )
+                                    const SizedBox(width: 6),
+                                    Flexible(
+                                      child: StatusBadge(
+                                        label:
+                                            currentStep == WorkflowStep.completed
+                                                ? 'Shift Complete'
+                                                : (isOnBreak
+                                                    ? '☕ On Break'
+                                                    : 'On Duty'),
+                                        color:
+                                            currentStep == WorkflowStep.completed
+                                                ? Colors.grey
+                                                : (isOnBreak
+                                                    ? Colors.amber.shade800
+                                                    : palette.success),
+                                      ),
+                                    ),
                                   ],
                                 ),
                                 const Divider(height: 24),

@@ -330,38 +330,47 @@ class AdminOverviewTab extends StatelessWidget {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: primary.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(10),
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: primary.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Icon(Icons.bolt_rounded, color: primary, size: 20),
                                   ),
-                                  child: Icon(Icons.bolt_rounded, color: primary, size: 20),
-                                ),
-                                const SizedBox(width: 12),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'Live Activity & Operations Hub',
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.bold, fontSize: 16),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Live Activity & Operations Hub',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold, fontSize: 16),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        Text(
+                                          'Real-time attendance stream and rapid admin shortcuts',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: isDark
+                                                ? palette.textSecondaryDark
+                                                : palette.textSecondaryLight,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    Text(
-                                      'Real-time attendance stream and rapid admin shortcuts',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: isDark
-                                            ? palette.textSecondaryDark
-                                            : palette.textSecondaryLight,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
+                                  ),
+                                ],
+                              ),
                             ),
+                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(

@@ -155,46 +155,56 @@ class _AppShellState extends State<AppShell> {
           Expanded(
             child: Row(
               children: [
-                Text(
-                  widget.title,
-                  style: TextStyle(
-                    fontSize: isWide ? 20 : 18,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: -0.3,
-                    color: isDark ? Colors.white : AppColors.slate800,
+                Flexible(
+                  child: Text(
+                    widget.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: isWide ? 20 : 17,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.3,
+                      color: isDark ? Colors.white : AppColors.slate800,
+                    ),
                   ),
                 ),
                 if (widget.userRoleLabel != null) ...[
-                  const SizedBox(width: 10),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: primary.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: primary.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: primary,
-                            shape: BoxShape.circle,
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: primary.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: primary,
+                              shape: BoxShape.circle,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          widget.userRoleLabel!,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: primary,
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              widget.userRoleLabel!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: primary,
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -462,61 +472,72 @@ class _AppShellState extends State<AppShell> {
     AppThemePalette palette,
     Color primary,
   ) {
+    final double itemPaddingH = widget.destinations.length > 4 ? 6.0 : 10.0;
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
       child: SafeArea(
         top: false,
         child: AppGlassCard(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
           borderRadius: 24,
           blurAmount: 16,
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: List.generate(widget.destinations.length, (index) {
               final isSelected = widget.selectedIndex == index;
               final dest = widget.destinations[index];
 
-              return AppBounceable(
-                onTap: () => widget.onDestinationSelected(index),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? primary.withValues(alpha: isDark ? 0.25 : 0.15)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(16),
-                    border: isSelected
-                        ? Border.all(
-                            color: primary.withValues(alpha: 0.4),
-                          )
-                        : null,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isSelected ? dest.activeIcon : dest.icon,
-                        size: 22,
-                        color: isSelected
-                            ? primary
-                            : (isDark ? Colors.white54 : AppColors.slate500),
-                      ),
-                      if (isSelected) ...[
-                        const SizedBox(width: 8),
-                        Text(
-                          dest.label,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: primary,
-                          ),
+              return Expanded(
+                child: AppBounceable(
+                  onTap: () => widget.onDestinationSelected(index),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: itemPaddingH,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? primary.withValues(alpha: isDark ? 0.25 : 0.15)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(16),
+                      border: isSelected
+                          ? Border.all(
+                              color: primary.withValues(alpha: 0.4),
+                            )
+                          : null,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isSelected ? dest.activeIcon : dest.icon,
+                          size: widget.destinations.length > 4 ? 19 : 22,
+                          color: isSelected
+                              ? primary
+                              : (isDark ? Colors.white54 : AppColors.slate500),
                         ),
+                        if (isSelected) ...[
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                dest.label,
+                                maxLines: 1,
+                                style: TextStyle(
+                                  fontSize: widget.destinations.length > 4 ? 10 : 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: primary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               );
