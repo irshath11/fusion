@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_theme.dart';
-import '../../../core/services/employee_report_pdf_service.dart';
+import '../../../core/services/service_report_pdf_service.dart';
 import '../../../core/widgets/e_signature_pad.dart';
 import '../../../database/local_database_service.dart';
 
@@ -22,186 +22,171 @@ class _EmployeeReportGeneratorScreenState
   final LocalDatabaseService _db = LocalDatabaseService();
   final _formKey = GlobalKey<FormState>();
 
-  // Report Form Controllers
-  final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _workOrderController = TextEditingController();
-
-  // Site & Client Location Controllers
-  final TextEditingController _siteController = TextEditingController();
-  final TextEditingController _locationDetailsController = TextEditingController();
-  final TextEditingController _clientController = TextEditingController();
-
-  // Personnel Controllers
-  final TextEditingController _technicianNameController = TextEditingController();
-  final TextEditingController _technicianCodeController = TextEditingController();
-  final TextEditingController _engineerNameController = TextEditingController();
-  final TextEditingController _supervisorController = TextEditingController();
-  final TextEditingController _customerNameController = TextEditingController();
-  final TextEditingController _customerTitleController = TextEditingController();
-
-  // Remarks Controller
-  final TextEditingController _remarksController = TextEditingController();
-
-  String _selectedCategory = 'Daily Work Report';
-  DateTime _reportDate = DateTime.now();
   late String _refNumber;
+  DateTime _reportDate = DateTime.now();
 
-  // 4 Digital Signatures
+  // Section 1: Property & Call Details Controllers
+  final TextEditingController _propertyDetailsController = TextEditingController();
+  final TextEditingController _jobNoController = TextEditingController();
+  final TextEditingController _contactNameController = TextEditingController();
+  final TextEditingController _contactNumberController = TextEditingController();
+  final TextEditingController _locationController = TextEditingController();
+  final TextEditingController _appointmentTimeController = TextEditingController();
+  final TextEditingController _attendedTimeController = TextEditingController();
+  final TextEditingController _callBookingTimeController = TextEditingController();
+  String _selectedCallType = ''; // 'Complaint', 'Breakdown', 'Preventive'
+
+  // Section 2: Service Required & Priority
+  final Set<String> _selectedServices = {};
+  final List<String> _allServices = [
+    'A/C',
+    'CCTV',
+    'Fire Fighting',
+    'Carpentry',
+    'BMS',
+    'Electrical',
+    'SMATV',
+    'Generator',
+    'Civil',
+    'Access Control',
+    'Plumbing',
+    'Intercom',
+    'Cleaning Service',
+    'Painting',
+    'Soft Services',
+  ];
+  final TextEditingController _othersServiceController = TextEditingController();
+  String _selectedPriority = ''; // 'Urgent', 'Normal'
+
+  // Section 3: Defects Found on Inspection
+  final TextEditingController _defectsFoundController = TextEditingController();
+
+  // Section 4: Material Used Table (5 rows x 2 pairs)
+  late List<TextEditingController> _matControllers1;
+  late List<TextEditingController> _qtyControllers1;
+  late List<TextEditingController> _matControllers2;
+  late List<TextEditingController> _qtyControllers2;
+
+  // Section 5: Details of work done
+  final TextEditingController _detailsOfWorkDoneController = TextEditingController();
+
+  // Section 6: Client/Customer Remark
+  final TextEditingController _clientRemarkController = TextEditingController();
+
+  // Section 7: Service Performance Report & Housekeeping
+  String _performanceRating = ''; // 'Satisfactory', 'Unsatisfactory'
+  final TextEditingController _supervisorRemarksController = TextEditingController();
+  String _housekeepingCompleted = ''; // 'Yes', 'No'
+
+  // Section 8: 4 Digital Signatures in a row
+  final TextEditingController _technicianNameController = TextEditingController();
+  final TextEditingController _engineerNameController = TextEditingController();
+  final TextEditingController _supervisorNameController = TextEditingController();
+  final TextEditingController _customerNameController = TextEditingController();
+
   Uint8List? _technicianSigBytes;
   Uint8List? _engineerSigBytes;
   Uint8List? _supervisorSigBytes;
   Uint8List? _customerSigBytes;
 
-  String _empDept = 'Technical & Contracting';
-
-  // Task entries list
-  final List<_TaskFormItem> _taskItems = [];
-
-  final List<String> _reportCategories = [
-    'Daily Work Report',
-    'Field Duty Report',
-    'Site Inspection Report',
-    'Maintenance Service Report',
-    'Incident & Safety Report',
-  ];
-
   @override
   void initState() {
     super.initState();
-    _refNumber = 'REP-${DateFormat('yyyyMMdd').format(DateTime.now())}-${Random().nextInt(900) + 100}';
-    _titleController.text = 'Daily Work Activity Report';
-    _workOrderController.text = 'WO-${Random().nextInt(9000) + 1000}';
-    _locationDetailsController.text = 'Building 1, Main Duty Area';
-    _engineerNameController.text = 'Eng. Mohamed Al-Mansoori';
-    _supervisorController.text = 'Eng. Hassan Ahmed';
-    _customerNameController.text = 'Mr. John Smith';
-    _customerTitleController.text = 'Facility Operations Manager';
+    _refNumber = 'SR-${DateFormat('yyyyMMdd').format(DateTime.now())}-${Random().nextInt(900) + 100}';
+    
+    // Initialize 5 rows x 2 pairs material controllers (all empty)
+    _matControllers1 = List.generate(5, (_) => TextEditingController());
+    _qtyControllers1 = List.generate(5, (_) => TextEditingController());
+    _matControllers2 = List.generate(5, (_) => TextEditingController());
+    _qtyControllers2 = List.generate(5, (_) => TextEditingController());
+
     _loadEmployeeData();
-    _addInitialTask();
   }
 
   void _loadEmployeeData() {
     final user = _db.currentUser;
     if (user != null) {
-      final employees = _db.getEmployees();
-      final emp = employees.where((e) => e.id == user.id || e.email == user.email).firstOrNull;
-      final assignedSite = emp?.assignedOfficeName ?? user.assignedOfficeName ?? 'Abu Dhabi Main Work Site';
-
-      final empName = user.fullName.isNotEmpty ? user.fullName : (user.name.isNotEmpty ? user.name : 'Technician');
-      final empCode = user.employeeCode ?? (user.id.length >= 4 ? 'EMP-${user.id.substring(0, 4)}' : 'EMP-1001');
-
-      setState(() {
-        _technicianNameController.text = empName;
-        _technicianCodeController.text = empCode;
-        _empDept = user.department ?? 'Field Engineering';
-        _siteController.text = assignedSite;
-        _clientController.text = 'Fusion Neo Contracting';
-      });
-    } else {
-      setState(() {
-        _technicianNameController.text = 'Technician Name';
-        _technicianCodeController.text = 'EMP-1001';
-        _empDept = 'Technical Department';
-        _siteController.text = 'Abu Dhabi Site 1';
-        _clientController.text = 'Client Enterprise';
-      });
+      final empName = user.fullName.isNotEmpty ? user.fullName : user.name;
+      if (empName.isNotEmpty) {
+        setState(() {
+          _technicianNameController.text = empName;
+        });
+      }
     }
-  }
-
-  void _addInitialTask() {
-    _taskItems.add(_TaskFormItem(
-      descController: TextEditingController(text: 'Site inspection and workforce duty coordination'),
-      durationController: TextEditingController(text: '4.0 hrs'),
-      status: 'Completed',
-      notesController: TextEditingController(text: 'Completed according to safety schedule'),
-    ));
-    _taskItems.add(_TaskFormItem(
-      descController: TextEditingController(text: 'Equipment check and maintenance verification'),
-      durationController: TextEditingController(text: '3.5 hrs'),
-      status: 'Completed',
-      notesController: TextEditingController(text: 'All mechanical systems operational'),
-    ));
-  }
-
-  void _addNewTaskRow() {
-    setState(() {
-      _taskItems.add(_TaskFormItem(
-        descController: TextEditingController(),
-        durationController: TextEditingController(text: '1.0 hr'),
-        status: 'Completed',
-        notesController: TextEditingController(),
-      ));
-    });
-  }
-
-  void _removeTaskRow(int index) {
-    if (_taskItems.length <= 1) return;
-    setState(() {
-      final item = _taskItems.removeAt(index);
-      item.dispose();
-    });
   }
 
   @override
   void dispose() {
-    _titleController.dispose();
-    _workOrderController.dispose();
-    _siteController.dispose();
-    _locationDetailsController.dispose();
-    _clientController.dispose();
+    _propertyDetailsController.dispose();
+    _jobNoController.dispose();
+    _contactNameController.dispose();
+    _contactNumberController.dispose();
+    _locationController.dispose();
+    _appointmentTimeController.dispose();
+    _attendedTimeController.dispose();
+    _callBookingTimeController.dispose();
+    _othersServiceController.dispose();
+    _defectsFoundController.dispose();
+    _detailsOfWorkDoneController.dispose();
+    _clientRemarkController.dispose();
+    _supervisorRemarksController.dispose();
     _technicianNameController.dispose();
-    _technicianCodeController.dispose();
     _engineerNameController.dispose();
-    _supervisorController.dispose();
+    _supervisorNameController.dispose();
     _customerNameController.dispose();
-    _customerTitleController.dispose();
-    _remarksController.dispose();
-    for (final t in _taskItems) {
-      t.dispose();
+
+    for (int i = 0; i < 5; i++) {
+      _matControllers1[i].dispose();
+      _qtyControllers1[i].dispose();
+      _matControllers2[i].dispose();
+      _qtyControllers2[i].dispose();
     }
     super.dispose();
   }
 
-  EmployeeReportData _buildReportData() {
-    final taskEntries = _taskItems.map((item) {
-      return ReportTaskEntry(
-        description: item.descController.text.trim().isNotEmpty
-            ? item.descController.text.trim()
-            : 'General Field Task',
-        durationOrQty: item.durationController.text.trim().isNotEmpty
-            ? item.durationController.text.trim()
-            : '1.0 hr',
-        status: item.status,
-        notes: item.notesController.text.trim().isNotEmpty
-            ? item.notesController.text.trim()
-            : '--',
-      );
-    }).toList();
+  ServiceReportData _buildServiceReportData() {
+    final List<MaterialItemRow> materials = [];
+    for (int i = 0; i < 5; i++) {
+      final m1 = _matControllers1[i].text.trim();
+      final q1 = _qtyControllers1[i].text.trim();
+      final m2 = _matControllers2[i].text.trim();
+      final q2 = _qtyControllers2[i].text.trim();
+      if (m1.isNotEmpty || q1.isNotEmpty || m2.isNotEmpty || q2.isNotEmpty) {
+        materials.add(MaterialItemRow(
+          material1: m1,
+          qty1: q1,
+          material2: m2,
+          qty2: q2,
+        ));
+      }
+    }
 
-    return EmployeeReportData(
-      reportTitle: _titleController.text.trim().isNotEmpty
-          ? _titleController.text.trim()
-          : _selectedCategory,
-      reportCategory: _selectedCategory,
+    return ServiceReportData(
       reportRefNumber: _refNumber,
       reportDate: _reportDate,
-      workOrderNumber: _workOrderController.text.trim().isNotEmpty
-          ? _workOrderController.text.trim()
-          : 'WO-1001',
-      siteLocation: _siteController.text.trim().isNotEmpty
-          ? _siteController.text.trim()
-          : 'Field Site',
-      locationDetails: _locationDetailsController.text.trim(),
-      clientName: _clientController.text.trim(),
+      propertyDetails: _propertyDetailsController.text.trim(),
+      jobNo: _jobNoController.text.trim(),
+      contactName: _contactNameController.text.trim(),
+      contactNumber: _contactNumberController.text.trim(),
+      location: _locationController.text.trim(),
+      appointmentTime: _appointmentTimeController.text.trim(),
+      attendedTime: _attendedTimeController.text.trim(),
+      callBookingTime: _callBookingTimeController.text.trim(),
+      callType: _selectedCallType,
+      selectedServices: _selectedServices.toList(),
+      otherServices: _othersServiceController.text.trim(),
+      priority: _selectedPriority,
+      defectsFound: _defectsFoundController.text.trim(),
+      materialsTable: materials,
+      detailsOfWorkDone: _detailsOfWorkDoneController.text.trim(),
+      clientRemark: _clientRemarkController.text.trim(),
+      performanceRating: _performanceRating,
+      supervisorRemarks: _supervisorRemarksController.text.trim(),
+      housekeepingCompleted: _housekeepingCompleted,
       technicianName: _technicianNameController.text.trim(),
-      technicianCode: _technicianCodeController.text.trim(),
-      department: _empDept,
       engineerName: _engineerNameController.text.trim(),
-      supervisorName: _supervisorController.text.trim(),
+      supervisorName: _supervisorNameController.text.trim(),
       customerName: _customerNameController.text.trim(),
-      customerTitle: _customerTitleController.text.trim(),
-      taskEntries: taskEntries,
-      generalRemarks: _remarksController.text.trim(),
       technicianSigBytes: _technicianSigBytes,
       engineerSigBytes: _engineerSigBytes,
       supervisorSigBytes: _supervisorSigBytes,
@@ -237,8 +222,7 @@ class _EmployeeReportGeneratorScreenState
   }
 
   void _previewPdfReport() {
-    if (!_formKey.currentState!.validate()) return;
-    final reportData = _buildReportData();
+    final reportData = _buildServiceReportData();
 
     showModalBottomSheet(
       context: context,
@@ -266,7 +250,7 @@ class _EmployeeReportGeneratorScreenState
                       Icon(Icons.picture_as_pdf_rounded, color: Colors.white, size: 22),
                       SizedBox(width: 10),
                       Text(
-                        'PDF Report Preview',
+                        'Service Report PDF Preview',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 17,
@@ -284,7 +268,7 @@ class _EmployeeReportGeneratorScreenState
             ),
             Expanded(
               child: PdfPreview(
-                build: (format) => EmployeeReportPdfService.buildReportPdfBytes(reportData),
+                build: (format) => ServiceReportPdfService.buildReportPdfBytes(reportData),
                 allowPrinting: true,
                 allowSharing: true,
                 canChangePageFormat: false,
@@ -299,20 +283,20 @@ class _EmployeeReportGeneratorScreenState
   }
 
   Future<void> _generateAndSharePdf() async {
-    if (!_formKey.currentState!.validate()) return;
+    final reportData = _buildServiceReportData();
+    await ServiceReportPdfService.shareOrDownloadReportPdf(reportData);
+  }
 
-    if (_technicianSigBytes == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please add Technician E-Signature before exporting the final report.'),
-          backgroundColor: AppColors.warning,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+  Future<void> _selectTime(TextEditingController controller) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        controller.text = picked.format(context);
+      });
     }
-
-    final reportData = _buildReportData();
-    await EmployeeReportPdfService.shareOrDownloadReportPdf(reportData);
   }
 
   @override
@@ -322,16 +306,29 @@ class _EmployeeReportGeneratorScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            Text(
-              'Employee Report Generator',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.bolt_rounded, color: Colors.amber, size: 22),
             ),
-            Text(
-              'Create Custom PDF with 4-Role Signatures & Company Seal',
-              style: TextStyle(fontSize: 11, color: Colors.white70),
+            const SizedBox(width: 10),
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'FUSION',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                ),
+                Text(
+                  'Official Field Service Report',
+                  style: TextStyle(fontSize: 11, color: Colors.white70),
+                ),
+              ],
             ),
           ],
         ),
@@ -353,70 +350,118 @@ class _EmployeeReportGeneratorScreenState
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              // Card 1: Header & Report Metadata
+              // ================= 1st Section: Property & Call Details =================
               _buildSectionCard(
                 isDark: isDark,
-                title: 'Report Type & Metadata',
-                icon: Icons.assignment_rounded,
+                title: '1. Property Details & Call Booking Info',
+                icon: Icons.home_work_rounded,
                 child: Column(
                   children: [
-                    DropdownButtonFormField<String>(
-                      initialValue: _selectedCategory,
-                      decoration: _inputDecoration('Report Category', isDark),
-                      items: _reportCategories.map((cat) {
-                        return DropdownMenuItem(value: cat, child: Text(cat));
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setState(() {
-                            _selectedCategory = val;
-                            _titleController.text = val;
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _titleController,
-                      decoration: _inputDecoration('Report Title', isDark),
-                      validator: (v) => v == null || v.trim().isEmpty ? 'Enter report title' : null,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _propertyDetailsController,
+                            decoration: _inputDecoration('Property Details', isDark),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _jobNoController,
+                            decoration: _inputDecoration('Job No', isDark),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
                         Expanded(
-                          child: InkWell(
-                            onTap: () async {
-                              final picked = await showDatePicker(
-                                context: context,
-                                initialDate: _reportDate,
-                                firstDate: DateTime(2020),
-                                lastDate: DateTime(2030),
-                              );
-                              if (picked != null) {
-                                setState(() {
-                                  _reportDate = picked;
-                                });
-                              }
-                            },
-                            child: InputDecorator(
-                              decoration: _inputDecoration('Report Date', isDark),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(DateFormat('dd MMM yyyy').format(_reportDate)),
-                                  const Icon(Icons.calendar_today_rounded, size: 16, color: AppColors.primary),
-                                ],
-                              ),
+                          child: TextFormField(
+                            controller: _contactNameController,
+                            decoration: _inputDecoration('Contact Name', isDark),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _contactNumberController,
+                            decoration: _inputDecoration('Contact Number', isDark),
+                            keyboardType: TextInputType.phone,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _locationController,
+                      decoration: _inputDecoration('Location', isDark),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _appointmentTimeController,
+                            readOnly: true,
+                            onTap: () => _selectTime(_appointmentTimeController),
+                            decoration: _inputDecoration('Appointment Time', isDark).copyWith(
+                              suffixIcon: const Icon(Icons.access_time_rounded, size: 18),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: TextFormField(
-                            controller: _workOrderController,
-                            decoration: _inputDecoration('Work Order / LPO #', isDark),
+                            controller: _attendedTimeController,
+                            readOnly: true,
+                            onTap: () => _selectTime(_attendedTimeController),
+                            decoration: _inputDecoration('Attended Time', isDark).copyWith(
+                              suffixIcon: const Icon(Icons.access_time_filled_rounded, size: 18),
+                            ),
                           ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _callBookingTimeController,
+                            readOnly: true,
+                            onTap: () => _selectTime(_callBookingTimeController),
+                            decoration: _inputDecoration('Call Booking Time', isDark).copyWith(
+                              suffixIcon: const Icon(Icons.more_time_rounded, size: 18),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Text(
+                          'Call Type: ',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        const SizedBox(width: 12),
+                        Wrap(
+                          spacing: 16,
+                          children: ['Complaint', 'Breakdown', 'Preventive'].map((type) {
+                            final isSelected = _selectedCallType == type;
+                            return ChoiceChip(
+                              label: Text(type),
+                              selected: isSelected,
+                              selectedColor: AppColors.primary,
+                              labelStyle: TextStyle(
+                                color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                              onSelected: (val) {
+                                setState(() => _selectedCallType = val ? type : '');
+                              },
+                            );
+                          }).toList(),
                         ),
                       ],
                     ),
@@ -425,100 +470,77 @@ class _EmployeeReportGeneratorScreenState
               ),
               const SizedBox(height: 16),
 
-              // Card 2: Client & Site Location Details
+              // ================= 2nd Section: Service Required & Priority =================
               _buildSectionCard(
                 isDark: isDark,
-                title: 'Client & Work Site Location',
-                icon: Icons.location_city_rounded,
+                title: '2. Service Required & Priority',
+                icon: Icons.build_circle_rounded,
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _clientController,
-                            decoration: _inputDecoration('Client / Company Name', isDark),
-                            validator: (v) => v == null || v.trim().isEmpty ? 'Enter client name' : null,
+                    const Text(
+                      'Select Required Services:',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _allServices.map((service) {
+                        final isSelected = _selectedServices.contains(service);
+                        return FilterChip(
+                          label: Text(service, style: const TextStyle(fontSize: 12)),
+                          selected: isSelected,
+                          selectedColor: AppColors.primary.withValues(alpha: 0.2),
+                          checkmarkColor: AppColors.primary,
+                          labelStyle: TextStyle(
+                            color: isSelected ? AppColors.primary : (isDark ? Colors.white70 : Colors.black87),
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _siteController,
-                            decoration: _inputDecoration('Work Site / Project Name', isDark),
-                            validator: (v) => v == null || v.trim().isEmpty ? 'Enter work site' : null,
-                          ),
-                        ),
-                      ],
+                          onSelected: (selected) {
+                            setState(() {
+                              if (selected) {
+                                _selectedServices.add(service);
+                              } else {
+                                _selectedServices.remove(service);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
-                      controller: _locationDetailsController,
-                      decoration: _inputDecoration('Location Specifics (Building, Zone, Area)', isDark),
+                      controller: _othersServiceController,
+                      decoration: _inputDecoration('Others (Please Specify)', isDark),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Card 3: Personnel & Team Info
-              _buildSectionCard(
-                isDark: isDark,
-                title: 'Project Personnel & Team',
-                icon: Icons.badge_rounded,
-                child: Column(
-                  children: [
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _technicianNameController,
-                            decoration: _inputDecoration('Technician Name', isDark),
-                            validator: (v) => v == null || v.trim().isEmpty ? 'Enter technician name' : null,
-                          ),
+                        const Text(
+                          'Priority: ',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _technicianCodeController,
-                            decoration: _inputDecoration('Technician Code', isDark),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _engineerNameController,
-                            decoration: _inputDecoration('Site Engineer Name', isDark),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _supervisorController,
-                            decoration: _inputDecoration('Supervisor Name', isDark),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _customerNameController,
-                            decoration: _inputDecoration('Customer Rep Name', isDark),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _customerTitleController,
-                            decoration: _inputDecoration('Customer Designation / Title', isDark),
-                          ),
+                        const SizedBox(width: 16),
+                        Wrap(
+                          spacing: 16,
+                          children: ['Urgent', 'Normal'].map((prio) {
+                            final isSelected = _selectedPriority == prio;
+                            return ChoiceChip(
+                              label: Text(prio),
+                              selected: isSelected,
+                              selectedColor: prio == 'Urgent' ? Colors.redAccent : AppColors.primary,
+                              labelStyle: TextStyle(
+                                color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                              onSelected: (val) {
+                                setState(() => _selectedPriority = val ? prio : '');
+                              },
+                            );
+                          }).toList(),
                         ),
                       ],
                     ),
@@ -527,135 +549,235 @@ class _EmployeeReportGeneratorScreenState
               ),
               const SizedBox(height: 16),
 
-              // Card 4: Work Activities & Task Table
+              // ================= 3rd Section: Defects Found on Inspection =================
               _buildSectionCard(
                 isDark: isDark,
-                title: 'Work Activities & Task Breakdown',
-                icon: Icons.list_alt_rounded,
-                action: ElevatedButton.icon(
-                  onPressed: _addNewTaskRow,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-                    foregroundColor: AppColors.primary,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  ),
-                  icon: const Icon(Icons.add_rounded, size: 16),
-                  label: const Text('Add Task', style: TextStyle(fontSize: 12)),
+                title: '3. Defects Found on Inspection',
+                icon: Icons.search_off_rounded,
+                child: TextFormField(
+                  controller: _defectsFoundController,
+                  maxLines: 3,
+                  decoration: _inputDecoration('Enter defects found during inspection...', isDark),
                 ),
+              ),
+              const SizedBox(height: 16),
+
+              // ================= 4th Section: Material Used Table (4 Cols, 5 Rows) =================
+              _buildSectionCard(
+                isDark: isDark,
+                title: '4. Material Used (Table)',
+                icon: Icons.inventory_2_rounded,
                 child: Column(
                   children: [
-                    for (int i = 0; i < _taskItems.length; i++) ...[
-                      _buildTaskRow(i, _taskItems[i], isDark),
-                      if (i < _taskItems.length - 1) const Divider(height: 24),
+                    // Header Row
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Row(
+                        children: [
+                          Expanded(flex: 3, child: Text('Material Used', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                          SizedBox(width: 6),
+                          Expanded(flex: 1, child: Text('Qty', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                          SizedBox(width: 12),
+                          Expanded(flex: 3, child: Text('Material Used', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                          SizedBox(width: 6),
+                          Expanded(flex: 1, child: Text('Qty', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // 5 Rows
+                    for (int i = 0; i < 5; i++) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: TextFormField(
+                              controller: _matControllers1[i],
+                              decoration: _inputDecoration('Material ${i + 1}A', isDark),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            flex: 1,
+                            child: TextFormField(
+                              controller: _qtyControllers1[i],
+                              decoration: _inputDecoration('Qty', isDark),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 3,
+                            child: TextFormField(
+                              controller: _matControllers2[i],
+                              decoration: _inputDecoration('Material ${i + 1}B', isDark),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            flex: 1,
+                            child: TextFormField(
+                              controller: _qtyControllers2[i],
+                              decoration: _inputDecoration('Qty', isDark),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (i < 4) const SizedBox(height: 8),
                     ],
                   ],
                 ),
               ),
               const SizedBox(height: 16),
 
-              // Card 5: Remarks & Field Observations
+              // ================= 5th Section: Details of work done =================
               _buildSectionCard(
                 isDark: isDark,
-                title: 'General Remarks & Field Observations',
-                icon: Icons.notes_rounded,
+                title: '5. Details of Work Done',
+                icon: Icons.handyman_rounded,
                 child: TextFormField(
-                  controller: _remarksController,
+                  controller: _detailsOfWorkDoneController,
                   maxLines: 3,
-                  decoration: _inputDecoration('Enter any general notes, site conditions, or remarks...', isDark),
+                  decoration: _inputDecoration('Enter full details of work executed...', isDark),
                 ),
               ),
               const SizedBox(height: 16),
 
-              // Card 6: Authorization & 4-Role E-Signatures
+              // ================= 6th Section: Client/Customer Remark =================
               _buildSectionCard(
                 isDark: isDark,
-                title: 'Authorization & 4-Role E-Signatures',
+                title: '6. Client / Customer Remark',
+                icon: Icons.rate_review_rounded,
+                child: TextFormField(
+                  controller: _clientRemarkController,
+                  maxLines: 3,
+                  decoration: _inputDecoration('Enter client feedback / remarks...', isDark),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // ================= 7th Section: Service Performance Report =================
+              _buildSectionCard(
+                isDark: isDark,
+                title: '7. Service Performance Report',
+                icon: Icons.verified_user_rounded,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'Service Performance: ',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        const SizedBox(width: 12),
+                        Wrap(
+                          spacing: 12,
+                          children: ['Satisfactory', 'Unsatisfactory'].map((rating) {
+                            final isSelected = _performanceRating == rating;
+                            return ChoiceChip(
+                              label: Text(rating),
+                              selected: isSelected,
+                              selectedColor: rating == 'Satisfactory' ? Colors.green : Colors.deepOrange,
+                              labelStyle: TextStyle(
+                                color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                              onSelected: (val) {
+                                setState(() => _performanceRating = val ? rating : '');
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _supervisorRemarksController,
+                      maxLines: 2,
+                      decoration: _inputDecoration("Supervisor's Remarks", isDark),
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Text(
+                          'Housekeeping Completed: ',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        const SizedBox(width: 16),
+                        Wrap(
+                          spacing: 16,
+                          children: ['Yes', 'No'].map((opt) {
+                            final isSelected = _housekeepingCompleted == opt;
+                            return ChoiceChip(
+                              label: Text(opt),
+                              selected: isSelected,
+                              selectedColor: opt == 'Yes' ? Colors.green : Colors.red,
+                              labelStyle: TextStyle(
+                                color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                              onSelected: (val) {
+                                setState(() => _housekeepingCompleted = val ? opt : '');
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // ================= 8th Section: Four Signatures in a Row =================
+              _buildSectionCard(
+                isDark: isDark,
+                title: '8. Authorizations & 4 Signatures (In Row)',
                 icon: Icons.draw_rounded,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isMobile = constraints.maxWidth < 480;
-                    if (isMobile) {
-                      return Column(
-                        children: [
-                          ESignaturePreviewBox(
-                            label: '1. Technician E-Signature',
+                child: Row(
+                  children: [
+                        Expanded(
+                          child: ESignaturePreviewBox(
+                            label: 'Technician',
                             signatureBytes: _technicianSigBytes,
                             onTapSign: () => _openSignatureModalForRole('technician'),
                             onClear: () => setState(() => _technicianSigBytes = null),
                           ),
-                          const SizedBox(height: 14),
-                          ESignaturePreviewBox(
-                            label: '2. Engineer E-Signature',
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ESignaturePreviewBox(
+                            label: 'Engineer',
                             signatureBytes: _engineerSigBytes,
                             onTapSign: () => _openSignatureModalForRole('engineer'),
                             onClear: () => setState(() => _engineerSigBytes = null),
                           ),
-                          const SizedBox(height: 14),
-                          ESignaturePreviewBox(
-                            label: '3. Supervisor E-Signature',
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ESignaturePreviewBox(
+                            label: 'Supervisor',
                             signatureBytes: _supervisorSigBytes,
                             onTapSign: () => _openSignatureModalForRole('supervisor'),
                             onClear: () => setState(() => _supervisorSigBytes = null),
                           ),
-                          const SizedBox(height: 14),
-                          ESignaturePreviewBox(
-                            label: '4. Customer E-Signature',
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ESignaturePreviewBox(
+                            label: 'Customer',
                             signatureBytes: _customerSigBytes,
                             onTapSign: () => _openSignatureModalForRole('customer'),
                             onClear: () => setState(() => _customerSigBytes = null),
                           ),
-                        ],
-                      );
-                    }
-                    return Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ESignaturePreviewBox(
-                                label: '1. Technician E-Signature',
-                                signatureBytes: _technicianSigBytes,
-                                onTapSign: () => _openSignatureModalForRole('technician'),
-                                onClear: () => setState(() => _technicianSigBytes = null),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ESignaturePreviewBox(
-                                label: '2. Engineer E-Signature',
-                                signatureBytes: _engineerSigBytes,
-                                onTapSign: () => _openSignatureModalForRole('engineer'),
-                                onClear: () => setState(() => _engineerSigBytes = null),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ESignaturePreviewBox(
-                                label: '3. Supervisor E-Signature',
-                                signatureBytes: _supervisorSigBytes,
-                                onTapSign: () => _openSignatureModalForRole('supervisor'),
-                                onClear: () => setState(() => _supervisorSigBytes = null),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ESignaturePreviewBox(
-                                label: '4. Customer E-Signature',
-                                signatureBytes: _customerSigBytes,
-                                onTapSign: () => _openSignatureModalForRole('customer'),
-                                onClear: () => setState(() => _customerSigBytes = null),
-                              ),
-                            ),
-                          ],
                         ),
                       ],
-                    );
-                  },
                 ),
               ),
               const SizedBox(height: 24),
@@ -700,69 +822,11 @@ class _EmployeeReportGeneratorScreenState
     );
   }
 
-  Widget _buildTaskRow(int index, _TaskFormItem item, bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Task #${index + 1}',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary),
-            ),
-            if (_taskItems.length > 1)
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
-                onPressed: () => _removeTaskRow(index),
-              ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        TextFormField(
-          controller: item.descController,
-          decoration: _inputDecoration('Task Description / Activity', isDark),
-          validator: (v) => v == null || v.trim().isEmpty ? 'Enter task description' : null,
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: TextFormField(
-                controller: item.durationController,
-                decoration: _inputDecoration('Duration / Hours', isDark),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                initialValue: item.status,
-                decoration: _inputDecoration('Status', isDark),
-                items: ['Completed', 'In Progress', 'Pending'].map((st) {
-                  return DropdownMenuItem(value: st, child: Text(st, style: const TextStyle(fontSize: 12)));
-                }).toList(),
-                onChanged: (val) {
-                  if (val != null) setState(() => item.status = val);
-                },
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: item.notesController,
-          decoration: _inputDecoration('Notes / Location specifics', isDark),
-        ),
-      ],
-    );
-  }
-
   Widget _buildSectionCard({
     required bool isDark,
     required String title,
     required IconData icon,
     required Widget child,
-    Widget? action,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -785,30 +849,18 @@ class _EmployeeReportGeneratorScreenState
         children: [
           Row(
             children: [
+              Icon(icon, color: AppColors.primary, size: 20),
+              const SizedBox(width: 8),
               Expanded(
-                child: Row(
-                  children: [
-                    Icon(icon, color: AppColors.primary, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        title,
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : const Color(0xFF0F172A),
-                        ),
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
                 ),
               ),
-              if (action != null) ...[
-                const SizedBox(width: 8),
-                action,
-              ],
             ],
           ),
           const SizedBox(height: 12),
@@ -822,7 +874,7 @@ class _EmployeeReportGeneratorScreenState
     return InputDecoration(
       labelText: label,
       isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       filled: true,
       fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
       border: OutlineInputBorder(
@@ -838,25 +890,5 @@ class _EmployeeReportGeneratorScreenState
         borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
       ),
     );
-  }
-}
-
-class _TaskFormItem {
-  final TextEditingController descController;
-  final TextEditingController durationController;
-  final TextEditingController notesController;
-  String status;
-
-  _TaskFormItem({
-    required this.descController,
-    required this.durationController,
-    required this.notesController,
-    required this.status,
-  });
-
-  void dispose() {
-    descController.dispose();
-    durationController.dispose();
-    notesController.dispose();
   }
 }
