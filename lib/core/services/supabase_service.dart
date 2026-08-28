@@ -1704,4 +1704,109 @@ class SupabaseService {
       return [];
     }
   }
+
+  /// Fetch the next sequential Service Report reference number from Supabase.
+  /// Starts at 2001 if no reports exist.
+  Future<int> fetchNextServiceReportRefNumber() async {
+    if (!_isInitialized || client == null) return 2001;
+
+    try {
+      final response = await client!
+          .from('service_reports')
+          .select('ref_number')
+          .order('ref_number', ascending: false)
+          .limit(1);
+
+      final List list = response as List;
+      if (list.isEmpty) {
+        return 2001;
+      }
+      final maxRef = list.first['ref_number'];
+      if (maxRef != null && maxRef is num) {
+        return maxRef.toInt() + 1;
+      }
+      return 2001;
+    } catch (e) {
+      debugPrint('Supabase fetchNextServiceReportRefNumber note: $e');
+      return 2001;
+    }
+  }
+
+  /// Save Service Report record to Supabase
+  Future<bool> saveServiceReport({
+    required dynamic refNumber,
+    required Map<String, dynamic> reportData,
+  }) async {
+    if (!_isInitialized || client == null) {
+      debugPrint('Supabase not initialized; skipping service report upload');
+      return false;
+    }
+
+    try {
+      final payload = {
+        'ref_number': refNumber.toString(),
+        'job_no': reportData['jobNo'] ?? '',
+        'property_details': reportData['propertyDetails'] ?? '',
+        'contact_name': reportData['contactName'] ?? '',
+        'contact_number': reportData['contactNumber'] ?? '',
+        'location': reportData['location'] ?? '',
+        'call_type': reportData['callType'] ?? '',
+        'priority': reportData['priority'] ?? '',
+        'performance_rating': reportData['performanceRating'] ?? '',
+        'housekeeping_completed': reportData['housekeepingCompleted'] ?? '',
+        'technician_name': reportData['technicianName'] ?? '',
+        'engineer_name': reportData['engineerName'] ?? '',
+        'supervisor_name': reportData['supervisorName'] ?? '',
+        'customer_name': reportData['customerName'] ?? '',
+        'report_data': reportData,
+        'created_by': LocalDatabaseService().currentUser?.fullName ??
+            LocalDatabaseService().currentUser?.name ??
+            'Employee',
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      await client!.from('service_reports').upsert(
+            payload,
+            onConflict: 'ref_number',
+          );
+      debugPrint('Service Report #$refNumber successfully saved to Supabase cloud database.');
+      return true;
+    } catch (e) {
+      debugPrint('Supabase saveServiceReport error: $e');
+      return false;
+    }
+  }
+
+  /// Syncs all locally queued offline service reports to Supabase
+  Future<int> syncPendingServiceReports() async {
+    if (!_isInitialized || client == null) return 0;
+
+    final db = LocalDatabaseService();
+    final pending = db.getPendingLocalServiceReports();
+    if (pending.isEmpty) return 0;
+
+    int syncedCount = 0;
+    for (final item in pending) {
+      final refNum = item['reportRefNumber'] as String?;
+      final Map<String, dynamic>? data = item['reportData'] != null
+          ? Map<String, dynamic>.from(item['reportData'])
+          : null;
+
+      if (refNum != null && data != null) {
+        final success = await saveServiceReport(
+          refNumber: refNum,
+          reportData: data,
+        );
+        if (success) {
+          await db.markServiceReportSynced(refNum);
+          syncedCount++;
+        }
+      }
+    }
+    if (syncedCount > 0) {
+      debugPrint('Successfully synchronized $syncedCount offline service reports to Supabase.');
+    }
+    return syncedCount;
+  }
 }

@@ -5,7 +5,6 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
-/// Single item row in material table (supports two material-qty pairs per row)
 class MaterialItemRow {
   final String material1;
   final String qty1;
@@ -18,6 +17,22 @@ class MaterialItemRow {
     this.material2 = '',
     this.qty2 = '',
   });
+
+  Map<String, dynamic> toJson() => {
+        'material1': material1,
+        'qty1': qty1,
+        'material2': material2,
+        'qty2': qty2,
+      };
+
+  factory MaterialItemRow.fromJson(Map<String, dynamic> json) {
+    return MaterialItemRow(
+      material1: json['material1']?.toString() ?? '',
+      qty1: json['qty1']?.toString() ?? '',
+      material2: json['material2']?.toString() ?? '',
+      qty2: json['qty2']?.toString() ?? '',
+    );
+  }
 }
 
 /// Data model holding all fields for Fusion Electro Mechanical Service Report
@@ -101,6 +116,72 @@ class ServiceReportData {
     this.supervisorSigBytes,
     this.customerSigBytes,
   });
+
+  Map<String, dynamic> toJson() => {
+        'reportRefNumber': reportRefNumber,
+        'reportDate': reportDate.toIso8601String(),
+        'propertyDetails': propertyDetails,
+        'jobNo': jobNo,
+        'contactName': contactName,
+        'contactNumber': contactNumber,
+        'location': location,
+        'appointmentTime': appointmentTime,
+        'attendedTime': attendedTime,
+        'callBookingTime': callBookingTime,
+        'callType': callType,
+        'selectedServices': selectedServices,
+        'otherServices': otherServices,
+        'priority': priority,
+        'defectsFound': defectsFound,
+        'materialsTable': materialsTable.map((e) => e.toJson()).toList(),
+        'detailsOfWorkDone': detailsOfWorkDone,
+        'clientRemark': clientRemark,
+        'performanceRating': performanceRating,
+        'supervisorRemarks': supervisorRemarks,
+        'housekeepingCompleted': housekeepingCompleted,
+        'technicianName': technicianName,
+        'engineerName': engineerName,
+        'supervisorName': supervisorName,
+        'customerName': customerName,
+      };
+
+  factory ServiceReportData.fromJson(Map<String, dynamic> json) {
+    return ServiceReportData(
+      reportRefNumber: json['reportRefNumber']?.toString() ?? '',
+      reportDate: json['reportDate'] != null
+          ? (DateTime.tryParse(json['reportDate'].toString()) ?? DateTime.now())
+          : DateTime.now(),
+      propertyDetails: json['propertyDetails']?.toString() ?? '',
+      jobNo: json['jobNo']?.toString() ?? '',
+      contactName: json['contactName']?.toString() ?? '',
+      contactNumber: json['contactNumber']?.toString() ?? '',
+      location: json['location']?.toString() ?? '',
+      appointmentTime: json['appointmentTime']?.toString() ?? '',
+      attendedTime: json['attendedTime']?.toString() ?? '',
+      callBookingTime: json['callBookingTime']?.toString() ?? '',
+      callType: json['callType']?.toString() ?? '',
+      selectedServices: (json['selectedServices'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+      otherServices: json['otherServices']?.toString() ?? '',
+      priority: json['priority']?.toString() ?? '',
+      defectsFound: json['defectsFound']?.toString() ?? '',
+      materialsTable: (json['materialsTable'] as List<dynamic>?)
+              ?.map((e) => MaterialItemRow.fromJson(Map<String, dynamic>.from(e)))
+              .toList() ??
+          [],
+      detailsOfWorkDone: json['detailsOfWorkDone']?.toString() ?? '',
+      clientRemark: json['clientRemark']?.toString() ?? '',
+      performanceRating: json['performanceRating']?.toString() ?? '',
+      supervisorRemarks: json['supervisorRemarks']?.toString() ?? '',
+      housekeepingCompleted: json['housekeepingCompleted']?.toString() ?? '',
+      technicianName: json['technicianName']?.toString() ?? '',
+      engineerName: json['engineerName']?.toString() ?? '',
+      supervisorName: json['supervisorName']?.toString() ?? '',
+      customerName: json['customerName']?.toString() ?? '',
+    );
+  }
 }
 
 class ServiceReportPdfService {

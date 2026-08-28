@@ -921,4 +921,138 @@ class LocalDatabaseService {
       debugPrint('Error saving theme mode to Hive: $e');
     }
   }
+
+  // ==========================================================
+  // OFFLINE SERVICE REPORTS MANAGEMENT & PREFIX SEQUENCING
+  // ==========================================================
+
+  /// Get employee prefix code (e.g. E01, E02...) for current logged-in employee
+  String get currentEmployeePrefix {
+    final user = _currentUser;
+    if (user == null) return 'E01';
+    final empNameOrId = user.fullName.isNotEmpty
+        ? user.fullName
+        : (user.name.isNotEmpty ? user.name : user.id);
+
+    final idx = _employees.indexWhere((e) =>
+        e.id == user.id ||
+        (e.email.isNotEmpty &&
+            user.email.isNotEmpty &&
+            e.email.toLowerCase() == user.email.toLowerCase()) ||
+        e.name.toLowerCase() == empNameOrId.toLowerCase());
+
+    if (idx >= 0) {
+      final numStr = (idx + 1).toString().padLeft(2, '0');
+      return 'E$numStr';
+    }
+
+    final clean =
+        empNameOrId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+    if (clean.length >= 2) {
+      return 'E${clean.substring(0, 2)}';
+    }
+    return 'E01';
+  }
+
+  /// Fetch next local sequence number starting at 2001 for given employee prefix
+  int getNextLocalServiceReportSeq(String prefix) {
+    final key = 'sr_seq_$prefix';
+    final val = _settingsBox?.get(key, defaultValue: 2001);
+    if (val is num) return val.toInt();
+    return 2001;
+  }
+
+  /// Increment and save local sequence number for given employee prefix
+  Future<void> incrementLocalServiceReportSeq(String prefix) async {
+    final current = getNextLocalServiceReportSeq(prefix);
+    final key = 'sr_seq_$prefix';
+    await _settingsBox?.put(key, current + 1);
+  }
+
+  /// Format full reference number (e.g. SR-E01-2001)
+  String generateNextFullRefNumber() {
+    final prefix = currentEmployeePrefix;
+    final seq = getNextLocalServiceReportSeq(prefix);
+    return 'SR-$prefix-$seq';
+  }
+
+  /// Save service report to local offline Hive storage
+  Future<void> saveServiceReportLocally(Map<String, dynamic> reportData) async {
+    try {
+      final String jsonStr =
+          _settingsBox?.get('pending_service_reports_json', defaultValue: '[]');
+      final List decoded = jsonDecode(jsonStr);
+
+      final String refNumber = reportData['reportRefNumber'] ?? '';
+
+      final existingIdx =
+          decoded.indexWhere((item) => item['reportRefNumber'] == refNumber);
+      final payload = {
+        'reportRefNumber': refNumber,
+        'reportData': reportData,
+        'syncStatus': 'pending',
+        'createdAt': DateTime.now().toIso8601String(),
+      };
+
+      if (existingIdx >= 0) {
+        decoded[existingIdx] = payload;
+      } else {
+        decoded.add(payload);
+      }
+
+      await _settingsBox?.put(
+          'pending_service_reports_json', jsonEncode(decoded));
+      debugPrint('Service report $refNumber saved locally to offline storage queue.');
+    } catch (e) {
+      debugPrint('Error saving service report locally: $e');
+    }
+  }
+
+  /// Retrieve all pending offline service reports awaiting sync
+  List<Map<String, dynamic>> getPendingLocalServiceReports() {
+    try {
+      final String jsonStr =
+          _settingsBox?.get('pending_service_reports_json', defaultValue: '[]');
+      final List decoded = jsonDecode(jsonStr);
+      return decoded
+          .where((item) => item['syncStatus'] == 'pending')
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Mark local offline service report as synced to cloud Supabase
+  Future<void> markServiceReportSynced(String refNumber) async {
+    try {
+      final String jsonStr =
+          _settingsBox?.get('pending_service_reports_json', defaultValue: '[]');
+      final List decoded = jsonDecode(jsonStr);
+
+      for (int i = 0; i < decoded.length; i++) {
+        if (decoded[i]['reportRefNumber'] == refNumber) {
+          decoded[i]['syncStatus'] = 'synced';
+          decoded[i]['syncedAt'] = DateTime.now().toIso8601String();
+        }
+      }
+
+      await _settingsBox?.put(
+          'pending_service_reports_json', jsonEncode(decoded));
+    } catch (e) {
+      debugPrint('Error marking service report synced: $e');
+    }
+  }
+
+  /// Retrieve all locally saved service reports (both synced and pending)
+  List<Map<String, dynamic>> getAllSavedServiceReports() {
+    try {
+      final String jsonStr =
+          _settingsBox?.get('pending_service_reports_json', defaultValue: '[]');
+      final List decoded = jsonDecode(jsonStr);
+      return decoded.map((item) => Map<String, dynamic>.from(item)).toList();
+    } catch (e) {
+      return [];
+    }
+  }
 }

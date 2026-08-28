@@ -1,16 +1,17 @@
-import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_theme.dart';
 import '../../../core/services/service_report_pdf_service.dart';
+import '../../../core/services/supabase_service.dart';
 import '../../../core/widgets/e_signature_pad.dart';
 import '../../../database/local_database_service.dart';
+import 'employee_reports_list_screen.dart';
 
 class EmployeeReportGeneratorScreen extends StatefulWidget {
-  const EmployeeReportGeneratorScreen({super.key});
+  final ServiceReportData? existingReport;
+  const EmployeeReportGeneratorScreen({super.key, this.existingReport});
 
   @override
   State<EmployeeReportGeneratorScreen> createState() =>
@@ -92,15 +93,136 @@ class _EmployeeReportGeneratorScreenState
   @override
   void initState() {
     super.initState();
-    _refNumber = 'SR-${DateFormat('yyyyMMdd').format(DateTime.now())}-${Random().nextInt(900) + 100}';
     
-    // Initialize 5 rows x 2 pairs material controllers (all empty)
+    // Initialize 5 rows x 2 pairs material controllers
     _matControllers1 = List.generate(5, (_) => TextEditingController());
     _qtyControllers1 = List.generate(5, (_) => TextEditingController());
     _matControllers2 = List.generate(5, (_) => TextEditingController());
     _qtyControllers2 = List.generate(5, (_) => TextEditingController());
 
-    _loadEmployeeData();
+    if (widget.existingReport != null) {
+      _loadExistingReport(widget.existingReport!);
+    } else {
+      _initRefNumber();
+      _loadEmployeeData();
+    }
+
+    // Attempt automatic background sync if connected
+    SupabaseService().syncPendingServiceReports();
+  }
+
+  void _loadExistingReport(ServiceReportData ex) {
+    _refNumber = ex.reportRefNumber;
+    _reportDate = ex.reportDate;
+    _propertyDetailsController.text = ex.propertyDetails;
+    _jobNoController.text = ex.jobNo;
+    _contactNameController.text = ex.contactName;
+    _contactNumberController.text = ex.contactNumber;
+    _locationController.text = ex.location;
+    _appointmentTimeController.text = ex.appointmentTime;
+    _attendedTimeController.text = ex.attendedTime;
+    _callBookingTimeController.text = ex.callBookingTime;
+    _selectedCallType = ex.callType;
+    _selectedServices.addAll(ex.selectedServices);
+    _othersServiceController.text = ex.otherServices;
+    _selectedPriority = ex.priority;
+    _defectsFoundController.text = ex.defectsFound;
+    _detailsOfWorkDoneController.text = ex.detailsOfWorkDone;
+    _clientRemarkController.text = ex.clientRemark;
+    _performanceRating = ex.performanceRating;
+    _supervisorRemarksController.text = ex.supervisorRemarks;
+    _housekeepingCompleted = ex.housekeepingCompleted;
+    _technicianNameController.text = ex.technicianName;
+    _engineerNameController.text = ex.engineerName;
+    _supervisorNameController.text = ex.supervisorName;
+    _customerNameController.text = ex.customerName;
+    _technicianSigBytes = ex.technicianSigBytes;
+    _engineerSigBytes = ex.engineerSigBytes;
+    _supervisorSigBytes = ex.supervisorSigBytes;
+    _customerSigBytes = ex.customerSigBytes;
+
+    for (int i = 0; i < 5; i++) {
+      if (i < ex.materialsTable.length) {
+        _matControllers1[i].text = ex.materialsTable[i].material1;
+        _qtyControllers1[i].text = ex.materialsTable[i].qty1;
+        _matControllers2[i].text = ex.materialsTable[i].material2;
+        _qtyControllers2[i].text = ex.materialsTable[i].qty2;
+      }
+    }
+  }
+
+  bool _hasAnyData(ServiceReportData data) {
+    if (data.propertyDetails.isNotEmpty) return true;
+    if (data.jobNo.isNotEmpty) return true;
+    if (data.contactName.isNotEmpty) return true;
+    if (data.contactNumber.isNotEmpty) return true;
+    if (data.location.isNotEmpty) return true;
+    if (data.appointmentTime.isNotEmpty) return true;
+    if (data.attendedTime.isNotEmpty) return true;
+    if (data.callBookingTime.isNotEmpty) return true;
+    if (data.callType.isNotEmpty) return true;
+    if (data.selectedServices.isNotEmpty) return true;
+    if (data.otherServices.isNotEmpty) return true;
+    if (data.priority.isNotEmpty) return true;
+    if (data.defectsFound.isNotEmpty) return true;
+    if (data.detailsOfWorkDone.isNotEmpty) return true;
+    if (data.clientRemark.isNotEmpty) return true;
+    if (data.performanceRating.isNotEmpty) return true;
+    if (data.supervisorRemarks.isNotEmpty) return true;
+    if (data.housekeepingCompleted.isNotEmpty) return true;
+    if (data.materialsTable.any((m) =>
+        m.material1.isNotEmpty ||
+        m.qty1.isNotEmpty ||
+        m.material2.isNotEmpty ||
+        m.qty2.isNotEmpty)) return true;
+    if (data.technicianSigBytes != null ||
+        data.engineerSigBytes != null ||
+        data.supervisorSigBytes != null ||
+        data.customerSigBytes != null) return true;
+    return false;
+  }
+
+  void _initRefNumber() {
+    setState(() {
+      _refNumber = _db.generateNextFullRefNumber();
+    });
+  }
+
+  Future<void> _triggerManualSync() async {
+    final pendingCount = _db.getPendingLocalServiceReports().length;
+    if (pendingCount == 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('All service reports are synchronized to cloud DB.'),
+            backgroundColor: Colors.blueAccent,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    final count = await SupabaseService().syncPendingServiceReports();
+    if (mounted) {
+      if (count > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Successfully synchronized $count offline service report(s) to cloud DB.'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not connect to cloud DB. Reports remain safely saved on your phone.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   void _loadEmployeeData() {
@@ -221,8 +343,14 @@ class _EmployeeReportGeneratorScreenState
     }
   }
 
-  void _previewPdfReport() {
+  Future<void> _previewPdfReport() async {
     final reportData = _buildServiceReportData();
+
+    // Save locally & attempt background cloud save
+    await _db.saveServiceReportLocally(reportData.toJson());
+    SupabaseService().syncPendingServiceReports();
+
+    if (!mounted) return;
 
     showModalBottomSheet(
       context: context,
@@ -284,7 +412,100 @@ class _EmployeeReportGeneratorScreenState
 
   Future<void> _generateAndSharePdf() async {
     final reportData = _buildServiceReportData();
+
+    if (!_hasAnyData(reportData)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please fill in at least one detail or field before exporting the report.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
+    // 1. Save locally to phone offline storage
+    await _db.saveServiceReportLocally(reportData.toJson());
+    if (widget.existingReport == null) {
+      await _db.incrementLocalServiceReportSeq(_db.currentEmployeePrefix);
+    }
+
+    // 2. Cloud sync if internet is available
+    final synced = await SupabaseService().syncPendingServiceReports();
+
+    if (mounted) {
+      if (synced > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Service Report #$_refNumber saved & synced to cloud DB.'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Service Report #$_refNumber saved locally on phone (Offline mode).'),
+            backgroundColor: Colors.blueGrey,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+
+    // 3. Share/Export PDF
     await ServiceReportPdfService.shareOrDownloadReportPdf(reportData);
+
+    // 4. Clear all form fields & advance sequence for the next report
+    _clearAllFields();
+  }
+
+  void _clearAllFields() {
+    setState(() {
+      _propertyDetailsController.clear();
+      _jobNoController.clear();
+      _contactNameController.clear();
+      _contactNumberController.clear();
+      _locationController.clear();
+      _appointmentTimeController.clear();
+      _attendedTimeController.clear();
+      _callBookingTimeController.clear();
+      _selectedCallType = '';
+
+      _selectedServices.clear();
+      _othersServiceController.clear();
+      _selectedPriority = '';
+
+      _defectsFoundController.clear();
+
+      for (int i = 0; i < 5; i++) {
+        _matControllers1[i].clear();
+        _qtyControllers1[i].clear();
+        _matControllers2[i].clear();
+        _qtyControllers2[i].clear();
+      }
+
+      _detailsOfWorkDoneController.clear();
+      _clientRemarkController.clear();
+
+      _performanceRating = '';
+      _supervisorRemarksController.clear();
+      _housekeepingCompleted = '';
+
+      _engineerNameController.clear();
+      _supervisorNameController.clear();
+      _customerNameController.clear();
+
+      _technicianSigBytes = null;
+      _engineerSigBytes = null;
+      _supervisorSigBytes = null;
+      _customerSigBytes = null;
+    });
+
+    _loadEmployeeData();
+    _initRefNumber();
   }
 
   Future<void> _selectTime(TextEditingController controller) async {
@@ -336,6 +557,25 @@ class _EmployeeReportGeneratorScreenState
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          IconButton(
+            tooltip: 'Saved Reports History',
+            icon: const Icon(Icons.history_rounded),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const EmployeeReportsListScreen(),
+                ),
+              ).then((_) {
+                if (mounted) setState(() {});
+              });
+            },
+          ),
+          IconButton(
+            tooltip: 'Sync Offline Reports',
+            icon: const Icon(Icons.cloud_upload_rounded),
+            onPressed: _triggerManualSync,
+          ),
           IconButton(
             tooltip: 'Preview PDF',
             icon: const Icon(Icons.picture_as_pdf_rounded),
