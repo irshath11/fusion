@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle, NetworkAssetBundle;
 import 'package:intl/intl.dart';
@@ -12,7 +13,7 @@ class WorkPhotoReportData {
   final String location;
   final String employeeName;
   final String remarks;
-  final List<String> photos; // Base64 or Network URL image strings
+  final List<String> photos; // Base64, local file path, or Network URL image strings
 
   WorkPhotoReportData({
     required this.reportRefNumber,
@@ -53,9 +54,9 @@ class WorkPhotoReportData {
 }
 
 class WorkPhotoReportPdfService {
-  /// Generates PDF bytes asynchronously in a background isolate to keep UI at 60 FPS
+  /// Generates PDF bytes asynchronously
   static Future<Uint8List> buildPdfBytesAsync(WorkPhotoReportData data) async {
-    return compute(buildPdfBytes, data);
+    return buildPdfBytes(data);
   }
 
   static Future<Uint8List> buildPdfBytes(WorkPhotoReportData data) async {
@@ -72,9 +73,10 @@ class WorkPhotoReportPdfService {
     final printTimestamp =
         DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
 
-    // Decode photos (base64 or network URLs)
+    // Decode photos (base64, local file path, or network URLs)
     final photoMemoryImages = <pw.MemoryImage>[];
     for (final photoStr in data.photos) {
+      if (photoStr.trim().isEmpty) continue;
       try {
         if (photoStr.startsWith('http://') || photoStr.startsWith('https://')) {
           final uri = Uri.parse(photoStr);
@@ -82,13 +84,18 @@ class WorkPhotoReportPdfService {
           final byteData = await bundle.load(photoStr);
           final bytes = byteData.buffer.asUint8List();
           photoMemoryImages.add(pw.MemoryImage(bytes));
+        } else if (File(photoStr).existsSync()) {
+          final fileBytes = await File(photoStr).readAsBytes();
+          photoMemoryImages.add(pw.MemoryImage(fileBytes));
         } else {
           final cleanB64 =
               photoStr.contains(',') ? photoStr.split(',').last : photoStr;
           final bytes = base64Decode(cleanB64.trim());
           photoMemoryImages.add(pw.MemoryImage(bytes));
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Error decoding image for PDF: $e');
+      }
     }
 
     // Chunk photos (4 per page)

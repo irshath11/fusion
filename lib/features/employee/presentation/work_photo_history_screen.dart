@@ -186,13 +186,28 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
   }
 
   Future<Uint8List?> _fetchOrDecodeImageBytes(String photoStr) async {
+    final photoTrim = photoStr.trim();
+    if (photoTrim.isEmpty) return null;
+
     final bool isNetwork =
-        photoStr.startsWith('http://') || photoStr.startsWith('https://');
+        photoTrim.startsWith('http://') || photoTrim.startsWith('https://');
+
     if (!isNetwork) {
-      return _getOrDecodeBase64(photoStr);
+      if (photoTrim.startsWith('data:image/') || photoTrim.length > 500) {
+        return _getOrDecodeBase64(photoTrim);
+      }
+      try {
+        final file = File(photoTrim);
+        if (await file.exists()) {
+          return await file.readAsBytes();
+        }
+      } catch (e) {
+        debugPrint('Error checking local file path: $e');
+      }
+      return _getOrDecodeBase64(photoTrim);
     }
     try {
-      final request = await HttpClient().getUrl(Uri.parse(photoStr));
+      final request = await HttpClient().getUrl(Uri.parse(photoTrim));
       final response = await request.close();
       if (response.statusCode == 200) {
         final bytesList =
@@ -241,43 +256,56 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
 
     try {
       final reportDate = submission['reportDate'] != null
-          ? (DateTime.tryParse(submission['reportDate']) ?? DateTime.now())
+          ? (DateTime.tryParse(submission['reportDate'].toString()) ??
+              DateTime.now())
           : DateTime.now();
       final dateStr = DateFormat('yyyyMMdd_HHmm').format(reportDate);
+      int loadedCount = 0;
+      String? lastSavedPath;
 
-      int successCount = 0;
-      String? lastSavePath;
       for (int i = 0; i < photos.length; i++) {
         final photoStr = photos[i];
         final bytes = await _fetchOrDecodeImageBytes(photoStr);
         if (bytes != null && bytes.isNotEmpty) {
           final ext = _getPhotoExtension(photoStr, bytes);
-          final filename = 'Work_Image_${i + 1}_$dateStr.$ext';
+          final filename = 'Work_Photo_${dateStr}_${i + 1}.$ext';
           final savedPath = await ImageSaver.saveImageToDevice(bytes, filename);
           if (savedPath != null) {
-            successCount++;
-            lastSavePath = savedPath;
+            loadedCount++;
+            lastSavedPath = savedPath;
           }
         }
       }
 
-      if (mounted && successCount > 0) {
-        final msg = lastSavePath != null && lastSavePath != 'Downloads'
-            ? 'Downloaded $successCount image(s) to device storage ($lastSavePath)'
-            : 'Downloaded $successCount image(s) directly to device Downloads folder!';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(msg),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 4),
-          ),
-        );
+      if (loadedCount > 0) {
+        if (mounted) {
+          final isGallery = lastSavedPath != null && lastSavedPath.contains('Pictures');
+          final msg = isGallery
+              ? 'Successfully saved $loadedCount photo(s) directly to device Gallery ("FusionAttendance" album)!'
+              : 'Successfully saved $loadedCount photo(s) to device Downloads / storage!';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(msg),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not load image data for download.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error exporting images: $e'),
+            content: Text('Error downloading images: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -305,9 +333,12 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
 
       final savedPath = await ImageSaver.saveImageToDevice(bytes, filename);
       if (mounted && savedPath != null) {
-        final msg = savedPath != 'Downloads'
-            ? 'Photo saved directly to $savedPath'
-            : 'Photo downloaded automatically to device Downloads folder!';
+        final isGallery = savedPath.contains('Pictures');
+        final msg = isGallery
+            ? 'Photo saved directly to device Gallery ("FusionAttendance" album)!'
+            : (savedPath != 'Downloads'
+                ? 'Photo saved directly to $savedPath'
+                : 'Photo downloaded automatically to device Downloads folder!');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg), backgroundColor: Colors.green),
         );

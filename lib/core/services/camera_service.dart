@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
+import 'package:path_provider/path_provider.dart';
 
 class CameraCaptureResult {
   final String imagePath;
@@ -70,9 +71,18 @@ class CameraService {
     img.fill(mockImg, color: img.ColorRgb8(14, 116, 144));
     final bytes = img.encodeJpg(mockImg, quality: 60);
 
+    String path = '';
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/attendance_live_photo_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      await file.writeAsBytes(bytes);
+      path = file.path;
+    } catch (e) {
+      debugPrint('Error writing temp live photo: $e');
+    }
+
     return CameraCaptureResult(
-      imagePath:
-          '/tmp/attendance_live_photo_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      imagePath: path,
       base64Image: base64Encode(bytes),
       compressedSizeBytes: bytes.length,
     );
