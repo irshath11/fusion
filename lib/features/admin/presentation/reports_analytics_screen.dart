@@ -18,7 +18,6 @@ import '../../attendance/domain/attendance_record.dart';
 import 'admin_edit_attendance_dialog.dart';
 import '../../employee/presentation/employee_reports_list_screen.dart';
 import '../../employee/presentation/work_photo_history_screen.dart';
-import '../../../core/widgets/ai_executive_insights_card.dart';
 
 class ReportsAnalyticsScreen extends StatefulWidget {
   const ReportsAnalyticsScreen({super.key});
@@ -475,9 +474,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             ],
           ),
           const SizedBox(height: 12),
-
-          // AI Executive Insights & Anomaly Card
-          AiExecutiveInsightsCard(records: allRecords),
 
           // Tab Bar Switcher (Directory vs Cumulative Record vs Site Man-Hours)
           AppAnimatedTabSwitcher(
