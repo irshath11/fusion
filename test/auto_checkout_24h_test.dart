@@ -207,6 +207,54 @@ void main() {
       expect(entry.overtimeHours, 1.0);
       expect(entry.grossDuration, const Duration(hours: 11));
     });
+
+    test('12-hour shift (06:45 AM to 06:45 PM) calculates 8.0 regular, 1.0 food break, 1.0 travel tolerance and 2.0 overtime hours', () {
+      final checkInTime = DateTime(2026, 8, 10, 6, 45); // 06:45 AM
+      final checkOutTime = DateTime(2026, 8, 10, 18, 45); // 06:45 PM (12 hours gross)
+
+      final records = [
+        AttendanceRecord(
+          id: 'rec-6a',
+          employeeId: 'emp-106',
+          employeeName: 'John Doe',
+          workflowStep: WorkflowStep.officeCheckIn,
+          eventTimestamp: checkInTime,
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'Main Office HQ',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+        ),
+        AttendanceRecord(
+          id: 'rec-6b',
+          employeeId: 'emp-106',
+          employeeName: 'John Doe',
+          workflowStep: WorkflowStep.officeCheckOut,
+          eventTimestamp: checkOutTime,
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'Main Office HQ',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+        ),
+      ];
+
+      final entries = TimesheetCalculator.calculateDailyTimesheets(records);
+      expect(entries.length, 1);
+      final entry = entries.first;
+
+      expect(entry.isCompleted, isTrue);
+      expect(entry.isAutoCompleted, isFalse);
+      expect(entry.regularHours, 8.0);
+      expect(entry.breakHours, 1.0);
+      expect(entry.travelToleranceHours, 1.0);
+      expect(entry.overtimeHours, 2.0);
+      expect(entry.grossDuration, const Duration(hours: 12));
+    });
   });
 
   group('LocalDatabaseService autoResolveExpiredCheckIns Tests', () {

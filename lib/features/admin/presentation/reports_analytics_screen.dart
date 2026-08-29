@@ -559,6 +559,44 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   // ==========================================
   // LEVEL 2: DATE LIST VIEW FOR SELECTED EMPLOYEE
   // ==========================================
+  Future<void> _addNewDateEntryLogForEmployee(EmployeeEntity emp) async {
+    final now = DateTime.now();
+    final selectedDate = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: DateTime(2020),
+      lastDate: now.add(const Duration(days: 365)),
+      helpText: 'Select Date for New Entry Log (${emp.name})',
+    );
+
+    if (selectedDate == null || !mounted) return;
+
+    final ok = await AdminEditAttendanceDialog.show(
+      context,
+      employeeId: emp.id,
+      employeeName: emp.name,
+      date: selectedDate,
+      initialCheckIn: DateTime(
+          selectedDate.year, selectedDate.month, selectedDate.day, 8, 0),
+      initialCheckOut: DateTime(
+          selectedDate.year, selectedDate.month, selectedDate.day, 17, 0),
+      initialOtHours: 0.0,
+      initialRemarks: 'New date entry log created by admin',
+    );
+
+    if (ok == true && mounted) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'New date entry log created for ${emp.name} on ${DateFormat('dd MMM yyyy').format(selectedDate)}!',
+          ),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    }
+  }
+
   Widget _buildLevel2DateListView() {
     final emp = _resolveEmployee(_selectedEmployeeId);
 
@@ -641,24 +679,40 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   ],
                 ),
               ),
+              const SizedBox(width: 6),
+              ElevatedButton.icon(
+                onPressed: () => _addNewDateEntryLogForEmployee(emp),
+                icon: const Icon(Icons.post_add_rounded, size: 16),
+                label: const Text('+ Add Date Log',
+                    style:
+                        TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: activePrimary,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
               ElevatedButton.icon(
                 onPressed: () => _exportPdfForEmployee(emp, empRecords),
-                icon: const Icon(Icons.picture_as_pdf_rounded, size: 14),
+                icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
                 label: const Text('Download PDF',
                     style:
-                        TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red.shade700,
                   foregroundColor: Colors.white,
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-              )
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -963,6 +1017,23 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                       Text(
                         'No attendance logs recorded for ${emp.name} yet.',
                         style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: () => _addNewDateEntryLogForEmployee(emp),
+                        icon: const Icon(Icons.post_add_rounded, size: 18),
+                        label: const Text('Create New Date Entry Log',
+                            style: TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: activePrimary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -1313,45 +1384,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         ],
                       ),
                     ),
-                    trailing: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: () async {
-                            final ok = await AdminEditAttendanceDialog.show(
-                              context,
-                              employeeId: emp.id,
-                              employeeName: emp.name,
-                              date: parsedDate,
-                              initialCheckIn: dayEntry?.checkInTime,
-                              initialCheckOut: dayEntry?.checkOutTime,
-                              initialOtHours: dayEntry?.manualOvertimeHours ??
-                                  dayEntry?.overtimeHours,
-                              initialRemarks: dayEntry?.remarks,
-                            );
-                            if (ok == true && mounted) {
-                              setState(() {});
-                            }
-                          },
-                          icon: const Icon(Icons.edit_calendar_rounded, size: 15),
-                          label: const Text('Adjust Shift',
-                              style: TextStyle(
-                                  fontSize: 11, fontWeight: FontWeight.bold)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: activePrimary,
-                            foregroundColor: Colors.white,
-                            elevation: 2,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 8),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
                     onTap: () {
                       setState(() {
                         _selectedDate = parsedDate;
@@ -2633,19 +2666,17 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   ElevatedButton.icon(
                     onPressed: () =>
                         _exportCumulativePdf(employees, allRecords),
-                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 14),
+                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
                     label: const Text('Download PDF',
                         style: TextStyle(
-                            fontSize: 11, fontWeight: FontWeight.bold)),
+                            fontSize: 12, fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red.shade700,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 6),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          horizontal: 24, vertical: 12),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                     ),
                   ),
@@ -3244,19 +3275,17 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                       endDate: endDate,
                       groupByClient: _siteGroupByClient,
                     ),
-                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 14),
+                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
                     label: const Text('Download PDF',
                         style: TextStyle(
-                            fontSize: 11, fontWeight: FontWeight.bold)),
+                            fontSize: 12, fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red.shade700,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 6),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          horizontal: 24, vertical: 12),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                     ),
                   ),

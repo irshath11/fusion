@@ -62,6 +62,22 @@ class _AdminEditAttendanceDialogState
   late TextEditingController _remarksController;
   bool _isSaving = false;
 
+  double _calculateAutoOt(TimeOfDay checkIn, TimeOfDay checkOut) {
+    final checkInMins = checkIn.hour * 60 + checkIn.minute;
+    var checkOutMins = checkOut.hour * 60 + checkOut.minute;
+    if (checkOutMins < checkInMins) {
+      checkOutMins += 1440;
+    }
+    final grossMins = checkOutMins - checkInMins;
+    if (grossMins <= 480) {
+      return 0.0;
+    }
+    final remainingMins = grossMins > 540 ? (grossMins - 540) : 0;
+    final travelMins = remainingMins > 60 ? 60 : remainingMins;
+    final otMins = remainingMins > travelMins ? (remainingMins - travelMins) : 0;
+    return otMins / 60.0;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -73,10 +89,13 @@ class _AdminEditAttendanceDialogState
     _checkInTime = TimeOfDay.fromDateTime(defaultIn);
     _checkOutTime = TimeOfDay.fromDateTime(defaultOut);
 
+    final autoOt = _calculateAutoOt(_checkInTime, _checkOutTime);
+    final initialOt = (widget.initialOtHours != null && widget.initialOtHours! > 0)
+        ? widget.initialOtHours!
+        : (autoOt > 0 ? autoOt : (widget.initialOtHours ?? 0.0));
+
     _otController = TextEditingController(
-      text: widget.initialOtHours != null
-          ? widget.initialOtHours!.toStringAsFixed(1)
-          : '0.0',
+      text: initialOt.toStringAsFixed(1),
     );
     _remarksController = TextEditingController(
       text: widget.initialRemarks ?? '',
@@ -96,7 +115,11 @@ class _AdminEditAttendanceDialogState
       initialTime: _checkInTime,
     );
     if (picked != null) {
-      setState(() => _checkInTime = picked);
+      setState(() {
+        _checkInTime = picked;
+        _otController.text =
+            _calculateAutoOt(_checkInTime, _checkOutTime).toStringAsFixed(1);
+      });
     }
   }
 
@@ -106,7 +129,11 @@ class _AdminEditAttendanceDialogState
       initialTime: _checkOutTime,
     );
     if (picked != null) {
-      setState(() => _checkOutTime = picked);
+      setState(() {
+        _checkOutTime = picked;
+        _otController.text =
+            _calculateAutoOt(_checkInTime, _checkOutTime).toStringAsFixed(1);
+      });
     }
   }
 
@@ -362,35 +389,74 @@ class _AdminEditAttendanceDialogState
                   'Overtime (OT) Hours Adjustment',
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                 ),
-                Builder(
-                  builder: (context) {
-                    final otVal =
-                        double.tryParse(_otController.text.trim()) ?? 0.0;
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: otVal > 0
-                            ? Colors.orange.withValues(alpha: 0.15)
-                            : Colors.grey.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                            color: otVal > 0
-                                ? Colors.orange.shade400
-                                : Colors.grey.shade400),
-                      ),
-                      child: Text(
-                        '${otVal.toStringAsFixed(1)}h OT',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: otVal > 0
-                              ? Colors.orange.shade900
-                              : Colors.grey.shade700,
+                Row(
+                  children: [
+                    InkWell(
+                      onTap: _isSaving
+                          ? null
+                          : () => setState(() {
+                                _otController.text =
+                                    _calculateAutoOt(_checkInTime, _checkOutTime)
+                                        .toStringAsFixed(1);
+                              }),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        margin: const EdgeInsets.only(right: 6),
+                        decoration: BoxDecoration(
+                          color: primaryColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                              color: primaryColor.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.autorenew_rounded,
+                                size: 12, color: primaryColor),
+                            const SizedBox(width: 2),
+                            Text(
+                              'Auto OT',
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: primaryColor),
+                            ),
+                          ],
                         ),
                       ),
-                    );
-                  },
+                    ),
+                    Builder(
+                      builder: (context) {
+                        final otVal =
+                            double.tryParse(_otController.text.trim()) ?? 0.0;
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: otVal > 0
+                                ? Colors.orange.withValues(alpha: 0.15)
+                                : Colors.grey.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                                color: otVal > 0
+                                    ? Colors.orange.shade400
+                                    : Colors.grey.shade400),
+                          ),
+                          child: Text(
+                            '${otVal.toStringAsFixed(1)}h OT',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: otVal > 0
+                                  ? Colors.orange.shade900
+                                  : Colors.grey.shade700,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),

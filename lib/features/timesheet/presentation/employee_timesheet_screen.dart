@@ -47,19 +47,17 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                     padding: const EdgeInsets.only(right: 12.0),
                     child: ElevatedButton.icon(
                       onPressed: () => _downloadPdf(context, state),
-                      icon: const Icon(Icons.picture_as_pdf_rounded, size: 14),
+                      icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
                       label: const Text('Download PDF',
                           style: TextStyle(
-                              fontSize: 11, fontWeight: FontWeight.bold)),
+                              fontSize: 12, fontWeight: FontWeight.bold)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red.shade700,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            horizontal: 24, vertical: 12),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(10),
                         ),
                       ),
                     ),
