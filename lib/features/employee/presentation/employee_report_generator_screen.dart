@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_theme.dart';
+import '../../../core/services/ai_report_service.dart';
 import '../../../core/services/service_report_pdf_service.dart';
 import '../../../core/services/supabase_service.dart';
+import '../../../core/widgets/ai_voice_report_bottom_sheet.dart';
 import '../../../core/widgets/e_signature_pad.dart';
 import '../../../database/local_database_service.dart';
 import 'employee_reports_list_screen.dart';
@@ -508,6 +510,150 @@ class _EmployeeReportGeneratorScreenState
     _initRefNumber();
   }
 
+  void _openAiAssistant() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => AiVoiceReportBottomSheet(
+        onExtracted: _autoFillFromAi,
+      ),
+    );
+  }
+
+  void _autoFillFromAi(AiExtractedReportData data) {
+    setState(() {
+      if (data.defectsFound.isNotEmpty) {
+        _defectsFoundController.text = data.defectsFound;
+      }
+      if (data.detailsOfWorkDone.isNotEmpty) {
+        _detailsOfWorkDoneController.text = data.detailsOfWorkDone;
+      }
+      if (data.callType.isNotEmpty && ['Complaint', 'Breakdown', 'Preventive'].contains(data.callType)) {
+        _selectedCallType = data.callType;
+      }
+      if (data.priority.isNotEmpty && ['Urgent', 'Normal'].contains(data.priority)) {
+        _selectedPriority = data.priority;
+      }
+
+      for (final service in data.suggestedServices) {
+        if (_allServices.contains(service)) {
+          _selectedServices.add(service);
+        }
+      }
+
+      // Populate material tables (5 rows x 2 pairs = max 10 entries)
+      for (int i = 0; i < data.materials.length && i < 10; i++) {
+        final mat = data.materials[i];
+        if (i < 5) {
+          _matControllers1[i].text = mat.material;
+          _qtyControllers1[i].text = mat.qty;
+        } else {
+          final idx = i - 5;
+          _matControllers2[idx].text = mat.material;
+          _qtyControllers2[idx].text = mat.qty;
+        }
+      }
+    });
+
+    if (mounted) {
+      final modeStr = data.isOfflineFallback ? 'Local Offline AI' : 'Gemini AI';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✨ Report auto-filled via $modeStr! (${data.materials.length} material(s) extracted)'),
+          backgroundColor: Colors.indigo,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
+  Widget _buildAiBannerCard(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xFF1E1B4B), const Color(0xFF312E81)]
+              : [const Color(0xFFEEF2FF), const Color(0xFFE0E7FF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.3),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [AppColors.primary, AppColors.primaryLight],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.auto_awesome,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'AI Voice Assistant',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF1E1B4B),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Dictate job notes to auto-fill work done & materials',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? Colors.white70 : const Color(0xFF4338CA),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: _openAiAssistant,
+            icon: const Icon(Icons.mic, size: 16, color: Colors.white),
+            label: const Text(
+              'Dictate',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              elevation: 2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _selectTime(TextEditingController controller) async {
     final TimeOfDay? picked = await showTimePicker(
       context: context,
@@ -565,6 +711,11 @@ class _EmployeeReportGeneratorScreenState
         elevation: 0,
         actions: [
           IconButton(
+            tooltip: 'AI Voice Assistant',
+            icon: const Icon(Icons.auto_awesome_rounded, color: Colors.amberAccent),
+            onPressed: _openAiAssistant,
+          ),
+          IconButton(
             tooltip: 'Saved Reports History',
             icon: const Icon(Icons.history_rounded, color: Colors.white),
             onPressed: () {
@@ -597,6 +748,10 @@ class _EmployeeReportGeneratorScreenState
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              // ================= AI Assistant Banner =================
+              _buildAiBannerCard(isDark),
+              const SizedBox(height: 12),
+
               // ================= 1st Section: Property & Call Details =================
               _buildSectionCard(
                 isDark: isDark,
