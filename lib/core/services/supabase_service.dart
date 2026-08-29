@@ -1886,13 +1886,168 @@ class SupabaseService {
     return syncedCount;
   }
 
-  /// Master sync method for all offline data (attendance records + service reports)
-  Future<({int attendanceSynced, int reportsSynced})> syncAllOfflineData() async {
+  /// Upload work site photo to Supabase Storage bucket 'work_photos' (or 'attendance_photos')
+  Future<String?> uploadWorkPhotoData({
+    required String photoDataOrPath,
+    required String recordId,
+    required int index,
+  }) async {
+    if (!_isInitialized || client == null) return null;
+
+    try {
+      final fileName =
+          'work_photo_${recordId}_${index}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final storagePath = 'work_site_photos/$fileName';
+
+      Uint8List bytes;
+      if (!kIsWeb && File(photoDataOrPath).existsSync()) {
+        bytes = await File(photoDataOrPath).readAsBytes();
+      } else {
+        String cleanData = photoDataOrPath;
+        if (cleanData.contains(',')) {
+          cleanData = cleanData.split(',').last;
+        }
+        bytes = base64Decode(cleanData.trim());
+      }
+
+      String bucketName = 'work_photos';
+      try {
+        await client!.storage.from(bucketName).uploadBinary(
+              storagePath,
+              bytes,
+              fileOptions: const FileOptions(
+                  contentType: 'image/jpeg', cacheControl: '3600', upsert: true),
+            );
+      } catch (e) {
+        bucketName = 'attendance_photos';
+        await client!.storage.from(bucketName).uploadBinary(
+              storagePath,
+              bytes,
+              fileOptions: const FileOptions(
+                  contentType: 'image/jpeg', cacheControl: '3600', upsert: true),
+            );
+      }
+
+      final publicUrl =
+          client!.storage.from(bucketName).getPublicUrl(storagePath);
+      return publicUrl;
+    } catch (e) {
+      debugPrint('Supabase Storage uploadWorkPhotoData error: $e');
+      return null;
+    }
+  }
+
+  /// Save work photo report record to Supabase cloud database record-by-record
+  Future<bool> saveWorkPhotoReport(Map<String, dynamic> submissionData) async {
+    if (!_isInitialized || client == null) {
+      debugPrint('Supabase not initialized; skipping work photo report upload');
+      return false;
+    }
+
+    try {
+      final recordId = submissionData['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString();
+      final List rawPhotos = (submissionData['photos'] as List?) ?? [];
+      final List<String> uploadedPhotoUrls = [];
+
+      // Upload each photo belonging to this record to Supabase Storage
+      for (int i = 0; i < rawPhotos.length; i++) {
+        final photoStr = rawPhotos[i].toString();
+        if (photoStr.startsWith('http://') || photoStr.startsWith('https://')) {
+          uploadedPhotoUrls.add(photoStr);
+        } else {
+          final publicUrl = await uploadWorkPhotoData(
+            photoDataOrPath: photoStr,
+            recordId: recordId,
+            index: i,
+          );
+          if (publicUrl != null && publicUrl.isNotEmpty) {
+            uploadedPhotoUrls.add(publicUrl);
+          } else {
+            uploadedPhotoUrls.add(photoStr);
+          }
+        }
+      }
+
+      final payload = {
+        'id': recordId,
+        'report_date': submissionData['reportDate'] ?? DateTime.now().toIso8601String(),
+        'work_title': submissionData['workTitle'] ?? '',
+        'location': submissionData['location'] ?? '',
+        'employee_name': submissionData['employeeName'] ?? '',
+        'remarks': submissionData['remarks'] ?? '',
+        'photos': uploadedPhotoUrls,
+        'created_at': submissionData['createdAt'] ?? DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      await client!.from('work_photo_reports').upsert(
+            payload,
+            onConflict: 'id',
+          );
+
+      submissionData['photos'] = uploadedPhotoUrls;
+
+      debugPrint('Work photo report #$recordId record & photos successfully uploaded to Supabase.');
+      return true;
+    } catch (e) {
+      debugPrint('Supabase saveWorkPhotoReport error: $e');
+      return false;
+    }
+  }
+
+  /// Sync a single work photo submission record to Supabase
+  Future<bool> syncSingleWorkPhotoSubmission(Map<String, dynamic> submission) async {
+    final id = submission['id']?.toString();
+    if (id == null || id.isEmpty) return false;
+
+    if (!_isInitialized || client == null) {
+      debugPrint('Supabase client not active; cannot sync record #$id');
+      return false;
+    }
+
+    final success = await saveWorkPhotoReport(submission);
+    if (success) {
+      final db = LocalDatabaseService();
+      final List<String> updatedPhotos = (submission['photos'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [];
+      await db.markWorkPhotoSubmissionSynced(id, updatedPhotos: updatedPhotos);
+    }
+    return success;
+  }
+
+  /// Syncs all locally queued offline work photo reports to Supabase record-by-record
+  Future<int> syncPendingWorkPhotoSubmissions() async {
+    final db = LocalDatabaseService();
+    final pending = db.getPendingWorkPhotoSubmissions();
+    if (pending.isEmpty) return 0;
+
+    int syncedCount = 0;
+    for (final submission in pending) {
+      final success = await syncSingleWorkPhotoSubmission(submission);
+      if (success) {
+        syncedCount++;
+      }
+    }
+    if (syncedCount > 0) {
+      debugPrint('Successfully synchronized $syncedCount offline work photo report record(s) to Supabase.');
+    }
+    return syncedCount;
+  }
+
+  /// Master sync method for all offline data (attendance records + service reports + work photo reports)
+  Future<({int attendanceSynced, int reportsSynced, int workPhotosSynced})> syncAllOfflineData() async {
     final attendanceSynced = await syncPendingAttendanceRecords();
     final reportsSynced = await syncPendingServiceReports();
-    if (attendanceSynced > 0 || reportsSynced > 0) {
+    final workPhotosSynced = await syncPendingWorkPhotoSubmissions();
+    if (attendanceSynced > 0 || reportsSynced > 0 || workPhotosSynced > 0) {
       await syncCloudDataToLocal();
     }
-    return (attendanceSynced: attendanceSynced, reportsSynced: reportsSynced);
+    return (
+      attendanceSynced: attendanceSynced,
+      reportsSynced: reportsSynced,
+      workPhotosSynced: workPhotosSynced,
+    );
   }
 }

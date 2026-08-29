@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera access is required for attendance selfie verification and work site photo reports.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photo library access is required to attach work site photos to PDF reports.</string>
 </dict>
 </plist>

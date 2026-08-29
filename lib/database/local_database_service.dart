@@ -1138,15 +1138,98 @@ class LocalDatabaseService {
     }
   }
 
-  /// Get all locally generated report metadata entries
-  List<Map<String, dynamic>> getGeneratedReportsLocally() {
+  /// Save work site photos submission to local offline Hive storage
+  Future<void> saveWorkPhotoSubmissionLocally(Map<String, dynamic> submissionData) async {
     try {
       final String jsonStr =
-          _settingsBox?.get('generated_reports_history_json', defaultValue: '[]');
+          _settingsBox?.get('work_photo_submissions_json', defaultValue: '[]');
+      final List decoded = jsonDecode(jsonStr);
+
+      final payload = {
+        'id': submissionData['id'] ?? _uuid.v4(),
+        'reportDate': submissionData['reportDate'] ?? DateTime.now().toIso8601String(),
+        'workTitle': submissionData['workTitle'] ?? '',
+        'location': submissionData['location'] ?? '',
+        'employeeName': submissionData['employeeName'] ?? '',
+        'remarks': submissionData['remarks'] ?? '',
+        'photos': submissionData['photos'] ?? [],
+        'syncStatus': 'pending',
+        'createdAt': DateTime.now().toIso8601String(),
+      };
+
+      decoded.insert(0, payload);
+      await _settingsBox?.put('work_photo_submissions_json', jsonEncode(decoded));
+      debugPrint('Work photo submission saved locally with ${(payload['photos'] as List).length} image(s).');
+    } catch (e) {
+      debugPrint('Error saving work photo submission locally: $e');
+    }
+  }
+
+  /// Get all saved work photo submissions
+  List<Map<String, dynamic>> getSavedWorkPhotoSubmissions() {
+    try {
+      final String jsonStr =
+          _settingsBox?.get('work_photo_submissions_json', defaultValue: '[]');
       final List decoded = jsonDecode(jsonStr);
       return decoded.map((item) => Map<String, dynamic>.from(item)).toList();
     } catch (e) {
       return [];
+    }
+  }
+
+  /// Get all pending work photo submissions that need cloud sync
+  List<Map<String, dynamic>> getPendingWorkPhotoSubmissions() {
+    try {
+      final all = getSavedWorkPhotoSubmissions();
+      return all.where((item) => (item['syncStatus'] ?? 'pending') == 'pending').toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Mark a work photo submission as synced to the cloud database
+  Future<void> markWorkPhotoSubmissionSynced(String id, {List<String>? updatedPhotos}) async {
+    try {
+      final String jsonStr =
+          _settingsBox?.get('work_photo_submissions_json', defaultValue: '[]');
+      final List decoded = jsonDecode(jsonStr);
+
+      bool updated = false;
+      for (int i = 0; i < decoded.length; i++) {
+        final Map<String, dynamic> item = Map<String, dynamic>.from(decoded[i]);
+        if (item['id'].toString() == id) {
+          item['syncStatus'] = 'synced';
+          item['syncedAt'] = DateTime.now().toIso8601String();
+          if (updatedPhotos != null) {
+            item['photos'] = updatedPhotos;
+          }
+          decoded[i] = item;
+          updated = true;
+          break;
+        }
+      }
+
+      if (updated) {
+        await _settingsBox?.put('work_photo_submissions_json', jsonEncode(decoded));
+        debugPrint('Work photo submission #$id marked as synced.');
+      }
+    } catch (e) {
+      debugPrint('Error marking work photo submission as synced: $e');
+    }
+  }
+
+  /// Delete a saved work photo submission
+  Future<void> deleteWorkPhotoSubmission(String id) async {
+    try {
+      final String jsonStr =
+          _settingsBox?.get('work_photo_submissions_json', defaultValue: '[]');
+      final List decoded = jsonDecode(jsonStr);
+
+      decoded.removeWhere((item) => item['id']?.toString() == id);
+      await _settingsBox?.put('work_photo_submissions_json', jsonEncode(decoded));
+      debugPrint('Deleted work photo submission #$id.');
+    } catch (e) {
+      debugPrint('Error deleting work photo submission: $e');
     }
   }
 }

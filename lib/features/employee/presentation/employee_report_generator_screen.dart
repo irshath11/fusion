@@ -93,7 +93,7 @@ class _EmployeeReportGeneratorScreenState
   @override
   void initState() {
     super.initState();
-    
+
     // Initialize 5 rows x 2 pairs material controllers
     _matControllers1 = List.generate(5, (_) => TextEditingController());
     _qtyControllers1 = List.generate(5, (_) => TextEditingController());

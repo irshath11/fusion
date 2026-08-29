@@ -19,6 +19,7 @@ import '../../auth/presentation/auth_cubit.dart';
 import '../../auth/presentation/login_screen.dart';
 import '../../timesheet/presentation/employee_timesheet_screen.dart';
 import 'employee_report_generator_screen.dart';
+import 'work_photos_report_screen.dart';
 import '../../timesheet/domain/timesheet_entry.dart';
 import '../../../core/utils/timesheet_calculator.dart';
 import '../../../core/constants/app_theme.dart';
@@ -572,6 +573,11 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
         activeIcon: Icons.assignment_rounded,
         label: 'PDF Report',
       ),
+      NavDestinationItem(
+        icon: Icons.photo_library_outlined,
+        activeIcon: Icons.photo_library_rounded,
+        label: 'Work Photos',
+      ),
     ];
 
     Widget bodyWidget;
@@ -582,6 +588,8 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
       );
     } else if (_selectedNavIndex == 2) {
       bodyWidget = const EmployeeReportGeneratorScreen();
+    } else if (_selectedNavIndex == 3) {
+      bodyWidget = const WorkPhotosReportScreen();
     } else {
       bodyWidget = SafeArea(
         child: Column(

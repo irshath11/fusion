@@ -16,6 +16,7 @@ dependencies:
 
   # UI & Design
   cupertino_icons: ^1.0.6
+  web: ^1.0.0
   google_fonts: ^6.1.0
   intl: ^0.19.0
   image: ^4.2.0
@@ -33,6 +34,7 @@ dependencies:
   geolocator: ^10.1.0
   geocoding: ^3.0.0
   camera: ^0.10.5+9
+  image_picker: ^1.1.2
   device_info_plus: ^10.1.0
 
   # Data Exporting
