@@ -535,28 +535,37 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
           children: [
             // Date & Completion Status
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.calendar_today_rounded,
-                        size: 16,
-                        color: activePrimary),
-                    const SizedBox(width: 8),
-                    Text(
-                      dateFormat.format(entry.date),
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 15),
-                    ),
-                  ],
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(Icons.calendar_today_rounded,
+                          size: 16,
+                          color: activePrimary),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          dateFormat.format(entry.date),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 15),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                Row(
+                const SizedBox(width: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    if (entry.isEdited) ...[
+                    if (entry.isEdited)
                       Container(
-                        margin: const EdgeInsets.only(right: 6),
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 3),
                         decoration: BoxDecoration(
                           color: Colors.purple.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
@@ -572,13 +581,13 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                           ),
                         ),
                       ),
-                    ],
                     Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: entry.isAutoCompleted
-                            ? activePrimary.withValues(alpha: isDark ? 0.2 : 0.1)
+                            ? activePrimary
+                                .withValues(alpha: isDark ? 0.2 : 0.1)
                             : (entry.isCompleted
                                 ? palette.success.withValues(alpha: 0.1)
                                 : (isDark
@@ -589,7 +598,9 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                       child: Text(
                         entry.isAutoCompleted
                             ? 'Auto Checked-Out (8h)'
-                            : (entry.isCompleted ? 'Shift Complete' : 'In Progress'),
+                            : (entry.isCompleted
+                                ? 'Shift Complete'
+                                : 'In Progress'),
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
@@ -604,7 +615,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                       ),
                     ),
                   ],
-                )
+                ),
               ],
             ),
             const Divider(height: 20),
@@ -806,10 +817,36 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
-                        child: Text(
-                          fullFormat.format(entry.date),
-                          style: const TextStyle(
-                              fontSize: 17, fontWeight: FontWeight.bold),
+                        child: Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            Text(
+                              fullFormat.format(entry.date),
+                              style: const TextStyle(
+                                  fontSize: 17, fontWeight: FontWeight.bold),
+                            ),
+                            if (entry.isEdited)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.purple.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                      color: Colors.purple.withValues(alpha: 0.3)),
+                                ),
+                                child: const Text(
+                                  'ADMIN MODIFIED',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.purple,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                       IconButton(

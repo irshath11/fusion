@@ -119,7 +119,12 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
           children: [
             Icon(Icons.cleaning_services_rounded, color: Colors.redAccent),
             SizedBox(width: 10),
-            Text('Clear Local Reports Cache?'),
+            Expanded(
+              child: Text(
+                'Clear Local Reports Cache?',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
           ],
         ),
         content: const Text(
@@ -260,16 +265,20 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        titleSpacing: 0,
         title: const Row(
           children: [
-            Icon(Icons.assignment_turned_in_rounded, color: Colors.white, size: 22),
-            SizedBox(width: 10),
-            Text(
-              'Generated Reports History',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+            Icon(Icons.assignment_turned_in_rounded, color: Colors.white, size: 20),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Reports History',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -382,7 +391,7 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
                       : RefreshIndicator(
                           onRefresh: _triggerCloudSync,
                           child: ListView.builder(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            padding: const EdgeInsets.only(left: 12, right: 12, top: 8, bottom: 48),
                             itemCount: _filteredReports.length,
                             itemBuilder: (context, index) {
                               final item = _filteredReports[index];
@@ -497,22 +506,30 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
                                       Row(
                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
-                                          Text(
-                                            'Created: $createdStr',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: isDark ? Colors.white60 : Colors.black54,
-                                            ),
-                                          ),
-                                          if (reportData.technicianName.isNotEmpty)
-                                            Text(
-                                              'Tech: ${reportData.technicianName}',
+                                          Expanded(
+                                            child: Text(
+                                              'Created: $createdStr',
                                               style: TextStyle(
                                                 fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                                color: isDark ? AppColors.primaryLight : AppColors.primary,
+                                                color: isDark ? Colors.white60 : Colors.black54,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          if (reportData.technicianName.isNotEmpty) ...[
+                                            const SizedBox(width: 8),
+                                            Flexible(
+                                              child: Text(
+                                                'Tech: ${reportData.technicianName}',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isDark ? AppColors.primaryLight : AppColors.primary,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
+                                          ],
                                         ],
                                       ),
 

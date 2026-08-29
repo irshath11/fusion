@@ -141,27 +141,28 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               },
               destinations: _navItems,
               userRoleLabel: 'System Admin',
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.cleaning_services_rounded),
-                  tooltip: 'Clear Local Cache',
-                  onPressed: () => _showResetCacheDialog(adminCtx),
+              menuItems: [
+                AppShellActionItem(
+                  label: 'Clear Local Cache',
+                  icon: Icons.cleaning_services_rounded,
+                  onTap: () => _showResetCacheDialog(adminCtx),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.swap_horiz_rounded),
-                  tooltip: 'Transfer Ownership',
-                  onPressed: _showOwnershipTransferDialog,
+                AppShellActionItem(
+                  label: 'Transfer Ownership',
+                  icon: Icons.swap_horiz_rounded,
+                  onTap: _showOwnershipTransferDialog,
                 ),
-                IconButton(
-                  icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
-                  tooltip: 'Sign Out',
-                  onPressed: () {
+                AppShellActionItem(
+                  label: 'Sign Out',
+                  icon: Icons.logout_rounded,
+                  onTap: () {
                     context.read<AuthCubit>().logout();
                     Navigator.of(context).pushAndRemoveUntil(
                       MaterialPageRoute(builder: (ctx) => const LoginScreen()),
                       (route) => false,
                     );
                   },
+                  color: Colors.redAccent,
                 ),
               ],
               body: IndexedStack(

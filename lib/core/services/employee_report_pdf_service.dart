@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -459,8 +460,8 @@ class EmployeeReportPdfService {
     required pw.MemoryImage? sigImg,
   }) {
     return pw.Container(
-      height: 95,
-      padding: const pw.EdgeInsets.all(5),
+      height: 75,
+      padding: const pw.EdgeInsets.all(4),
       decoration: pw.BoxDecoration(
         border: pw.Border.all(color: PdfColors.grey400, width: 0.8),
         borderRadius: pw.BorderRadius.circular(5),
@@ -475,16 +476,16 @@ class EmployeeReportPdfService {
           ),
           if (sigImg != null)
             pw.Container(
-              height: 42,
+              height: 30,
               child: pw.Image(sigImg, fit: pw.BoxFit.contain),
             )
           else
             pw.Container(
-              height: 42,
+              height: 30,
               alignment: pw.Alignment.center,
               child: pw.Text(
                 '[ DIGITAL SIGNATURE PENDING ]',
-                style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey500),
+                style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey500),
               ),
             ),
           pw.Column(
@@ -492,14 +493,14 @@ class EmployeeReportPdfService {
               pw.Divider(thickness: 0.4, color: PdfColors.grey400),
               pw.Text(
                 'Name: $name',
-                style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
+                style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold),
                 maxLines: 1,
               ),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text(subText, style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700)),
-                  pw.Text('Date: $dateStr', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700)),
+                  pw.Text(subText, style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700)),
+                  pw.Text('Date: $dateStr', style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700)),
                 ],
               ),
             ],

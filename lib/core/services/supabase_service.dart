@@ -64,7 +64,8 @@ class SupabaseService {
           .from('organizations')
           .select('id')
           .eq('is_deleted', false)
-          .limit(1);
+          .limit(1)
+          .timeout(const Duration(milliseconds: 1500));
       return (response as List).isNotEmpty;
     } catch (e) {
       final errStr = e.toString();
@@ -1686,7 +1687,8 @@ class SupabaseService {
       final List<dynamic> response = await client!
           .from('attendance_records')
           .select()
-          .order('event_timestamp', ascending: false);
+          .order('event_timestamp', ascending: false)
+          .timeout(const Duration(seconds: 4));
 
       final List<AttendanceRecord> records = [];
       for (final json in response) {
@@ -1784,29 +1786,39 @@ class SupabaseService {
 
     final db = LocalDatabaseService();
     final pending = db.getPendingLocalServiceReports();
-    if (pending.isEmpty) return 0;
-
     int syncedCount = 0;
-    for (final item in pending) {
-      final refNum = item['reportRefNumber'] as String?;
-      final Map<String, dynamic>? data = item['reportData'] != null
-          ? Map<String, dynamic>.from(item['reportData'])
-          : null;
 
-      if (refNum != null && data != null) {
-        final success = await saveServiceReport(
-          refNumber: refNum,
-          reportData: data,
-        );
-        if (success) {
-          await db.markServiceReportSynced(refNum);
-          syncedCount++;
+    if (pending.isNotEmpty) {
+      for (final item in pending) {
+        final refNum = item['reportRefNumber'] as String?;
+        final Map<String, dynamic>? data = item['reportData'] != null
+            ? Map<String, dynamic>.from(item['reportData'])
+            : null;
+
+        if (refNum != null && data != null) {
+          final success = await saveServiceReport(
+            refNumber: refNum,
+            reportData: data,
+          );
+          if (success) {
+            await db.markServiceReportSynced(refNum);
+            syncedCount++;
+          }
         }
       }
+      if (syncedCount > 0) {
+        debugPrint('Successfully synchronized $syncedCount offline service reports to Supabase.');
+      }
     }
-    if (syncedCount > 0) {
-      debugPrint('Successfully synchronized $syncedCount offline service reports to Supabase.');
+
+    // Always fetch latest cloud reports and purge any reports deleted from cloud DB
+    try {
+      final cloudReports = await fetchServiceReportsFromSupabase();
+      await db.mergeCloudServiceReports(cloudReports);
+    } catch (e) {
+      debugPrint('Error syncing cloud service reports to local DB: $e');
     }
+
     return syncedCount;
   }
 

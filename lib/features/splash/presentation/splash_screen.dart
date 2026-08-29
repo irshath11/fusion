@@ -29,7 +29,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2800),
+      duration: const Duration(milliseconds: 1400),
     );
 
     // Logo Scale (0.5 -> 1.05 -> 1.0)
@@ -80,8 +80,8 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    // Navigate to RootRoleRouter after 3.4 seconds
-    _timer = Timer(const Duration(milliseconds: 3400), () {
+    // Navigate to RootRoleRouter after 1.6 seconds
+    _timer = Timer(const Duration(milliseconds: 1600), () {
       if (mounted) {
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(

@@ -153,14 +153,27 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
     });
   }
 
+  final Map<String, Uint8List> _base64Cache = {};
+
+  Uint8List? _getOrDecodeBase64(String photoStr) {
+    if (_base64Cache.containsKey(photoStr)) {
+      return _base64Cache[photoStr];
+    }
+    final cleanB64 = photoStr.contains(',') ? photoStr.split(',').last : photoStr;
+    try {
+      final decoded = base64Decode(cleanB64.trim());
+      _base64Cache[photoStr] = decoded;
+      return decoded;
+    } catch (_) {
+      return null;
+    }
+  }
+
   void _openFullImagePreview(String photoStr, int photoIndex, int totalPhotos) {
     final bool isNetwork = photoStr.startsWith('http://') || photoStr.startsWith('https://');
     Uint8List? bytes;
     if (!isNetwork) {
-      final cleanB64 = photoStr.contains(',') ? photoStr.split(',').last : photoStr;
-      try {
-        bytes = base64Decode(cleanB64.trim());
-      } catch (_) {}
+      bytes = _getOrDecodeBase64(photoStr);
     }
 
     showDialog(
@@ -250,7 +263,7 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
           [],
     );
 
-    final pdfBytes = await WorkPhotoReportPdfService.buildPdfBytes(data);
+    final pdfBytes = await WorkPhotoReportPdfService.buildPdfBytesAsync(data);
     final dateStr = DateFormat('yyyyMMdd').format(reportDate);
 
     await Printing.sharePdf(
@@ -266,9 +279,11 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        titleSpacing: 0,
         title: const Text(
           'Uploaded Work Photos History',
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 17),
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16),
+          overflow: TextOverflow.ellipsis,
         ),
         backgroundColor: primaryColor,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -376,28 +391,11 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
-                              const SizedBox(height: 16),
-                              ElevatedButton.icon(
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => const WorkPhotosReportScreen(),
-                                    ),
-                                  ).then((_) => _loadSubmissions());
-                                },
-                                icon: const Icon(Icons.add_a_photo_rounded),
-                                label: const Text('Upload Work Photos'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: primaryColor,
-                                  foregroundColor: Colors.white,
-                                ),
-                              ),
                             ],
                           ),
                         )
                       : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.only(left: 12, right: 12, top: 8, bottom: 48),
                           itemCount: _filteredSubmissions.length,
                           itemBuilder: (context, index) {
                             final item = _filteredSubmissions[index];
@@ -608,19 +606,14 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
                                         child: ListView.builder(
                                           scrollDirection: Axis.horizontal,
                                           itemCount: photos.length,
-                                          itemBuilder: (ctx, pIdx) {
-                                            final photoStr = photos[pIdx];
-                                            final bool isNetwork = photoStr.startsWith('http://') ||
-                                                photoStr.startsWith('https://');
-                                            Uint8List? bytes;
-                                            if (!isNetwork) {
-                                              final cleanB64 = photoStr.contains(',')
-                                                  ? photoStr.split(',').last
-                                                  : photoStr;
-                                              try {
-                                                bytes = base64Decode(cleanB64.trim());
-                                              } catch (_) {}
-                                            }
+                                            itemBuilder: (ctx, pIdx) {
+                                              final photoStr = photos[pIdx];
+                                              final bool isNetwork = photoStr.startsWith('http://') ||
+                                                  photoStr.startsWith('https://');
+                                              Uint8List? bytes;
+                                              if (!isNetwork) {
+                                                bytes = _getOrDecodeBase64(photoStr);
+                                              }
 
                                             return GestureDetector(
                                               onTap: () {

@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle, NetworkAssetBundle;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -12,7 +12,7 @@ class WorkPhotoReportData {
   final String location;
   final String employeeName;
   final String remarks;
-  final List<String> photos; // Base64 encoded image strings
+  final List<String> photos; // Base64 or Network URL image strings
 
   WorkPhotoReportData({
     required this.reportRefNumber,
@@ -53,19 +53,24 @@ class WorkPhotoReportData {
 }
 
 class WorkPhotoReportPdfService {
+  /// Generates PDF bytes asynchronously in a background isolate to keep UI at 60 FPS
+  static Future<Uint8List> buildPdfBytesAsync(WorkPhotoReportData data) async {
+    return compute(buildPdfBytes, data);
+  }
+
   static Future<Uint8List> buildPdfBytes(WorkPhotoReportData data) async {
     final pdf = pw.Document();
 
     // Load company logo if available
     pw.MemoryImage? logoImage;
     try {
-      final logoBytes =
-          await rootBundle.load('assets/images/fusion_logo.png');
+      final logoBytes = await rootBundle.load('assets/images/fusion_logo.png');
       logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
     } catch (_) {}
 
     final formattedDate = DateFormat('dd MMM yyyy').format(data.reportDate);
-    final printTimestamp = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+    final printTimestamp =
+        DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
 
     // Decode photos (base64 or network URLs)
     final photoMemoryImages = <pw.MemoryImage>[];
@@ -78,7 +83,8 @@ class WorkPhotoReportPdfService {
           final bytes = byteData.buffer.asUint8List();
           photoMemoryImages.add(pw.MemoryImage(bytes));
         } else {
-          final cleanB64 = photoStr.contains(',') ? photoStr.split(',').last : photoStr;
+          final cleanB64 =
+              photoStr.contains(',') ? photoStr.split(',').last : photoStr;
           final bytes = base64Decode(cleanB64.trim());
           photoMemoryImages.add(pw.MemoryImage(bytes));
         }
@@ -162,7 +168,8 @@ class WorkPhotoReportPdfService {
                     decoration: pw.BoxDecoration(
                       color: PdfColors.blue50,
                       borderRadius: pw.BorderRadius.circular(6),
-                      border: pw.Border.all(color: PdfColors.blue200, width: 0.8),
+                      border:
+                          pw.Border.all(color: PdfColors.blue200, width: 0.8),
                     ),
                     child: pw.Column(
                       children: [
@@ -171,7 +178,9 @@ class WorkPhotoReportPdfService {
                             pw.Expanded(
                               child: _buildInfoItem(
                                 'Work Title',
-                                data.workTitle.isNotEmpty ? data.workTitle : 'Site Work Execution',
+                                data.workTitle.isNotEmpty
+                                    ? data.workTitle
+                                    : 'Site Work Execution',
                               ),
                             ),
                             pw.SizedBox(width: 10),
@@ -189,21 +198,26 @@ class WorkPhotoReportPdfService {
                             pw.Expanded(
                               child: _buildInfoItem(
                                 'Location',
-                                data.location.isNotEmpty ? data.location : 'On Site',
+                                data.location.isNotEmpty
+                                    ? data.location
+                                    : 'On Site',
                               ),
                             ),
                             pw.SizedBox(width: 10),
                             pw.Expanded(
                               child: _buildInfoItem(
                                 'Technician / Employee',
-                                data.employeeName.isNotEmpty ? data.employeeName : 'Fusion Technical Staff',
+                                data.employeeName.isNotEmpty
+                                    ? data.employeeName
+                                    : 'Fusion Technical Staff',
                               ),
                             ),
                           ],
                         ),
                         if (data.remarks.isNotEmpty) ...[
                           pw.SizedBox(height: 6),
-                          _buildInfoItem('Work Details / Remarks', data.remarks),
+                          _buildInfoItem(
+                              'Work Details / Remarks', data.remarks),
                         ],
                       ],
                     ),
@@ -225,7 +239,8 @@ class WorkPhotoReportPdfService {
                     ),
                     pw.Text(
                       'Total Attached: ${photoMemoryImages.length}',
-                      style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                      style: const pw.TextStyle(
+                          fontSize: 8, color: PdfColors.grey700),
                     ),
                   ],
                 ),
@@ -242,14 +257,16 @@ class WorkPhotoReportPdfService {
                       final photoIndex = pageIdx * 4 + i + 1;
                       return pw.Container(
                         decoration: pw.BoxDecoration(
-                          border: pw.Border.all(color: PdfColors.grey400, width: 0.8),
+                          border: pw.Border.all(
+                              color: PdfColors.grey400, width: 0.8),
                           borderRadius: pw.BorderRadius.circular(4),
                         ),
                         padding: const pw.EdgeInsets.all(4),
                         child: pw.Column(
                           children: [
                             pw.Expanded(
-                              child: pw.Image(pagePhotos[i], fit: pw.BoxFit.cover),
+                              child:
+                                  pw.Image(pagePhotos[i], fit: pw.BoxFit.cover),
                             ),
                             pw.SizedBox(height: 3),
                             pw.Text(
@@ -275,7 +292,8 @@ class WorkPhotoReportPdfService {
                     ),
                     child: pw.Text(
                       'No site photos attached to this report.',
-                      style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+                      style: const pw.TextStyle(
+                          fontSize: 10, color: PdfColors.grey600),
                     ),
                   ),
 
@@ -291,11 +309,13 @@ class WorkPhotoReportPdfService {
                       children: [
                         pw.Text(
                           'Fusion Electro Mechanical Maintenance L.L.C  |  Site Work Evidence',
-                          style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey600),
+                          style: const pw.TextStyle(
+                              fontSize: 6.5, color: PdfColors.grey600),
                         ),
                         pw.Text(
                           'Page ${pageIdx + 1} of ${chunks.length}  |  Generated $printTimestamp',
-                          style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey600),
+                          style: const pw.TextStyle(
+                              fontSize: 6.5, color: PdfColors.grey600),
                         ),
                       ],
                     ),

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
 class CameraCaptureResult {
@@ -15,37 +16,43 @@ class CameraCaptureResult {
   });
 }
 
+/// Top-level isolate worker for CPU-intensive image resizing & compression
+Uint8List _compressCameraImageWorker(Uint8List rawBytes) {
+  try {
+    final decodedImage = img.decodeImage(rawBytes);
+    if (decodedImage != null) {
+      img.Image resizedImage;
+      if (decodedImage.width > 480 || decodedImage.height > 480) {
+        if (decodedImage.width > decodedImage.height) {
+          resizedImage = img.copyResize(decodedImage, width: 480);
+        } else {
+          resizedImage = img.copyResize(decodedImage, height: 480);
+        }
+      } else {
+        resizedImage = decodedImage;
+      }
+
+      final compressedBytes = img.encodeJpg(resizedImage, quality: 65);
+      return Uint8List.fromList(compressedBytes);
+    }
+  } catch (_) {}
+  return rawBytes;
+}
+
 class CameraService {
-  /// Processes, downscales, and compresses camera snapshots to ~25 KB - 45 KB (99% size reduction)
+  /// Processes, downscales, and compresses camera snapshots in a background isolate
   static Future<CameraCaptureResult> processXFile(XFile file) async {
     final rawBytes = await file.readAsBytes();
 
-    List<int> processedBytes = rawBytes;
+    // Offload CPU heavy image decoding and resizing to background isolate
+    final processedBytes = await compute(_compressCameraImageWorker, rawBytes);
+
     try {
-      final decodedImage = img.decodeImage(rawBytes);
-      if (decodedImage != null) {
-        // Downscale image to max 480px preserving aspect ratio
-        img.Image resizedImage;
-        if (decodedImage.width > 480 || decodedImage.height > 480) {
-          if (decodedImage.width > decodedImage.height) {
-            resizedImage = img.copyResize(decodedImage, width: 480);
-          } else {
-            resizedImage = img.copyResize(decodedImage, height: 480);
-          }
-        } else {
-          resizedImage = decodedImage;
-        }
-
-        // Compress JPEG to 65% quality
-        processedBytes = img.encodeJpg(resizedImage, quality: 65);
-
-        // Overwrite file with compressed image bytes
-        final compressedFile = File(file.path);
+      final compressedFile = File(file.path);
+      if (await compressedFile.exists()) {
         await compressedFile.writeAsBytes(processedBytes);
       }
-    } catch (_) {
-      // Fallback to original raw bytes if decoding fails
-    }
+    } catch (_) {}
 
     final base64Image = base64Encode(processedBytes);
 

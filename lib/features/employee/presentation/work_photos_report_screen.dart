@@ -53,6 +53,22 @@ class _WorkPhotosReportScreenState extends State<WorkPhotosReportScreen> {
     });
   }
 
+  final Map<String, Uint8List> _base64Cache = {};
+
+  Uint8List? _getOrDecodeBase64(String photoStr) {
+    if (_base64Cache.containsKey(photoStr)) {
+      return _base64Cache[photoStr];
+    }
+    final cleanB64 = photoStr.contains(',') ? photoStr.split(',').last : photoStr;
+    try {
+      final decoded = base64Decode(cleanB64.trim());
+      _base64Cache[photoStr] = decoded;
+      return decoded;
+    } catch (_) {
+      return null;
+    }
+  }
+
   void _loadEmployeeData() {
     final user = _db.currentUser;
     if (user != null) {
@@ -150,7 +166,7 @@ class _WorkPhotosReportScreenState extends State<WorkPhotosReportScreen> {
     }
 
     final data = _buildReportData();
-    final pdfBytes = await WorkPhotoReportPdfService.buildPdfBytes(data);
+    final pdfBytes = await WorkPhotoReportPdfService.buildPdfBytesAsync(data);
 
     if (!mounted) return;
     final dateStr = DateFormat('yyyyMMdd').format(_reportDate);
@@ -174,7 +190,7 @@ class _WorkPhotosReportScreenState extends State<WorkPhotosReportScreen> {
     }
 
     final data = _buildReportData();
-    final pdfBytes = await WorkPhotoReportPdfService.buildPdfBytes(data);
+    final pdfBytes = await WorkPhotoReportPdfService.buildPdfBytesAsync(data);
 
     final dateStr = DateFormat('yyyyMMdd').format(_reportDate);
     await Printing.sharePdf(
@@ -632,12 +648,8 @@ class _WorkPhotosReportScreenState extends State<WorkPhotosReportScreen> {
                         ),
                         itemCount: _photosList.length,
                         itemBuilder: (ctx, idx) {
-                          final b64 = _photosList[idx];
-                          final cleanB64 = b64.contains(',') ? b64.split(',').last : b64;
-                          Uint8List? bytes;
-                          try {
-                            bytes = base64Decode(cleanB64);
-                          } catch (_) {}
+                          final photoStr = _photosList[idx];
+                          final Uint8List? bytes = _getOrDecodeBase64(photoStr);
 
                           return GestureDetector(
                             onTap: () {

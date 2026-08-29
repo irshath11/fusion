@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -122,8 +123,12 @@ class LocalDatabaseService {
         } catch (_) {}
       }
 
-      // Check live setup status against Supabase table 'organizations'
-      await checkSetupStatusFromSupabase();
+      // Non-blocking background setup check if already completed locally
+      if (_isSetupCompleted) {
+        unawaited(checkSetupStatusFromSupabase());
+      } else {
+        await checkSetupStatusFromSupabase();
+      }
     } catch (e) {
       debugPrint('Hive database initialization warning: $e');
     }
@@ -960,7 +965,7 @@ class LocalDatabaseService {
     int maxSeq = 2000;
 
     // Scan all saved reports to find highest existing sequence for this prefix
-    final reports = getAllSavedServiceReports();
+    final reports = getAllSavedServiceReports(forceRefresh: true);
     final prefixPattern = 'SR-$prefix-';
     for (final item in reports) {
       final ref = (item['reportRefNumber'] ?? item['ref_number'] ?? '').toString();
@@ -990,6 +995,8 @@ class LocalDatabaseService {
     return 'SR-$prefix-$seq';
   }
 
+  List<Map<String, dynamic>>? _cachedServiceReports;
+
   /// Save service report to local offline Hive storage
   Future<void> saveServiceReportLocally(Map<String, dynamic> reportData) async {
     try {
@@ -1018,6 +1025,7 @@ class LocalDatabaseService {
 
       await _settingsBox?.put(
           'pending_service_reports_json', jsonEncode(decoded));
+      _cachedServiceReports = null; // Invalidate memory cache
       debugPrint('Service report $refNumber saved locally to offline storage queue.');
     } catch (e) {
       debugPrint('Error saving service report locally: $e');
@@ -1027,13 +1035,8 @@ class LocalDatabaseService {
   /// Retrieve all pending offline service reports awaiting sync
   List<Map<String, dynamic>> getPendingLocalServiceReports() {
     try {
-      final String jsonStr =
-          _settingsBox?.get('pending_service_reports_json', defaultValue: '[]');
-      final List decoded = jsonDecode(jsonStr);
-      return decoded
-          .where((item) => item['syncStatus'] == 'pending')
-          .map((item) => Map<String, dynamic>.from(item))
-          .toList();
+      final all = getAllSavedServiceReports();
+      return all.where((item) => item['syncStatus'] == 'pending').toList();
     } catch (e) {
       return [];
     }
@@ -1055,18 +1058,24 @@ class LocalDatabaseService {
 
       await _settingsBox?.put(
           'pending_service_reports_json', jsonEncode(decoded));
+      _cachedServiceReports = null; // Invalidate memory cache
     } catch (e) {
       debugPrint('Error marking service report synced: $e');
     }
   }
 
-  /// Retrieve all locally saved service reports (both synced and pending)
-  List<Map<String, dynamic>> getAllSavedServiceReports() {
+  /// Retrieve all locally saved service reports (both synced and pending) with in-memory caching
+  List<Map<String, dynamic>> getAllSavedServiceReports({bool forceRefresh = false}) {
+    if (!forceRefresh && _cachedServiceReports != null) {
+      return List<Map<String, dynamic>>.from(_cachedServiceReports!);
+    }
+
     try {
       final String jsonStr =
           _settingsBox?.get('pending_service_reports_json', defaultValue: '[]');
       final List decoded = jsonDecode(jsonStr);
-      return decoded.map((item) => Map<String, dynamic>.from(item)).toList();
+      _cachedServiceReports = decoded.map((item) => Map<String, dynamic>.from(item)).toList();
+      return List<Map<String, dynamic>>.from(_cachedServiceReports!);
     } catch (e) {
       return [];
     }
@@ -1076,6 +1085,7 @@ class LocalDatabaseService {
   Future<void> clearServiceReportsCache() async {
     try {
       await _settingsBox?.delete('pending_service_reports_json');
+      _cachedServiceReports = null; // Invalidate memory cache
       debugPrint('Service reports local cache cleared successfully.');
     } catch (e) {
       debugPrint('Error clearing service reports cache: $e');
@@ -1089,8 +1099,13 @@ class LocalDatabaseService {
           _settingsBox?.get('pending_service_reports_json', defaultValue: '[]');
       final List decoded = jsonDecode(jsonStr);
 
+      final Set<String> cloudRefNumbers = cloudReports
+          .map((c) => (c['reportRefNumber'] ?? c['ref_number'] ?? '').toString())
+          .where((ref) => ref.isNotEmpty)
+          .toSet();
+
       for (final cloud in cloudReports) {
-        final String refNumber = cloud['reportRefNumber'] ?? '';
+        final String refNumber = (cloud['reportRefNumber'] ?? cloud['ref_number'] ?? '').toString();
         if (refNumber.isEmpty) continue;
 
         final idx = decoded.indexWhere((item) => item['reportRefNumber'] == refNumber);
@@ -1104,8 +1119,19 @@ class LocalDatabaseService {
         }
       }
 
+      // Purge local reports that were marked as synced but are no longer in the cloud DB (e.g. deleted from cloud DB)
+      decoded.removeWhere((item) {
+        final String ref = (item['reportRefNumber'] ?? '').toString();
+        final String status = (item['syncStatus'] ?? '').toString();
+        if (status == 'synced' && ref.isNotEmpty && !cloudRefNumbers.contains(ref)) {
+          return true;
+        }
+        return false;
+      });
+
       await _settingsBox?.put(
           'pending_service_reports_json', jsonEncode(decoded));
+      _cachedServiceReports = null; // Invalidate memory cache
     } catch (e) {
       debugPrint('Error merging cloud service reports: $e');
     }
@@ -1138,6 +1164,8 @@ class LocalDatabaseService {
     }
   }
 
+  List<Map<String, dynamic>>? _cachedWorkPhotoSubmissions;
+
   /// Save work site photos submission to local offline Hive storage
   Future<void> saveWorkPhotoSubmissionLocally(Map<String, dynamic> submissionData) async {
     try {
@@ -1159,19 +1187,25 @@ class LocalDatabaseService {
 
       decoded.insert(0, payload);
       await _settingsBox?.put('work_photo_submissions_json', jsonEncode(decoded));
+      _cachedWorkPhotoSubmissions = null; // Invalidate cache
       debugPrint('Work photo submission saved locally with ${(payload['photos'] as List).length} image(s).');
     } catch (e) {
       debugPrint('Error saving work photo submission locally: $e');
     }
   }
 
-  /// Get all saved work photo submissions
-  List<Map<String, dynamic>> getSavedWorkPhotoSubmissions() {
+  /// Get all saved work photo submissions (with in-memory caching for peak UI performance)
+  List<Map<String, dynamic>> getSavedWorkPhotoSubmissions({bool forceRefresh = false}) {
+    if (!forceRefresh && _cachedWorkPhotoSubmissions != null) {
+      return List<Map<String, dynamic>>.from(_cachedWorkPhotoSubmissions!);
+    }
+
     try {
       final String jsonStr =
           _settingsBox?.get('work_photo_submissions_json', defaultValue: '[]');
       final List decoded = jsonDecode(jsonStr);
-      return decoded.map((item) => Map<String, dynamic>.from(item)).toList();
+      _cachedWorkPhotoSubmissions = decoded.map((item) => Map<String, dynamic>.from(item)).toList();
+      return List<Map<String, dynamic>>.from(_cachedWorkPhotoSubmissions!);
     } catch (e) {
       return [];
     }
@@ -1211,6 +1245,7 @@ class LocalDatabaseService {
 
       if (updated) {
         await _settingsBox?.put('work_photo_submissions_json', jsonEncode(decoded));
+        _cachedWorkPhotoSubmissions = null; // Invalidate cache
         debugPrint('Work photo submission #$id marked as synced.');
       }
     } catch (e) {
@@ -1227,6 +1262,7 @@ class LocalDatabaseService {
 
       decoded.removeWhere((item) => item['id']?.toString() == id);
       await _settingsBox?.put('work_photo_submissions_json', jsonEncode(decoded));
+      _cachedWorkPhotoSubmissions = null; // Invalidate cache
       debugPrint('Deleted work photo submission #$id.');
     } catch (e) {
       debugPrint('Error deleting work photo submission: $e');

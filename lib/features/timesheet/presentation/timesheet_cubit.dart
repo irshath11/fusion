@@ -62,42 +62,50 @@ class TimesheetCubit extends Cubit<TimesheetState> {
         return;
       }
 
+      // Render local records immediately (Instant load)
+      _calculateAndEmitTimesheet(empId, currentUser);
+
+      // Async cloud sync in background (non-blocking)
       try {
         final cloudRecords = await SupabaseService().fetchAttendanceRecordsFromSupabase();
         if (cloudRecords.isNotEmpty) {
           for (final record in cloudRecords) {
             _db.saveAttendanceRecord(record);
           }
+          // Refresh timesheet UI if new cloud records were fetched
+          _calculateAndEmitTimesheet(empId, currentUser);
         }
       } catch (_) {}
-
-      final allRecords = _db.getAttendanceRecords();
-      final entries = TimesheetCalculator.calculateDailyTimesheets(
-        allRecords,
-        targetEmployeeId: empId,
-        targetFirebaseUid: currentUser?.firebaseUid,
-        targetEmployeeName: currentUser?.fullName,
-      );
-
-      double totalReg = 0.0;
-      double totalOt = 0.0;
-
-      for (final entry in entries) {
-        totalReg += entry.regularHours;
-        totalOt += entry.overtimeHours;
-      }
-
-      emit(
-        TimesheetLoaded(
-          entries: entries,
-          totalRegularHours: totalReg,
-          totalOvertimeHours: totalOt,
-          totalCombinedHours: totalReg + totalOt,
-          totalDaysWorked: entries.length,
-        ),
-      );
     } catch (e) {
       emit(TimesheetError('Failed to calculate timesheet: ${e.toString()}'));
     }
+  }
+
+  void _calculateAndEmitTimesheet(String empId, dynamic currentUser) {
+    final allRecords = _db.getAttendanceRecords();
+    final entries = TimesheetCalculator.calculateDailyTimesheets(
+      allRecords,
+      targetEmployeeId: empId,
+      targetFirebaseUid: currentUser?.firebaseUid,
+      targetEmployeeName: currentUser?.fullName,
+    );
+
+    double totalReg = 0.0;
+    double totalOt = 0.0;
+
+    for (final entry in entries) {
+      totalReg += entry.regularHours;
+      totalOt += entry.overtimeHours;
+    }
+
+    emit(
+      TimesheetLoaded(
+        entries: entries,
+        totalRegularHours: totalReg,
+        totalOvertimeHours: totalOt,
+        totalCombinedHours: totalReg + totalOt,
+        totalDaysWorked: entries.length,
+      ),
+    );
   }
 }

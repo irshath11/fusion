@@ -103,6 +103,7 @@ class _EmployeeReportGeneratorScreenState
     if (widget.existingReport != null) {
       _loadExistingReport(widget.existingReport!);
     } else {
+      _refNumber = _db.generateNextFullRefNumber();
       _initRefNumber();
       _loadEmployeeData();
     }
@@ -182,10 +183,13 @@ class _EmployeeReportGeneratorScreenState
     return false;
   }
 
-  void _initRefNumber() {
-    setState(() {
-      _refNumber = _db.generateNextFullRefNumber();
-    });
+  Future<void> _initRefNumber() async {
+    await SupabaseService().syncPendingServiceReports();
+    if (mounted) {
+      setState(() {
+        _refNumber = _db.generateNextFullRefNumber();
+      });
+    }
   }
 
   Future<void> _triggerManualSync() async {
@@ -345,10 +349,6 @@ class _EmployeeReportGeneratorScreenState
 
   Future<void> _previewPdfReport() async {
     final reportData = _buildServiceReportData();
-
-    // Save locally & attempt background cloud save
-    await _db.saveServiceReportLocally(reportData.toJson());
-    SupabaseService().syncPendingServiceReports();
 
     if (!mounted) return;
 
@@ -646,69 +646,117 @@ class _EmployeeReportGeneratorScreenState
                       decoration: _inputDecoration('Location', isDark),
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _appointmentTimeController,
-                            readOnly: true,
-                            onTap: () => _selectTime(_appointmentTimeController),
-                            decoration: _inputDecoration('Appointment Time', isDark).copyWith(
-                              suffixIcon: const Icon(Icons.access_time_rounded, size: 18),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        if (constraints.maxWidth < 480) {
+                          return Column(
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _appointmentTimeController,
+                                      readOnly: true,
+                                      onTap: () => _selectTime(_appointmentTimeController),
+                                      decoration: _inputDecoration('Appointment Time', isDark).copyWith(
+                                        suffixIcon: const Icon(Icons.access_time_rounded, size: 18),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _attendedTimeController,
+                                      readOnly: true,
+                                      onTap: () => _selectTime(_attendedTimeController),
+                                      decoration: _inputDecoration('Attended Time', isDark).copyWith(
+                                        suffixIcon: const Icon(Icons.access_time_filled_rounded, size: 18),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              TextFormField(
+                                controller: _callBookingTimeController,
+                                readOnly: true,
+                                onTap: () => _selectTime(_callBookingTimeController),
+                                decoration: _inputDecoration('Call Booking Time', isDark).copyWith(
+                                  suffixIcon: const Icon(Icons.more_time_rounded, size: 18),
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: _appointmentTimeController,
+                                readOnly: true,
+                                onTap: () => _selectTime(_appointmentTimeController),
+                                decoration: _inputDecoration('Appointment Time', isDark).copyWith(
+                                  suffixIcon: const Icon(Icons.access_time_rounded, size: 18),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _attendedTimeController,
-                            readOnly: true,
-                            onTap: () => _selectTime(_attendedTimeController),
-                            decoration: _inputDecoration('Attended Time', isDark).copyWith(
-                              suffixIcon: const Icon(Icons.access_time_filled_rounded, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextFormField(
+                                controller: _attendedTimeController,
+                                readOnly: true,
+                                onTap: () => _selectTime(_attendedTimeController),
+                                decoration: _inputDecoration('Attended Time', isDark).copyWith(
+                                  suffixIcon: const Icon(Icons.access_time_filled_rounded, size: 18),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _callBookingTimeController,
-                            readOnly: true,
-                            onTap: () => _selectTime(_callBookingTimeController),
-                            decoration: _inputDecoration('Call Booking Time', isDark).copyWith(
-                              suffixIcon: const Icon(Icons.more_time_rounded, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextFormField(
+                                controller: _callBookingTimeController,
+                                readOnly: true,
+                                onTap: () => _selectTime(_callBookingTimeController),
+                                decoration: _inputDecoration('Call Booking Time', isDark).copyWith(
+                                  suffixIcon: const Icon(Icons.more_time_rounded, size: 18),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      ],
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 16),
                     const Divider(),
                     const SizedBox(height: 8),
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         const Text(
                           'Call Type: ',
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                         const SizedBox(width: 12),
-                        Wrap(
-                          spacing: 16,
-                          children: ['Complaint', 'Breakdown', 'Preventive'].map((type) {
-                            final isSelected = _selectedCallType == type;
-                            return ChoiceChip(
-                              label: Text(type),
-                              selected: isSelected,
-                              selectedColor: AppColors.primary,
-                              labelStyle: TextStyle(
-                                color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              ),
-                              onSelected: (val) {
-                                setState(() => _selectedCallType = val ? type : '');
-                              },
-                            );
-                          }).toList(),
+                        Expanded(
+                          child: Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
+                            children: ['Complaint', 'Breakdown', 'Preventive'].map((type) {
+                              final isSelected = _selectedCallType == type;
+                              return ChoiceChip(
+                                label: Text(type),
+                                selected: isSelected,
+                                selectedColor: AppColors.primary,
+                                labelStyle: TextStyle(
+                                  color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                ),
+                                onSelected: (val) {
+                                  setState(() => _selectedCallType = val ? type : '');
+                                },
+                              );
+                            }).toList(),
+                          ),
                         ),
                       ],
                     ),
@@ -765,29 +813,33 @@ class _EmployeeReportGeneratorScreenState
                     const Divider(),
                     const SizedBox(height: 8),
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         const Text(
                           'Priority: ',
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                         const SizedBox(width: 16),
-                        Wrap(
-                          spacing: 16,
-                          children: ['Urgent', 'Normal'].map((prio) {
-                            final isSelected = _selectedPriority == prio;
-                            return ChoiceChip(
-                              label: Text(prio),
-                              selected: isSelected,
-                              selectedColor: prio == 'Urgent' ? Colors.redAccent : AppColors.primary,
-                              labelStyle: TextStyle(
-                                color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              ),
-                              onSelected: (val) {
-                                setState(() => _selectedPriority = val ? prio : '');
-                              },
-                            );
-                          }).toList(),
+                        Expanded(
+                          child: Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
+                            children: ['Urgent', 'Normal'].map((prio) {
+                              final isSelected = _selectedPriority == prio;
+                              return ChoiceChip(
+                                label: Text(prio),
+                                selected: isSelected,
+                                selectedColor: prio == 'Urgent' ? Colors.redAccent : AppColors.primary,
+                                labelStyle: TextStyle(
+                                  color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                ),
+                                onSelected: (val) {
+                                  setState(() => _selectedPriority = val ? prio : '');
+                                },
+                              );
+                            }).toList(),
+                          ),
                         ),
                       ],
                     ),
@@ -814,68 +866,74 @@ class _EmployeeReportGeneratorScreenState
                 isDark: isDark,
                 title: '4. Material Used (Table)',
                 icon: Icons.inventory_2_rounded,
-                child: Column(
-                  children: [
-                    // Header Row
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Row(
-                        children: [
-                          Expanded(flex: 3, child: Text('Material Used', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                          SizedBox(width: 6),
-                          Expanded(flex: 1, child: Text('Qty', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                          SizedBox(width: 12),
-                          Expanded(flex: 3, child: Text('Material Used', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                          SizedBox(width: 6),
-                          Expanded(flex: 1, child: Text('Qty', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: 560,
+                    child: Column(
+                      children: [
+                        // Header Row
+                        Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Row(
+                            children: [
+                              Expanded(flex: 3, child: Text('Material Used', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                              SizedBox(width: 6),
+                              Expanded(flex: 1, child: Text('Qty', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                              SizedBox(width: 12),
+                              Expanded(flex: 3, child: Text('Material Used', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                              SizedBox(width: 6),
+                              Expanded(flex: 1, child: Text('Qty', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        // 5 Rows
+                        for (int i = 0; i < 5; i++) ...[
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: TextFormField(
+                                  controller: _matControllers1[i],
+                                  decoration: _inputDecoration('Material ${i + 1}A', isDark),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                flex: 1,
+                                child: TextFormField(
+                                  controller: _qtyControllers1[i],
+                                  decoration: _inputDecoration('Qty', isDark),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 3,
+                                child: TextFormField(
+                                  controller: _matControllers2[i],
+                                  decoration: _inputDecoration('Material ${i + 1}B', isDark),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                flex: 1,
+                                child: TextFormField(
+                                  controller: _qtyControllers2[i],
+                                  decoration: _inputDecoration('Qty', isDark),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (i < 4) const SizedBox(height: 8),
                         ],
-                      ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    // 5 Rows
-                    for (int i = 0; i < 5; i++) ...[
-                      Row(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: TextFormField(
-                              controller: _matControllers1[i],
-                              decoration: _inputDecoration('Material ${i + 1}A', isDark),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            flex: 1,
-                            child: TextFormField(
-                              controller: _qtyControllers1[i],
-                              decoration: _inputDecoration('Qty', isDark),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            flex: 3,
-                            child: TextFormField(
-                              controller: _matControllers2[i],
-                              decoration: _inputDecoration('Material ${i + 1}B', isDark),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            flex: 1,
-                            child: TextFormField(
-                              controller: _qtyControllers2[i],
-                              decoration: _inputDecoration('Qty', isDark),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (i < 4) const SizedBox(height: 8),
-                    ],
-                  ],
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -915,29 +973,33 @@ class _EmployeeReportGeneratorScreenState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         const Text(
                           'Service Performance: ',
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                         const SizedBox(width: 12),
-                        Wrap(
-                          spacing: 12,
-                          children: ['Satisfactory', 'Unsatisfactory'].map((rating) {
-                            final isSelected = _performanceRating == rating;
-                            return ChoiceChip(
-                              label: Text(rating),
-                              selected: isSelected,
-                              selectedColor: rating == 'Satisfactory' ? Colors.green : Colors.deepOrange,
-                              labelStyle: TextStyle(
-                                color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              ),
-                              onSelected: (val) {
-                                setState(() => _performanceRating = val ? rating : '');
-                              },
-                            );
-                          }).toList(),
+                        Expanded(
+                          child: Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
+                            children: ['Satisfactory', 'Unsatisfactory'].map((rating) {
+                              final isSelected = _performanceRating == rating;
+                              return ChoiceChip(
+                                label: Text(rating),
+                                selected: isSelected,
+                                selectedColor: rating == 'Satisfactory' ? Colors.green : Colors.deepOrange,
+                                labelStyle: TextStyle(
+                                  color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                ),
+                                onSelected: (val) {
+                                  setState(() => _performanceRating = val ? rating : '');
+                                },
+                              );
+                            }).toList(),
+                          ),
                         ),
                       ],
                     ),
@@ -951,29 +1013,33 @@ class _EmployeeReportGeneratorScreenState
                     const Divider(),
                     const SizedBox(height: 8),
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         const Text(
                           'Housekeeping Completed: ',
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                         const SizedBox(width: 16),
-                        Wrap(
-                          spacing: 16,
-                          children: ['Yes', 'No'].map((opt) {
-                            final isSelected = _housekeepingCompleted == opt;
-                            return ChoiceChip(
-                              label: Text(opt),
-                              selected: isSelected,
-                              selectedColor: opt == 'Yes' ? Colors.green : Colors.red,
-                              labelStyle: TextStyle(
-                                color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              ),
-                              onSelected: (val) {
-                                setState(() => _housekeepingCompleted = val ? opt : '');
-                              },
-                            );
-                          }).toList(),
+                        Expanded(
+                          child: Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
+                            children: ['Yes', 'No'].map((opt) {
+                              final isSelected = _housekeepingCompleted == opt;
+                              return ChoiceChip(
+                                label: Text(opt),
+                                selected: isSelected,
+                                selectedColor: opt == 'Yes' ? Colors.green : Colors.red,
+                                labelStyle: TextStyle(
+                                  color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                ),
+                                onSelected: (val) {
+                                  setState(() => _housekeepingCompleted = val ? opt : '');
+                                },
+                              );
+                            }).toList(),
+                          ),
                         ),
                       ],
                     ),
@@ -982,13 +1048,64 @@ class _EmployeeReportGeneratorScreenState
               ),
               const SizedBox(height: 16),
 
-              // ================= 8th Section: Four Signatures in a Row =================
+              // ================= 8th Section: Four Signatures =================
               _buildSectionCard(
                 isDark: isDark,
-                title: '8. Authorizations & 4 Signatures (In Row)',
+                title: '8. Authorizations & 4 Signatures',
                 icon: Icons.draw_rounded,
-                child: Row(
-                  children: [
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth < 480) {
+                      return Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ESignaturePreviewBox(
+                                  label: 'Technician',
+                                  signatureBytes: _technicianSigBytes,
+                                  onTapSign: () => _openSignatureModalForRole('technician'),
+                                  onClear: () => setState(() => _technicianSigBytes = null),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: ESignaturePreviewBox(
+                                  label: 'Engineer',
+                                  signatureBytes: _engineerSigBytes,
+                                  onTapSign: () => _openSignatureModalForRole('engineer'),
+                                  onClear: () => setState(() => _engineerSigBytes = null),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ESignaturePreviewBox(
+                                  label: 'Supervisor',
+                                  signatureBytes: _supervisorSigBytes,
+                                  onTapSign: () => _openSignatureModalForRole('supervisor'),
+                                  onClear: () => setState(() => _supervisorSigBytes = null),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: ESignaturePreviewBox(
+                                  label: 'Customer',
+                                  signatureBytes: _customerSigBytes,
+                                  onTapSign: () => _openSignatureModalForRole('customer'),
+                                  onClear: () => setState(() => _customerSigBytes = null),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
                         Expanded(
                           child: ESignaturePreviewBox(
                             label: 'Technician',
@@ -1025,6 +1142,8 @@ class _EmployeeReportGeneratorScreenState
                           ),
                         ),
                       ],
+                    );
+                  },
                 ),
               ),
               const SizedBox(height: 24),

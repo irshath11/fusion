@@ -26,6 +26,22 @@ class ReportsAnalyticsScreen extends StatefulWidget {
 
 class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   final LocalDatabaseService _db = LocalDatabaseService();
+  final Map<String, Uint8List> _avatarBase64Cache = {};
+
+  Uint8List? _getOrDecodeAvatar(String photoStr) {
+    if (_avatarBase64Cache.containsKey(photoStr)) {
+      return _avatarBase64Cache[photoStr];
+    }
+    String base64Str = photoStr.contains(',') ? photoStr.split(',').last : photoStr;
+    base64Str = base64Str.replaceAll(RegExp(r'\s+'), '');
+    try {
+      final decoded = base64Decode(base64Str);
+      _avatarBase64Cache[photoStr] = decoded;
+      return decoded;
+    } catch (_) {
+      return null;
+    }
+  }
 
   String? _selectedEmployeeId;
   DateTime? _selectedDate;
@@ -2600,14 +2616,16 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         return Image.file(File(cleanPhoto), fit: BoxFit.cover);
       }
 
-      String base64Str = cleanPhoto;
-      if (base64Str.contains(',')) {
-        base64Str = base64Str.split(',').last;
+      final decodedBytes = _getOrDecodeAvatar(cleanPhoto);
+      if (decodedBytes != null) {
+        return Image.memory(decodedBytes, fit: BoxFit.cover);
       }
-      base64Str = base64Str.replaceAll(RegExp(r'\s+'), '');
-
-      final decodedBytes = base64Decode(base64Str);
-      return Image.memory(decodedBytes, fit: BoxFit.cover);
+      return Container(
+        color: Colors.blueGrey.shade800,
+        child: const Center(
+          child: Icon(Icons.person_pin, size: 65, color: Colors.white70),
+        ),
+      );
     } catch (_) {
       return Container(
         color: Colors.blueGrey.shade800,

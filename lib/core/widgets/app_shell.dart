@@ -20,10 +20,24 @@ class NavDestinationItem {
   }) : activeIcon = activeIcon ?? icon;
 }
 
+class AppShellActionItem {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  final Color? color;
+
+  const AppShellActionItem({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.color,
+  });
+}
+
 /// Adaptive Application Shell providing:
 /// - Floating Glass Bottom Navigation Dock on Mobile (< 750px)
 /// - Modern Collapsible Navigation Rail on Desktop/Tablet (>= 750px)
-/// - Top Command Bar with Sync Health Heartbeat & Theme Switcher
+/// - Top Command Bar with 3-Dot Options Dropdown & Role Badge
 class AppShell extends StatefulWidget {
   final String title;
   final int selectedIndex;
@@ -31,6 +45,7 @@ class AppShell extends StatefulWidget {
   final List<NavDestinationItem> destinations;
   final Widget body;
   final List<Widget>? actions;
+  final List<AppShellActionItem>? menuItems;
   final Widget? floatingActionButton;
   final String? userRoleLabel;
 
@@ -42,6 +57,7 @@ class AppShell extends StatefulWidget {
     required this.destinations,
     required this.body,
     this.actions,
+    this.menuItems,
     this.floatingActionButton,
     this.userRoleLabel,
   });
@@ -186,31 +202,18 @@ class _AppShellState extends State<AppShell> {
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(color: primary.withValues(alpha: 0.3)),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: primary,
-                              shape: BoxShape.circle,
-                            ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        child: Text(
+                          widget.userRoleLabel!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: primary,
                           ),
-                          const SizedBox(width: 5),
-                          Flexible(
-                            child: Text(
-                              widget.userRoleLabel!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: primary,
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -219,75 +222,121 @@ class _AppShellState extends State<AppShell> {
             ),
           ),
 
-          // Custom Actions
-          if (widget.actions != null) ...widget.actions!,
-
-          // Sync Heartbeat Status Indicator
-          Tooltip(
-            message: 'Supabase Cloud Sync: Online & Verified',
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              margin: const EdgeInsets.only(right: 8),
-              decoration: BoxDecoration(
-                color: AppColors.success.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: AppColors.success.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 7,
-                    height: 7,
-                    decoration: const BoxDecoration(
-                      color: AppColors.success,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  if (isWide) ...[
-                    const SizedBox(width: 6),
-                    const Text(
-                      'Synced',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.success,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-
-          // Quick Theme Selector Trigger
-          AppBounceable(
-            onTap: () => ThemeSelectorModal.show(context),
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.1)
-                      : Colors.black.withValues(alpha: 0.08),
-                ),
-              ),
-              child: Icon(
-                Icons.palette_outlined,
-                size: 20,
-                color: primary,
-              ),
-            ),
-          ),
+          // 3-Dot Options Dropdown Menu
+          _buildThreeDotMenu(context, isDark, palette, primary),
         ],
       ),
     ),
+    );
+  }
+
+  Widget _buildThreeDotMenu(
+    BuildContext context,
+    bool isDark,
+    AppThemePalette palette,
+    Color primary,
+  ) {
+    final List<AppShellActionItem> allItems = [
+      AppShellActionItem(
+        label: 'Online & Synced',
+        icon: Icons.circle,
+        onTap: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Supabase Cloud Sync: Online & Verified'),
+              backgroundColor: AppColors.success,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        },
+        color: AppColors.success,
+      ),
+      if (widget.menuItems != null) ...widget.menuItems!,
+      AppShellActionItem(
+        label: 'Theme Selector',
+        icon: Icons.palette_outlined,
+        onTap: () => ThemeSelectorModal.show(context),
+        color: primary,
+      ),
+    ];
+
+    return Theme(
+      data: Theme.of(context).copyWith(
+        cardColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      ),
+      child: PopupMenuButton<int>(
+        icon: Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.1)
+                  : Colors.black.withValues(alpha: 0.08),
+            ),
+          ),
+          child: Icon(
+            Icons.more_vert_rounded,
+            size: 20,
+            color: isDark ? Colors.white70 : AppColors.slate800,
+          ),
+        ),
+        tooltip: 'More Options',
+        offset: const Offset(0, 48),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: isDark
+                ? palette.cardBorderDark
+                : palette.cardBorderLight,
+          ),
+        ),
+        elevation: 8,
+        onSelected: (index) {
+          if (index >= 0 && index < allItems.length) {
+            allItems[index].onTap();
+          }
+        },
+        itemBuilder: (menuCtx) {
+          return List.generate(allItems.length, (index) {
+            final item = allItems[index];
+            final itemColor = item.color ?? (isDark ? Colors.white.withValues(alpha: 0.87) : AppColors.slate800);
+            final isOnlineItem = item.label == 'Online & Synced';
+
+            return PopupMenuItem<int>(
+              value: index,
+              child: Row(
+                children: [
+                  if (isOnlineItem)
+                    Container(
+                      width: 9,
+                      height: 9,
+                      margin: const EdgeInsets.only(left: 5, right: 6),
+                      decoration: const BoxDecoration(
+                        color: AppColors.success,
+                        shape: BoxShape.circle,
+                      ),
+                    )
+                  else
+                    Icon(item.icon, size: 20, color: itemColor),
+                  const SizedBox(width: 12),
+                  Text(
+                    item.label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: itemColor,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          });
+        },
+      ),
     );
   }
 

@@ -214,12 +214,14 @@ class ESignaturePadState extends State<ESignaturePad> {
                   widget.onSignatureChanged?.call(true);
                 }
               },
-              child: CustomPaint(
-                painter: _SignaturePainter(
-                  strokes: _strokes,
-                  currentStroke: _currentStroke,
+              child: RepaintBoundary(
+                child: CustomPaint(
+                  painter: _SignaturePainter(
+                    strokes: _strokes,
+                    currentStroke: _currentStroke,
+                  ),
+                  size: Size.infinite,
                 ),
-                size: Size.infinite,
               ),
             ),
             Positioned(

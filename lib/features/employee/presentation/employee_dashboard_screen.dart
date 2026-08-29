@@ -1514,41 +1514,33 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
       },
       destinations: destinations,
       userRoleLabel: 'Field Employee',
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.cleaning_services_rounded),
-          tooltip: 'Clear Local Cache',
-          onPressed: _showResetCacheDialog,
+      menuItems: [
+        AppShellActionItem(
+          label: 'Clear Local Cache',
+          icon: Icons.cleaning_services_rounded,
+          onTap: _showResetCacheDialog,
         ),
-        IconButton(
-          icon: const Icon(Icons.lock_reset_rounded),
-          tooltip: 'Change Password',
-          onPressed: _showChangePasswordDialog,
+        AppShellActionItem(
+          label: 'Change Password',
+          icon: Icons.lock_reset_rounded,
+          onTap: _showChangePasswordDialog,
         ),
-        IconButton(
-          icon: _isSyncing
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : const Icon(Icons.sync_rounded),
-          tooltip: _isSyncing ? 'Syncing...' : 'Sync Offline Queue',
-          onPressed: _isSyncing ? null : _manualSync,
+        AppShellActionItem(
+          label: _isSyncing ? 'Syncing...' : 'Sync Offline Queue',
+          icon: Icons.sync_rounded,
+          onTap: _isSyncing ? () {} : _manualSync,
         ),
-        IconButton(
-          icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
-          tooltip: 'Logout',
-          onPressed: () {
+        AppShellActionItem(
+          label: 'Logout',
+          icon: Icons.logout_rounded,
+          onTap: () {
             context.read<AuthCubit>().logout();
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(builder: (ctx) => const LoginScreen()),
               (route) => false,
             );
           },
+          color: Colors.redAccent,
         ),
       ],
       body: bodyWidget,
