@@ -711,11 +711,6 @@ class _EmployeeReportGeneratorScreenState
         elevation: 0,
         actions: [
           IconButton(
-            tooltip: 'AI Voice Assistant',
-            icon: const Icon(Icons.auto_awesome_rounded, color: Colors.amberAccent),
-            onPressed: _openAiAssistant,
-          ),
-          IconButton(
             tooltip: 'Saved Reports History',
             icon: const Icon(Icons.history_rounded, color: Colors.white),
             onPressed: () {
