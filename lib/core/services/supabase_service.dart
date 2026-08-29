@@ -1809,4 +1809,55 @@ class SupabaseService {
     }
     return syncedCount;
   }
+
+  /// Syncs all locally queued offline attendance records to Supabase
+  Future<int> syncPendingAttendanceRecords() async {
+    if (!_isInitialized || client == null) return 0;
+
+    final db = LocalDatabaseService();
+    final pending = db.getAllPendingSyncRecords();
+    if (pending.isEmpty) return 0;
+
+    int syncedCount = 0;
+    final List<String> syncedIds = [];
+
+    for (final record in pending) {
+      String? photoUrl;
+      if (record.photoBase64.isNotEmpty) {
+        try {
+          photoUrl = await uploadAttendancePhotoData(
+            photoDataOrPath: record.photoBase64,
+            recordId: record.id,
+          );
+        } catch (_) {}
+      }
+
+      final success = await insertAttendanceEntry(
+        record: record,
+        photoPublicUrl: photoUrl,
+      );
+
+      if (success) {
+        syncedIds.add(record.id);
+        syncedCount++;
+      }
+    }
+
+    if (syncedIds.isNotEmpty) {
+      db.markRecordsSynced(syncedIds);
+      debugPrint('Successfully synchronized $syncedCount offline attendance records to Supabase.');
+    }
+
+    return syncedCount;
+  }
+
+  /// Master sync method for all offline data (attendance records + service reports)
+  Future<({int attendanceSynced, int reportsSynced})> syncAllOfflineData() async {
+    final attendanceSynced = await syncPendingAttendanceRecords();
+    final reportsSynced = await syncPendingServiceReports();
+    if (attendanceSynced > 0 || reportsSynced > 0) {
+      await syncCloudDataToLocal();
+    }
+    return (attendanceSynced: attendanceSynced, reportsSynced: reportsSynced);
+  }
 }

@@ -1055,4 +1055,43 @@ class LocalDatabaseService {
       return [];
     }
   }
+
+  /// Save generated attendance/analytics report metadata to local offline storage
+  Future<void> saveGeneratedReportLocally(Map<String, dynamic> reportMeta) async {
+    try {
+      final String jsonStr =
+          _settingsBox?.get('generated_reports_history_json', defaultValue: '[]');
+      final List decoded = jsonDecode(jsonStr);
+
+      final payload = {
+        'id': reportMeta['id'] ?? _uuid.v4(),
+        'title': reportMeta['title'] ?? 'Attendance Report',
+        'type': reportMeta['type'] ?? 'PDF',
+        'createdAt': DateTime.now().toIso8601String(),
+        'recordCount': reportMeta['recordCount'] ?? 0,
+        'filterDetails': reportMeta['filterDetails'] ?? '',
+        'syncStatus': 'synced',
+      };
+
+      decoded.insert(0, payload);
+      if (decoded.length > 50) decoded.removeLast();
+
+      await _settingsBox?.put(
+          'generated_reports_history_json', jsonEncode(decoded));
+    } catch (e) {
+      debugPrint('Error saving generated report locally: $e');
+    }
+  }
+
+  /// Get all locally generated report metadata entries
+  List<Map<String, dynamic>> getGeneratedReportsLocally() {
+    try {
+      final String jsonStr =
+          _settingsBox?.get('generated_reports_history_json', defaultValue: '[]');
+      final List decoded = jsonDecode(jsonStr);
+      return decoded.map((item) => Map<String, dynamic>.from(item)).toList();
+    } catch (e) {
+      return [];
+    }
+  }
 }

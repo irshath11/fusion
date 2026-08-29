@@ -31,6 +31,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   DateTime? _selectedDate;
   String _searchQuery = '';
   bool _isLoadingCloud = false;
+  bool _isSyncing = false;
   int _activeTab =
       0; // 0 = Directory, 1 = Cumulative Summary, 2 = Site / Client Man-Hours
   String _siteDateFilter = 'all'; // 'all', 'month', 'week', 'today'
@@ -42,6 +43,49 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   void initState() {
     super.initState();
     _loadCloudAttendanceRecords();
+  }
+
+  Future<void> _syncOfflineData() async {
+    if (_isSyncing) return;
+    setState(() => _isSyncing = true);
+
+    try {
+      final res = await SupabaseService().syncAllOfflineData();
+      final total = res.attendanceSynced + res.reportsSynced;
+
+      if (!mounted) return;
+
+      if (total > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Successfully uploaded $total offline record(s) to Cloud Database!',
+            ),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('All local records & reports are already synced to Cloud Database.'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+      await _loadCloudAttendanceRecords();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Cloud Sync Note: $e. Your report data is safely saved in local storage.'),
+          backgroundColor: Colors.amber.shade800,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSyncing = false);
+      }
+    }
   }
 
   Future<void> _loadCloudAttendanceRecords() async {
@@ -387,6 +431,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  _buildSyncButton(),
+                  const SizedBox(width: 6),
                   IconButton(
                     icon: _isLoadingCloud
                         ? SizedBox(
@@ -2446,6 +2492,71 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   // ==========================================
   // HELPER WIDGETS & METHODS
   // ==========================================
+  Widget _buildSyncButton() {
+    final pendingAttendance = _db.getAllPendingSyncRecords().length;
+    final pendingReports = _db.getPendingLocalServiceReports().length;
+    final totalPending = pendingAttendance + pendingReports;
+
+    if (_isSyncing) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+            ),
+            SizedBox(width: 8),
+            Text(
+              'Syncing...',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (totalPending > 0) {
+      return ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.amber.shade800,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          elevation: 2,
+        ),
+        onPressed: _syncOfflineData,
+        icon: const Icon(Icons.cloud_upload_rounded, size: 16),
+        label: Text(
+          'Sync to DB ($totalPending)',
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+        ),
+      );
+    }
+
+    return OutlinedButton.icon(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.success,
+        side: const BorderSide(color: AppColors.success),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      onPressed: _syncOfflineData,
+      icon: const Icon(Icons.cloud_done_rounded, size: 16),
+      label: const Text(
+        'Synced to DB',
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
   Widget _buildPhotoWidget(String photoBase64) {
     final cleanPhoto = photoBase64.trim();
     if (cleanPhoto.isEmpty) {
@@ -2615,10 +2726,16 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         employee: emp,
         records: records,
       );
+      await _db.saveGeneratedReportLocally({
+        'title': '${emp.name} Attendance Report',
+        'type': 'PDF',
+        'recordCount': records.length,
+        'filterDetails': 'Employee: ${emp.name} (${emp.employeeCode})',
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${emp.name} PDF report ready for download/saving!'),
+            content: Text('${emp.name} PDF report saved & ready for download!'),
             backgroundColor: AppColors.primary,
           ),
         );
@@ -2644,10 +2761,16 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         employees: employees,
         records: records,
       );
+      await _db.saveGeneratedReportLocally({
+        'title': 'Cumulative Attendance Report',
+        'type': 'PDF',
+        'recordCount': records.length,
+        'filterDetails': '${employees.length} Employees, ${records.length} Logs',
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Cumulative PDF report ready for download/saving!'),
+            content: Text('Cumulative PDF report saved & ready for download!'),
             backgroundColor: AppColors.primary,
           ),
         );
