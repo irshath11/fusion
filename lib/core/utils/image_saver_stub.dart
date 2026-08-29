@@ -1,6 +1,19 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+
+const MethodChannel _mediaScannerChannel =
+    MethodChannel('com.fusion.attendance/media_scanner');
+
+Future<void> _scanFileNative(String path) async {
+  if (!Platform.isAndroid) return;
+  try {
+    await _mediaScannerChannel.invokeMethod('scanFile', {'filePath': path});
+  } catch (e) {
+    debugPrint('Native MediaScanner error: $e');
+  }
+}
 
 /// Saves image bytes directly to local storage / gallery without launching PDF or share dialogs.
 Future<String?> saveImageToDeviceImpl(Uint8List bytes, String filename) async {
@@ -22,6 +35,9 @@ Future<String?> saveImageToDeviceImpl(Uint8List bytes, String filename) async {
         final file = File('${targetDir.path}/$filename');
         await file.writeAsBytes(bytes);
         primarySavedPath = file.path;
+
+        // Instantly register with native Android MediaScannerConnection
+        await _scanFileNative(file.path);
       }
 
       // 2. Save directly to public Downloads folder as secondary location
@@ -30,6 +46,8 @@ Future<String?> saveImageToDeviceImpl(Uint8List bytes, String filename) async {
         final file = File('${downloadDir.path}/$filename');
         await file.writeAsBytes(bytes);
         primarySavedPath ??= file.path;
+
+        await _scanFileNative(file.path);
       }
 
       // 3. Fallback to external app storage directory
@@ -39,6 +57,8 @@ Future<String?> saveImageToDeviceImpl(Uint8List bytes, String filename) async {
           final file = File('${extDir.path}/$filename');
           await file.writeAsBytes(bytes);
           primarySavedPath ??= file.path;
+
+          await _scanFileNative(file.path);
         }
       } catch (e) {
         debugPrint('Error saving to external storage: $e');
