@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -6,11 +7,12 @@ import 'package:printing/printing.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/services/work_photo_report_pdf_service.dart';
+import '../../../core/utils/image_saver.dart';
 import '../../../database/local_database_service.dart';
-import 'work_photos_report_screen.dart';
 
 class WorkPhotoHistoryScreen extends StatefulWidget {
-  const WorkPhotoHistoryScreen({super.key});
+  final String? initialSearchQuery;
+  const WorkPhotoHistoryScreen({super.key, this.initialSearchQuery});
 
   @override
   State<WorkPhotoHistoryScreen> createState() => _WorkPhotoHistoryScreenState();
@@ -27,6 +29,10 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialSearchQuery != null &&
+        widget.initialSearchQuery!.trim().isNotEmpty) {
+      _searchController.text = widget.initialSearchQuery!.trim();
+    }
     _loadSubmissions();
     _searchController.addListener(_filterSubmissions);
   }
@@ -41,7 +47,8 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
       if (count > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Successfully synced $count offline report(s) to cloud!'),
+            content:
+                Text('Successfully synced $count offline report(s) to cloud!'),
             backgroundColor: Colors.green,
           ),
         );
@@ -56,7 +63,8 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Sync error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Sync error: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -69,23 +77,26 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
   Future<void> _syncSingleRecord(Map<String, dynamic> item) async {
     final id = item['id']?.toString();
     if (id == null) return;
-    
+
     setState(() => _isSyncing = true);
     try {
-      final success = await SupabaseService().syncSingleWorkPhotoSubmission(item);
+      final success =
+          await SupabaseService().syncSingleWorkPhotoSubmission(item);
       _loadSubmissions();
       if (!mounted) return;
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Successfully synced record "${item['workTitle'] ?? id}" to cloud!'),
+            content: Text(
+                'Successfully synced record "${item['workTitle'] ?? id}" to cloud!'),
             backgroundColor: Colors.green,
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Failed to sync record. Please check your internet connection.'),
+            content: Text(
+                'Failed to sync record. Please check your internet connection.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -93,7 +104,8 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Sync error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Sync error: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -115,7 +127,7 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
     });
 
     final records = _db.getSavedWorkPhotoSubmissions();
-    
+
     // Sort newest first
     records.sort((a, b) {
       final String da = a['createdAt'] ?? a['reportDate'] ?? '';
@@ -128,6 +140,9 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
       _filteredSubmissions = List.from(records);
       _isLoading = false;
     });
+    if (_searchController.text.isNotEmpty) {
+      _filterSubmissions();
+    }
   }
 
   void _filterSubmissions() {
@@ -159,7 +174,8 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
     if (_base64Cache.containsKey(photoStr)) {
       return _base64Cache[photoStr];
     }
-    final cleanB64 = photoStr.contains(',') ? photoStr.split(',').last : photoStr;
+    final cleanB64 =
+        photoStr.contains(',') ? photoStr.split(',').last : photoStr;
     try {
       final decoded = base64Decode(cleanB64.trim());
       _base64Cache[photoStr] = decoded;
@@ -169,8 +185,147 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
     }
   }
 
+  Future<Uint8List?> _fetchOrDecodeImageBytes(String photoStr) async {
+    final bool isNetwork =
+        photoStr.startsWith('http://') || photoStr.startsWith('https://');
+    if (!isNetwork) {
+      return _getOrDecodeBase64(photoStr);
+    }
+    try {
+      final request = await HttpClient().getUrl(Uri.parse(photoStr));
+      final response = await request.close();
+      if (response.statusCode == 200) {
+        final bytesList =
+            await response.fold<List<int>>([], (p, e) => p..addAll(e));
+        return Uint8List.fromList(bytesList);
+      }
+    } catch (e) {
+      debugPrint('Error fetching network photo bytes: $e');
+    }
+    return null;
+  }
+
+  String _getPhotoExtension(String photoStr, Uint8List? bytes) {
+    if (photoStr.toLowerCase().contains('.png') ||
+        photoStr.contains('image/png')) {
+      return 'png';
+    }
+    if (bytes != null && bytes.length >= 4) {
+      if (bytes[0] == 0x89 &&
+          bytes[1] == 0x50 &&
+          bytes[2] == 0x4E &&
+          bytes[3] == 0x47) {
+        return 'png';
+      }
+    }
+    return 'jpg';
+  }
+
+  Future<void> _downloadAllImages(Map<String, dynamic> submission) async {
+    final photos = (submission['photos'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        [];
+
+    if (photos.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No images found in this record to download.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      final reportDate = submission['reportDate'] != null
+          ? (DateTime.tryParse(submission['reportDate']) ?? DateTime.now())
+          : DateTime.now();
+      final dateStr = DateFormat('yyyyMMdd_HHmm').format(reportDate);
+
+      int successCount = 0;
+      String? lastSavePath;
+      for (int i = 0; i < photos.length; i++) {
+        final photoStr = photos[i];
+        final bytes = await _fetchOrDecodeImageBytes(photoStr);
+        if (bytes != null && bytes.isNotEmpty) {
+          final ext = _getPhotoExtension(photoStr, bytes);
+          final filename = 'Work_Image_${i + 1}_$dateStr.$ext';
+          final savedPath = await ImageSaver.saveImageToDevice(bytes, filename);
+          if (savedPath != null) {
+            successCount++;
+            lastSavePath = savedPath;
+          }
+        }
+      }
+
+      if (mounted && successCount > 0) {
+        final msg = lastSavePath != null && lastSavePath != 'Downloads'
+            ? 'Downloaded $successCount image(s) to device storage ($lastSavePath)'
+            : 'Downloaded $successCount image(s) directly to device Downloads folder!';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error exporting images: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _downloadSinglePhoto(String photoStr) async {
+    try {
+      final bytes = await _fetchOrDecodeImageBytes(photoStr);
+      if (bytes == null || bytes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('Could not load image bytes to download.'),
+                backgroundColor: Colors.orange),
+          );
+        }
+        return;
+      }
+
+      final ext = _getPhotoExtension(photoStr, bytes);
+      final filename =
+          'Work_Photo_${DateTime.now().millisecondsSinceEpoch}.$ext';
+
+      final savedPath = await ImageSaver.saveImageToDevice(bytes, filename);
+      if (mounted && savedPath != null) {
+        final msg = savedPath != 'Downloads'
+            ? 'Photo saved directly to $savedPath'
+            : 'Photo downloaded automatically to device Downloads folder!';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Failed to download photo: $e'),
+              backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   void _openFullImagePreview(String photoStr, int photoIndex, int totalPhotos) {
-    final bool isNetwork = photoStr.startsWith('http://') || photoStr.startsWith('https://');
+    final bool isNetwork =
+        photoStr.startsWith('http://') || photoStr.startsWith('https://');
     Uint8List? bytes;
     if (!isNetwork) {
       bytes = _getOrDecodeBase64(photoStr);
@@ -212,7 +367,8 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
                               loadingBuilder: (_, child, progress) {
                                 if (progress == null) return child;
                                 return const Center(
-                                  child: CircularProgressIndicator(color: Colors.white),
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white),
                                 );
                               },
                               errorBuilder: (_, __, ___) => const Center(
@@ -222,7 +378,8 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
                             )
                           : (bytes != null
                               ? Image.memory(bytes, fit: BoxFit.contain)
-                              : const Icon(Icons.broken_image, color: Colors.white)),
+                              : const Icon(Icons.broken_image,
+                                  color: Colors.white)),
                     ),
                   ),
                 ],
@@ -231,12 +388,27 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
             Positioned(
               top: 8,
               right: 8,
-              child: CircleAvatar(
-                backgroundColor: Colors.black.withValues(alpha: 0.7),
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () => Navigator.pop(ctx),
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    backgroundColor: Colors.black.withValues(alpha: 0.7),
+                    child: IconButton(
+                      tooltip: 'Download Photo',
+                      icon: const Icon(Icons.download_rounded,
+                          color: Colors.white),
+                      onPressed: () => _downloadSinglePhoto(photoStr),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  CircleAvatar(
+                    backgroundColor: Colors.black.withValues(alpha: 0.7),
+                    child: IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -282,7 +454,8 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
         titleSpacing: 0,
         title: const Text(
           'Uploaded Work Photos History',
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16),
+          style: TextStyle(
+              fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16),
           overflow: TextOverflow.ellipsis,
         ),
         backgroundColor: primaryColor,
@@ -330,10 +503,12 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
                       : null,
                   filled: true,
                   fillColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
+                    borderSide: BorderSide(
+                        color: isDark ? Colors.white12 : Colors.black12),
                   ),
                 ),
               ),
@@ -386,7 +561,8 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
                                     ? 'No records match your search'
                                     : 'No work photo records uploaded yet',
                                 style: TextStyle(
-                                  color: isDark ? Colors.white60 : Colors.black54,
+                                  color:
+                                      isDark ? Colors.white60 : Colors.black54,
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -395,27 +571,36 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
                           ),
                         )
                       : ListView.builder(
-                          padding: const EdgeInsets.only(left: 12, right: 12, top: 8, bottom: 48),
+                          padding: const EdgeInsets.only(
+                              left: 12, right: 12, top: 8, bottom: 48),
                           itemCount: _filteredSubmissions.length,
                           itemBuilder: (context, index) {
                             final item = _filteredSubmissions[index];
-                            final title = (item['workTitle'] ?? 'Work Photos Record').toString();
-                            final location = (item['location'] ?? 'Site Location').toString();
-                            final technician = (item['employeeName'] ?? '').toString();
+                            final title =
+                                (item['workTitle'] ?? 'Work Photos Record')
+                                    .toString();
+                            final location =
+                                (item['location'] ?? 'Site Location')
+                                    .toString();
+                            final technician =
+                                (item['employeeName'] ?? '').toString();
                             final remarks = (item['remarks'] ?? '').toString();
                             final photos = (item['photos'] as List<dynamic>?)
                                     ?.map((e) => e.toString())
                                     .toList() ??
                                 [];
 
-                            final syncStatus = (item['syncStatus'] ?? 'pending').toString();
+                            final syncStatus =
+                                (item['syncStatus'] ?? 'pending').toString();
                             final isSynced = syncStatus == 'synced';
 
                             final reportDate = item['reportDate'] != null
-                                ? (DateTime.tryParse(item['reportDate']) ?? DateTime.now())
+                                ? (DateTime.tryParse(item['reportDate']) ??
+                                    DateTime.now())
                                 : DateTime.now();
                             final formattedDate =
-                                DateFormat('dd MMM yyyy, hh:mm a').format(reportDate);
+                                DateFormat('dd MMM yyyy, hh:mm a')
+                                    .format(reportDate);
 
                             return Card(
                               margin: const EdgeInsets.only(bottom: 14),
@@ -423,10 +608,14 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(14),
                                 side: BorderSide(
-                                  color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+                                  color: isDark
+                                      ? Colors.white10
+                                      : Colors.black.withValues(alpha: 0.05),
                                 ),
                               ),
-                              color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                              color: isDark
+                                  ? const Color(0xFF1E293B)
+                                  : Colors.white,
                               child: Padding(
                                 padding: const EdgeInsets.all(14),
                                 child: Column(
@@ -434,27 +623,39 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
                                   children: [
                                     // Record Header Row
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Expanded(
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                title.isNotEmpty ? title : 'Work Photo Record #${index + 1}',
+                                                title.isNotEmpty
+                                                    ? title
+                                                    : 'Work Photo Record #${index + 1}',
                                                 style: TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   fontSize: 15,
-                                                  color: isDark ? Colors.white : Colors.black87,
+                                                  color: isDark
+                                                      ? Colors.white
+                                                      : Colors.black87,
                                                 ),
                                               ),
                                               if (location.isNotEmpty) ...[
                                                 const SizedBox(height: 2),
                                                 Row(
                                                   children: [
-                                                    Icon(Icons.location_on_rounded,
-                                                        size: 13, color: primaryColor),
+                                                    Icon(
+                                                      Icons.location_on_rounded,
+                                                      size: 13,
+                                                      color: isDark
+                                                          ? AppColors.primaryLight
+                                                          : primaryColor,
+                                                    ),
                                                     const SizedBox(width: 4),
                                                     Expanded(
                                                       child: Text(
@@ -474,64 +675,116 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
                                           ),
                                         ),
                                         Column(
-                                          crossAxisAlignment: CrossAxisAlignment.end,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.end,
                                           children: [
                                             Container(
                                               padding: const EdgeInsets.symmetric(
                                                   horizontal: 8, vertical: 4),
                                               decoration: BoxDecoration(
-                                                color: primaryColor.withValues(alpha: 0.12),
-                                                borderRadius: BorderRadius.circular(8),
-                                              ),
-                                              child: Text(
-                                                formattedDate,
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: primaryColor,
+                                                color: isDark
+                                                    ? AppColors.primaryLight
+                                                        .withValues(alpha: 0.2)
+                                                    : primaryColor.withValues(
+                                                        alpha: 0.12),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                border: Border.all(
+                                                  color: isDark
+                                                      ? AppColors.primaryLight
+                                                          .withValues(
+                                                              alpha: 0.5)
+                                                      : primaryColor
+                                                          .withValues(
+                                                              alpha: 0.3),
+                                                  width: 0.8,
                                                 ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.access_time_rounded,
+                                                    size: 12,
+                                                    color: isDark
+                                                        ? AppColors.primaryLight
+                                                        : primaryColor,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    formattedDate,
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: isDark
+                                                          ? AppColors.primaryLight
+                                                          : primaryColor,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ),
                                             const SizedBox(height: 4),
                                             InkWell(
-                                              onTap: isSynced ? null : () => _syncSingleRecord(item),
-                                              borderRadius: BorderRadius.circular(6),
+                                              onTap: isSynced
+                                                  ? null
+                                                  : () =>
+                                                      _syncSingleRecord(item),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
                                               child: Container(
-                                                padding: const EdgeInsets.symmetric(
-                                                    horizontal: 6, vertical: 3),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 3),
                                                 decoration: BoxDecoration(
                                                   color: isSynced
-                                                      ? Colors.green.withValues(alpha: 0.15)
-                                                      : Colors.orange.withValues(alpha: 0.2),
-                                                  borderRadius: BorderRadius.circular(6),
+                                                      ? Colors.green.withValues(
+                                                          alpha: 0.15)
+                                                      : Colors.orange
+                                                          .withValues(
+                                                              alpha: 0.2),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
                                                   border: Border.all(
                                                     color: isSynced
                                                         ? Colors.green.shade300
-                                                        : Colors.orange.shade400,
+                                                        : Colors
+                                                            .orange.shade400,
                                                     width: 0.8,
                                                   ),
                                                 ),
                                                 child: Row(
-                                                  mainAxisSize: MainAxisSize.min,
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
                                                   children: [
                                                     Icon(
                                                       isSynced
-                                                          ? Icons.check_circle_rounded
-                                                          : Icons.cloud_upload_rounded,
+                                                          ? Icons
+                                                              .check_circle_rounded
+                                                          : Icons
+                                                              .cloud_upload_rounded,
                                                       size: 11,
                                                       color: isSynced
-                                                          ? Colors.green.shade700
-                                                          : Colors.orange.shade900,
+                                                          ? Colors
+                                                              .green.shade700
+                                                          : Colors
+                                                              .orange.shade900,
                                                     ),
                                                     const SizedBox(width: 4),
                                                     Text(
-                                                      isSynced ? 'Synced' : 'Sync Now',
+                                                      isSynced
+                                                          ? 'Synced'
+                                                          : 'Sync Now',
                                                       style: TextStyle(
                                                         fontSize: 10,
-                                                        fontWeight: FontWeight.bold,
+                                                        fontWeight:
+                                                            FontWeight.bold,
                                                         color: isSynced
-                                                            ? Colors.green.shade700
-                                                            : Colors.orange.shade900,
+                                                          ? Colors.green.shade700
+                                                          : Colors.orange
+                                                              .shade900,
                                                       ),
                                                     ),
                                                   ],
@@ -550,7 +803,9 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
                                         style: TextStyle(
                                           fontSize: 11,
                                           fontStyle: FontStyle.italic,
-                                          color: isDark ? Colors.white54 : Colors.grey.shade600,
+                                          color: isDark
+                                              ? Colors.white54
+                                              : Colors.grey.shade600,
                                         ),
                                       ),
                                     ],
@@ -561,15 +816,19 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
                                         padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(
                                           color: isDark
-                                              ? Colors.white.withValues(alpha: 0.04)
+                                              ? Colors.white
+                                                  .withValues(alpha: 0.04)
                                               : Colors.grey.shade100,
-                                          borderRadius: BorderRadius.circular(6),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
                                         ),
                                         child: Text(
                                           remarks,
                                           style: TextStyle(
                                             fontSize: 12,
-                                            color: isDark ? Colors.white70 : Colors.black87,
+                                            color: isDark
+                                                ? Colors.white70
+                                                : Colors.black87,
                                           ),
                                         ),
                                       ),
@@ -579,21 +838,26 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
 
                                     // Uploaded Photos Section
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
                                         Text(
                                           'Uploaded Photos (${photos.length}):',
                                           style: TextStyle(
                                             fontSize: 12,
                                             fontWeight: FontWeight.bold,
-                                            color: isDark ? Colors.white70 : Colors.black87,
+                                            color: isDark
+                                                ? Colors.white70
+                                                : Colors.black87,
                                           ),
                                         ),
                                         Text(
                                           'Tap thumbnail to expand',
                                           style: TextStyle(
                                             fontSize: 10,
-                                            color: isDark ? Colors.white38 : Colors.grey.shade600,
+                                            color: isDark
+                                                ? Colors.white38
+                                                : Colors.grey.shade600,
                                           ),
                                         ),
                                       ],
@@ -606,25 +870,29 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
                                         child: ListView.builder(
                                           scrollDirection: Axis.horizontal,
                                           itemCount: photos.length,
-                                            itemBuilder: (ctx, pIdx) {
-                                              final photoStr = photos[pIdx];
-                                              final bool isNetwork = photoStr.startsWith('http://') ||
-                                                  photoStr.startsWith('https://');
-                                              Uint8List? bytes;
-                                              if (!isNetwork) {
-                                                bytes = _getOrDecodeBase64(photoStr);
-                                              }
+                                          itemBuilder: (ctx, pIdx) {
+                                            final photoStr = photos[pIdx];
+                                            final bool isNetwork = photoStr
+                                                    .startsWith('http://') ||
+                                                photoStr.startsWith('https://');
+                                            Uint8List? bytes;
+                                            if (!isNetwork) {
+                                              bytes =
+                                                  _getOrDecodeBase64(photoStr);
+                                            }
 
                                             return GestureDetector(
                                               onTap: () {
-                                                _openFullImagePreview(
-                                                    photoStr, pIdx + 1, photos.length);
+                                                _openFullImagePreview(photoStr,
+                                                    pIdx + 1, photos.length);
                                               },
                                               child: Container(
                                                 width: 90,
-                                                margin: const EdgeInsets.only(right: 8),
+                                                margin: const EdgeInsets.only(
+                                                    right: 8),
                                                 decoration: BoxDecoration(
-                                                  borderRadius: BorderRadius.circular(8),
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
                                                   border: Border.all(
                                                     color: isDark
                                                         ? Colors.white24
@@ -635,37 +903,64 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
                                                   children: [
                                                     Positioned.fill(
                                                       child: ClipRRect(
-                                                        borderRadius: BorderRadius.circular(7),
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(7),
                                                         child: isNetwork
                                                             ? Image.network(
                                                                 photoStr,
-                                                                fit: BoxFit.cover,
-                                                                loadingBuilder: (_, child, progress) {
-                                                                  if (progress == null) return child;
+                                                                fit: BoxFit
+                                                                    .cover,
+                                                                loadingBuilder: (_,
+                                                                    child,
+                                                                    progress) {
+                                                                  if (progress ==
+                                                                      null)
+                                                                    return child;
                                                                   return const Center(
-                                                                    child: SizedBox(
+                                                                    child:
+                                                                        SizedBox(
                                                                       width: 18,
-                                                                      height: 18,
-                                                                      child: CircularProgressIndicator(
-                                                                        strokeWidth: 2,
+                                                                      height:
+                                                                          18,
+                                                                      child:
+                                                                          CircularProgressIndicator(
+                                                                        strokeWidth:
+                                                                            2,
                                                                       ),
                                                                     ),
                                                                   );
                                                                 },
-                                                                errorBuilder: (_, __, ___) => Container(
-                                                                  color: Colors.grey.shade800,
-                                                                  child: const Icon(
-                                                                    Icons.broken_image,
-                                                                    color: Colors.white54,
+                                                                errorBuilder: (_,
+                                                                        __,
+                                                                        ___) =>
+                                                                    Container(
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade800,
+                                                                  child:
+                                                                      const Icon(
+                                                                    Icons
+                                                                        .broken_image,
+                                                                    color: Colors
+                                                                        .white54,
                                                                   ),
                                                                 ),
                                                               )
                                                             : (bytes != null
-                                                                ? Image.memory(bytes, fit: BoxFit.cover)
+                                                                ? Image.memory(
+                                                                    bytes,
+                                                                    fit: BoxFit
+                                                                        .cover)
                                                                 : Container(
-                                                                    color: Colors.grey.shade800,
-                                                                    child: const Icon(Icons.image,
-                                                                        color: Colors.white),
+                                                                    color: Colors
+                                                                        .grey
+                                                                        .shade800,
+                                                                    child: const Icon(
+                                                                        Icons
+                                                                            .image,
+                                                                        color: Colors
+                                                                            .white),
                                                                   )),
                                                       ),
                                                     ),
@@ -673,18 +968,28 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
                                                       bottom: 4,
                                                       right: 4,
                                                       child: Container(
-                                                        padding: const EdgeInsets.symmetric(
-                                                            horizontal: 5, vertical: 1),
-                                                        decoration: BoxDecoration(
-                                                          color: Colors.black.withValues(alpha: 0.7),
-                                                          borderRadius: BorderRadius.circular(4),
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                                horizontal: 5,
+                                                                vertical: 1),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: Colors.black
+                                                              .withValues(
+                                                                  alpha: 0.7),
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(4),
                                                         ),
                                                         child: Text(
                                                           '#${pIdx + 1}',
-                                                          style: const TextStyle(
+                                                          style:
+                                                              const TextStyle(
                                                             color: Colors.white,
                                                             fontSize: 9,
-                                                            fontWeight: FontWeight.bold,
+                                                            fontWeight:
+                                                                FontWeight.bold,
                                                           ),
                                                         ),
                                                       ),
@@ -700,8 +1005,11 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
                                       Container(
                                         padding: const EdgeInsets.all(12),
                                         decoration: BoxDecoration(
-                                          color: isDark ? Colors.white10 : Colors.grey.shade100,
-                                          borderRadius: BorderRadius.circular(8),
+                                          color: isDark
+                                              ? Colors.white10
+                                              : Colors.grey.shade100,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
                                         ),
                                         child: const Row(
                                           children: [
@@ -710,31 +1018,89 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
                                             SizedBox(width: 8),
                                             Text('No image files attached',
                                                 style: TextStyle(
-                                                    fontSize: 12, color: Colors.grey)),
+                                                    fontSize: 12,
+                                                    color: Colors.grey)),
                                           ],
                                         ),
                                       ),
 
                                     const SizedBox(height: 10),
 
-                                    // Action Bar (Export PDF optional)
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.end,
-                                      children: [
-                                        TextButton.icon(
-                                          onPressed: () => _exportPdfReport(item),
-                                          icon: Icon(Icons.picture_as_pdf_rounded,
-                                              size: 16, color: primaryColor),
-                                          label: Text(
-                                            'PDF Report',
-                                            style: TextStyle(
-                                              color: primaryColor,
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
+                                    // Action Bar (Download Images & Download PDF Report)
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: Wrap(
+                                        spacing: 6,
+                                        runSpacing: 6,
+                                        alignment: WrapAlignment.end,
+                                        children: [
+                                          OutlinedButton.icon(
+                                            onPressed: () =>
+                                                _downloadAllImages(item),
+                                            icon: Icon(
+                                              Icons.photo_library_rounded,
+                                              size: 14,
+                                              color: isDark
+                                                  ? AppColors.primaryLight
+                                                  : primaryColor,
+                                            ),
+                                            label: Text(
+                                              'Download Images',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color: isDark
+                                                    ? AppColors.primaryLight
+                                                    : primaryColor,
+                                              ),
+                                            ),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: isDark
+                                                  ? AppColors.primaryLight
+                                                  : primaryColor,
+                                              padding: const EdgeInsets
+                                                  .symmetric(
+                                                  horizontal: 8, vertical: 4),
+                                              minimumSize: Size.zero,
+                                              tapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                              side: BorderSide(
+                                                color: isDark
+                                                    ? AppColors.primaryLight
+                                                    : primaryColor,
+                                                width: 1.0,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                      ],
+                                          ElevatedButton.icon(
+                                            onPressed: () =>
+                                                _exportPdfReport(item),
+                                            icon: const Icon(
+                                                Icons.picture_as_pdf_rounded,
+                                                size: 14),
+                                            label: const Text(
+                                              'Download PDF',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor:
+                                                  Colors.red.shade700,
+                                              foregroundColor: Colors.white,
+                                              padding: const EdgeInsets
+                                                  .symmetric(
+                                                  horizontal: 8, vertical: 4),
+                                              minimumSize: Size.zero,
+                                              tapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -745,20 +1111,6 @@ class _WorkPhotoHistoryScreenState extends State<WorkPhotoHistoryScreen> {
             ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const WorkPhotosReportScreen(),
-            ),
-          ).then((_) => _loadSubmissions());
-        },
-        backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add_a_photo_rounded),
-        label: const Text('Upload New Photos', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
     );
   }

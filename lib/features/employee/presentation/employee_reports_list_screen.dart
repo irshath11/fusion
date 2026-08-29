@@ -9,7 +9,8 @@ import '../../../database/local_database_service.dart';
 import 'employee_report_generator_screen.dart';
 
 class EmployeeReportsListScreen extends StatefulWidget {
-  const EmployeeReportsListScreen({super.key});
+  final String? initialSearchQuery;
+  const EmployeeReportsListScreen({super.key, this.initialSearchQuery});
 
   @override
   State<EmployeeReportsListScreen> createState() =>
@@ -26,6 +27,10 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialSearchQuery != null &&
+        widget.initialSearchQuery!.trim().isNotEmpty) {
+      _searchController.text = widget.initialSearchQuery!.trim();
+    }
     _loadReports();
     _searchController.addListener(_filterReports);
   }
@@ -79,6 +84,9 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
         _filteredReports = List.from(reports);
         _isLoading = false;
       });
+      if (_searchController.text.isNotEmpty) {
+        _filterReports();
+      }
     }
   }
 
@@ -187,6 +195,26 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
     }
   }
 
+  Future<void> _downloadPdf(ServiceReportData reportData) async {
+    try {
+      final pdfBytes = await ServiceReportPdfService.buildReportPdfBytes(reportData);
+      final refStr = reportData.reportRefNumber.replaceAll('/', '_').replaceAll('\\', '_');
+      await Printing.sharePdf(
+        bytes: pdfBytes,
+        filename: 'Service_Report_$refStr.pdf',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error downloading PDF: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   void _previewPdf(ServiceReportData reportData) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final headerColor = AppTheme.currentColors.primaryFor(Theme.of(context).brightness);
@@ -226,9 +254,18 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
                       ),
                     ],
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, color: Colors.white),
-                    onPressed: () => Navigator.pop(ctx),
+                  Row(
+                    children: [
+                      IconButton(
+                        tooltip: 'Download PDF',
+                        icon: const Icon(Icons.download_rounded, color: Colors.white),
+                        onPressed: () => _downloadPdf(reportData),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: Colors.white),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -535,45 +572,75 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
 
                                       const Divider(height: 18),
 
-                                      // Actions Row
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.end,
-                                        children: [
-                                          OutlinedButton.icon(
-                                            onPressed: () => _editReport(reportData),
-                                            icon: Icon(
-                                              Icons.edit_note_rounded,
-                                              size: 18,
-                                              color: isDark ? AppColors.primaryLight : AppColors.primary,
-                                            ),
-                                            label: Text(
-                                              'Edit Report',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
+                                      // Actions Row (Responsive & Compact)
+                                      Align(
+                                        alignment: Alignment.centerRight,
+                                        child: Wrap(
+                                          spacing: 6,
+                                          runSpacing: 6,
+                                          alignment: WrapAlignment.end,
+                                          children: [
+                                            OutlinedButton.icon(
+                                              onPressed: () => _editReport(reportData),
+                                              icon: Icon(
+                                                Icons.edit_note_rounded,
+                                                size: 14,
                                                 color: isDark ? AppColors.primaryLight : AppColors.primary,
                                               ),
-                                            ),
-                                            style: OutlinedButton.styleFrom(
-                                              foregroundColor: isDark ? AppColors.primaryLight : AppColors.primary,
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                              side: BorderSide(
-                                                color: isDark ? AppColors.primaryLight : AppColors.primary,
-                                                width: 1.2,
+                                              label: Text(
+                                                'Edit Report',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isDark ? AppColors.primaryLight : AppColors.primary,
+                                                ),
+                                              ),
+                                              style: OutlinedButton.styleFrom(
+                                                foregroundColor: isDark ? AppColors.primaryLight : AppColors.primary,
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                minimumSize: Size.zero,
+                                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                side: BorderSide(
+                                                  color: isDark ? AppColors.primaryLight : AppColors.primary,
+                                                  width: 1.0,
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          ElevatedButton.icon(
-                                            onPressed: () => _previewPdf(reportData),
-                                            icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
-                                            label: const Text('View PDF'),
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: isDark ? AppColors.primaryLight : AppColors.primary,
-                                              foregroundColor: Colors.white,
-                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                            OutlinedButton.icon(
+                                              onPressed: () => _previewPdf(reportData),
+                                              icon: const Icon(Icons.picture_as_pdf_rounded, size: 14),
+                                              label: const Text(
+                                                'View PDF',
+                                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                              ),
+                                              style: OutlinedButton.styleFrom(
+                                                foregroundColor: isDark ? AppColors.primaryLight : AppColors.primary,
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                minimumSize: Size.zero,
+                                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                side: BorderSide(
+                                                  color: isDark ? AppColors.primaryLight : AppColors.primary,
+                                                  width: 1.0,
+                                                ),
+                                              ),
                                             ),
-                                          ),
-                                        ],
+                                            ElevatedButton.icon(
+                                              onPressed: () => _downloadPdf(reportData),
+                                              icon: const Icon(Icons.download_rounded, size: 14),
+                                              label: const Text(
+                                                'Download PDF',
+                                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                              ),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.red.shade700,
+                                                foregroundColor: Colors.white,
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                minimumSize: Size.zero,
+                                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -585,20 +652,6 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
             ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const EmployeeReportGeneratorScreen(),
-            ),
-          ).then((_) => _loadReports());
-        },
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('New Report', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
     );
   }

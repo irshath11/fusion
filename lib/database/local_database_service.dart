@@ -227,6 +227,9 @@ class LocalDatabaseService {
           role: UserRole.employee,
           organizationId: _organization?.id ?? '00000000-0000-0000-0000-000000000001',
           isActive: e.isActive,
+          useDefaultOffice: e.useDefaultOffice,
+          assignedOfficeId: e.assignedOfficeId,
+          assignedOfficeName: e.assignedOfficeName,
         );
       }
     }

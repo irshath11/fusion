@@ -16,6 +16,8 @@ import '../../../core/widgets/app_animated_tab_switcher.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../attendance/domain/attendance_record.dart';
 import 'admin_edit_attendance_dialog.dart';
+import '../../employee/presentation/employee_reports_list_screen.dart';
+import '../../employee/presentation/work_photo_history_screen.dart';
 
 class ReportsAnalyticsScreen extends StatefulWidget {
   const ReportsAnalyticsScreen({super.key});
@@ -757,8 +759,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               const SizedBox(width: 6),
               ElevatedButton.icon(
                 onPressed: () => _exportPdfForEmployee(emp, empRecords),
-                icon: const Icon(Icons.picture_as_pdf_rounded, size: 14),
-                label: const Text('PDF',
+                icon: const Icon(Icons.download_rounded, size: 14),
+                label: const Text('Export Timesheet',
                     style:
                         TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
@@ -776,6 +778,87 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             ],
           ),
           const SizedBox(height: 12),
+
+          // Individual Employee Reports Navigation Bar (PDF Report Page & Work Image Page)
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isDark ? palette.surfaceDark : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isDark ? palette.cardBorderDark : Colors.grey.shade200,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (ctx) => EmployeeReportsListScreen(
+                            initialSearchQuery: emp.name,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 15),
+                    label: const Text('PDF Report Page',
+                        style: TextStyle(
+                            fontSize: 11, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 10),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (ctx) => WorkPhotoHistoryScreen(
+                            initialSearchQuery: emp.name,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.photo_library_rounded, size: 15),
+                    label: const Text('Work Image Page',
+                        style: TextStyle(
+                            fontSize: 11, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: activePrimary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 10),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
 
           // Executive Timesheet Summary Cards
           Row(

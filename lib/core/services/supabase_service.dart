@@ -294,6 +294,15 @@ class SupabaseService {
               empRow['department'].toString().trim().isNotEmpty) {
             map['department'] = empRow['department'].toString().trim();
           }
+          if (empRow['use_default_office'] != null) {
+            map['use_default_office'] = empRow['use_default_office'];
+          }
+          if (empRow['assigned_office_id'] != null) {
+            map['assigned_office_id'] = empRow['assigned_office_id'];
+          }
+          if (empRow['assigned_office_name'] != null) {
+            map['assigned_office_name'] = empRow['assigned_office_name'];
+          }
         }
         return UserEntity.fromJson(map);
       }
@@ -340,6 +349,15 @@ class SupabaseService {
                 empRow['department'].toString().trim().isNotEmpty) {
               map['department'] = empRow['department'].toString().trim();
             }
+            if (empRow['use_default_office'] != null) {
+              map['use_default_office'] = empRow['use_default_office'];
+            }
+            if (empRow['assigned_office_id'] != null) {
+              map['assigned_office_id'] = empRow['assigned_office_id'];
+            }
+            if (empRow['assigned_office_name'] != null) {
+              map['assigned_office_name'] = empRow['assigned_office_name'];
+            }
           }
           return UserEntity.fromJson(map);
         }
@@ -383,6 +401,15 @@ class SupabaseService {
             if (empRow['department'] != null &&
                 empRow['department'].toString().trim().isNotEmpty) {
               map['department'] = empRow['department'].toString().trim();
+            }
+            if (empRow['use_default_office'] != null) {
+              map['use_default_office'] = empRow['use_default_office'];
+            }
+            if (empRow['assigned_office_id'] != null) {
+              map['assigned_office_id'] = empRow['assigned_office_id'];
+            }
+            if (empRow['assigned_office_name'] != null) {
+              map['assigned_office_name'] = empRow['assigned_office_name'];
             }
           }
           return UserEntity.fromJson(map);
@@ -500,6 +527,15 @@ class SupabaseService {
           if (empRow['department'] != null &&
               empRow['department'].toString().trim().isNotEmpty) {
             map['department'] = empRow['department'].toString().trim();
+          }
+          if (empRow['use_default_office'] != null) {
+            map['use_default_office'] = empRow['use_default_office'];
+          }
+          if (empRow['assigned_office_id'] != null) {
+            map['assigned_office_id'] = empRow['assigned_office_id'];
+          }
+          if (empRow['assigned_office_name'] != null) {
+            map['assigned_office_name'] = empRow['assigned_office_name'];
           }
         }
 

@@ -91,6 +91,9 @@ class UserManagementCubit extends Cubit<UserManagementState> {
             role: UserRole.employee,
             organizationId: orgId,
             isActive: e.isActive,
+            useDefaultOffice: e.useDefaultOffice,
+            assignedOfficeId: e.assignedOfficeId,
+            assignedOfficeName: e.assignedOfficeName,
           );
           final key = localUser.email.trim().isNotEmpty
               ? localUser.email.trim().toLowerCase()

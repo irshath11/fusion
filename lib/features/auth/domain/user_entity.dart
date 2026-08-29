@@ -14,6 +14,7 @@ class UserEntity {
   final String? employeeCode;
   final String? designation;
   final String? department;
+  final bool useDefaultOffice;
   final String? assignedOfficeId;
   final String? assignedOfficeName;
 
@@ -31,6 +32,7 @@ class UserEntity {
     this.employeeCode,
     this.designation,
     this.department,
+    this.useDefaultOffice = true,
     this.assignedOfficeId,
     this.assignedOfficeName,
   });
@@ -52,6 +54,7 @@ class UserEntity {
         'employee_code': employeeCode,
         'designation': designation,
         'department': department,
+        'use_default_office': useDefaultOffice,
         'assigned_office_id': assignedOfficeId,
         'assigned_office_name': assignedOfficeName,
       };
@@ -71,6 +74,8 @@ class UserEntity {
         employeeCode: json['employee_code'] ?? json['employeeCode'],
         designation: json['designation'],
         department: json['department'],
+        useDefaultOffice:
+            json['use_default_office'] ?? json['useDefaultOffice'] ?? true,
         assignedOfficeId: json['assigned_office_id'] ?? json['assignedOfficeId'],
         assignedOfficeName: json['assigned_office_name'] ?? json['assignedOfficeName'],
       );
@@ -89,6 +94,7 @@ class UserEntity {
     String? employeeCode,
     String? designation,
     String? department,
+    bool? useDefaultOffice,
     String? assignedOfficeId,
     String? assignedOfficeName,
   }) {
@@ -106,6 +112,7 @@ class UserEntity {
       employeeCode: employeeCode ?? this.employeeCode,
       designation: designation ?? this.designation,
       department: department ?? this.department,
+      useDefaultOffice: useDefaultOffice ?? this.useDefaultOffice,
       assignedOfficeId: assignedOfficeId ?? this.assignedOfficeId,
       assignedOfficeName: assignedOfficeName ?? this.assignedOfficeName,
     );
