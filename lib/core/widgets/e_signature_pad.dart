@@ -255,7 +255,11 @@ class _ESignatureDialogState extends State<ESignatureDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? AppColors.primaryLight : AppColors.primary;
+
     return AlertDialog(
+      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       contentPadding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
       title: Row(
@@ -263,23 +267,30 @@ class _ESignatureDialogState extends State<ESignatureDialog> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
+              color: primaryColor.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.draw_rounded, color: AppColors.primary, size: 22),
+            child: Icon(Icons.draw_rounded, color: primaryColor, size: 22),
           ),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Draw E-Signature',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : AppColors.textPrimaryLight,
+                  ),
                 ),
                 Text(
                   'Use your finger or stylus to sign below',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.white70 : Colors.grey.shade600,
+                  ),
                 ),
               ],
             ),
@@ -306,15 +317,15 @@ class _ESignatureDialogState extends State<ESignatureDialog> {
               children: [
                 TextButton.icon(
                   onPressed: () => _padKey.currentState?.undo(),
-                  icon: const Icon(Icons.undo_rounded, size: 16),
-                  label: const Text('Undo'),
-                  style: TextButton.styleFrom(foregroundColor: Colors.grey.shade700),
+                  icon: Icon(Icons.undo_rounded, size: 16, color: isDark ? Colors.white70 : Colors.grey.shade700),
+                  label: Text('Undo', style: TextStyle(color: isDark ? Colors.white70 : Colors.grey.shade700)),
+                  style: TextButton.styleFrom(foregroundColor: isDark ? Colors.white70 : Colors.grey.shade700),
                 ),
                 TextButton.icon(
                   onPressed: () => _padKey.currentState?.clear(),
-                  icon: const Icon(Icons.delete_outline_rounded, size: 16),
-                  label: const Text('Clear'),
-                  style: TextButton.styleFrom(foregroundColor: Colors.red.shade600),
+                  icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.redAccent),
+                  label: const Text('Clear', style: TextStyle(color: Colors.redAccent)),
+                  style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
                 ),
               ],
             ),
@@ -326,6 +337,8 @@ class _ESignatureDialogState extends State<ESignatureDialog> {
         OutlinedButton(
           onPressed: () => Navigator.pop(context, null),
           style: OutlinedButton.styleFrom(
+            foregroundColor: isDark ? Colors.white70 : Colors.grey.shade800,
+            side: BorderSide(color: isDark ? Colors.white30 : Colors.grey.shade400),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
           child: const Text('Cancel'),
@@ -340,7 +353,7 @@ class _ESignatureDialogState extends State<ESignatureDialog> {
                 }
               : null,
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
+            backgroundColor: primaryColor,
             foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
@@ -370,6 +383,8 @@ class ESignaturePreviewBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? AppColors.primaryLight : AppColors.primary;
     final hasSig = signatureBytes != null && signatureBytes!.isNotEmpty;
 
     return Column(
@@ -383,10 +398,10 @@ class ESignaturePreviewBox extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF334155),
+                  color: isDark ? Colors.white70 : const Color(0xFF334155),
                 ),
               ),
             ),
@@ -394,12 +409,12 @@ class ESignaturePreviewBox extends StatelessWidget {
               const SizedBox(width: 6),
               GestureDetector(
                 onTap: onClear,
-                child: const Text(
+                child: Text(
                   'Change',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
+                    color: primaryColor,
                   ),
                 ),
               ),
@@ -414,16 +429,18 @@ class ESignaturePreviewBox extends StatelessWidget {
             height: 115,
             width: double.infinity,
             decoration: BoxDecoration(
-              color: hasSig ? Colors.white : const Color(0xFFF8FAFC),
+              color: hasSig
+                  ? (isDark ? const Color(0xFF1E293B) : Colors.white)
+                  : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC)),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: hasSig ? AppColors.primary : Colors.grey.shade300,
+                color: hasSig ? primaryColor : (isDark ? Colors.white24 : Colors.grey.shade300),
                 width: hasSig ? 1.8 : 1.2,
               ),
               boxShadow: hasSig
                   ? [
                       BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.08),
+                        color: primaryColor.withValues(alpha: 0.12),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -481,17 +498,17 @@ class ESignaturePreviewBox extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.08),
+                            color: primaryColor.withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.draw_rounded,
-                            color: AppColors.primary,
+                            color: primaryColor,
                             size: 20,
                           ),
                         ),
                         const SizedBox(height: 6),
-                        const Text(
+                        Text(
                           'Tap to add E-Signature',
                           textAlign: TextAlign.center,
                           maxLines: 1,
@@ -499,7 +516,7 @@ class ESignaturePreviewBox extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.primary,
+                            color: primaryColor,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -510,7 +527,7 @@ class ESignaturePreviewBox extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 10,
-                            color: Colors.grey.shade500,
+                            color: isDark ? Colors.white54 : Colors.grey.shade500,
                           ),
                         ),
                       ],

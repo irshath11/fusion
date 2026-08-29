@@ -352,23 +352,26 @@ class _EmployeeReportGeneratorScreenState
 
     if (!mounted) return;
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final headerColor = AppTheme.currentColors.primaryFor(Theme.of(context).brightness);
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
         height: MediaQuery.of(context).size.height * 0.9,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              decoration: BoxDecoration(
+                color: headerColor,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -428,9 +431,6 @@ class _EmployeeReportGeneratorScreenState
 
     // 1. Save locally to phone offline storage
     await _db.saveServiceReportLocally(reportData.toJson());
-    if (widget.existingReport == null) {
-      await _db.incrementLocalServiceReportSeq(_db.currentEmployeePrefix);
-    }
 
     // 2. Cloud sync if internet is available
     final synced = await SupabaseService().syncPendingServiceReports();
@@ -543,7 +543,12 @@ class _EmployeeReportGeneratorScreenState
               children: [
                 Text(
                   'FUSION',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
                 ),
                 Text(
                   'Official Field Service Report',
@@ -555,11 +560,13 @@ class _EmployeeReportGeneratorScreenState
         ),
         backgroundColor: primaryColor,
         foregroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Colors.white),
+        actionsIconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
         actions: [
           IconButton(
             tooltip: 'Saved Reports History',
-            icon: const Icon(Icons.history_rounded),
+            icon: const Icon(Icons.history_rounded, color: Colors.white),
             onPressed: () {
               Navigator.push(
                 context,
@@ -573,12 +580,12 @@ class _EmployeeReportGeneratorScreenState
           ),
           IconButton(
             tooltip: 'Sync Offline Reports',
-            icon: const Icon(Icons.cloud_upload_rounded),
+            icon: const Icon(Icons.cloud_upload_rounded, color: Colors.white),
             onPressed: _triggerManualSync,
           ),
           IconButton(
             tooltip: 'Preview PDF',
-            icon: const Icon(Icons.picture_as_pdf_rounded),
+            icon: const Icon(Icons.picture_as_pdf_rounded, color: Colors.white),
             onPressed: _previewPdfReport,
           ),
         ],

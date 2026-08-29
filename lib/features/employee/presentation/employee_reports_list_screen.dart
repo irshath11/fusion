@@ -36,12 +36,36 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
     super.dispose();
   }
 
-  void _loadReports() {
+  Future<void> _loadReports() async {
     setState(() {
       _isLoading = true;
     });
 
-    final reports = _db.getAllSavedServiceReports();
+    // 1. Load local reports first for instant display
+    var reports = _db.getAllSavedServiceReports();
+    _applyReportsList(reports);
+
+    // 2. Fetch cloud reports from Supabase database & merge into local storage
+    try {
+      final cloudReports = await SupabaseService().fetchServiceReportsFromSupabase();
+      if (cloudReports.isNotEmpty) {
+        await _db.mergeCloudServiceReports(cloudReports);
+        reports = _db.getAllSavedServiceReports();
+        _applyReportsList(reports);
+        return;
+      }
+    } catch (e) {
+      debugPrint('Error fetching cloud reports: $e');
+    }
+
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _applyReportsList(List<Map<String, dynamic>> reports) {
     // Sort newest first
     reports.sort((a, b) {
       final String da = a['createdAt'] ?? '';
@@ -49,11 +73,13 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
       return dbStr.compareTo(da);
     });
 
-    setState(() {
-      _allReports = reports;
-      _filteredReports = List.from(reports);
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _allReports = reports;
+        _filteredReports = List.from(reports);
+        _isLoading = false;
+      });
+    }
   }
 
   void _filterReports() {
@@ -85,10 +111,57 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
     });
   }
 
+  Future<void> _confirmClearCache() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.cleaning_services_rounded, color: Colors.redAccent),
+            SizedBox(width: 10),
+            Text('Clear Local Reports Cache?'),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to clear all locally cached service reports from this device?\n\n'
+          'Note: Synced reports stored in the cloud database will remain completely safe and can be re-fetched by refreshing.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear Cache'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() => _isLoading = true);
+      await _db.clearServiceReportsCache();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Local service reports cache cleared successfully.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+      await _loadReports();
+    }
+  }
+
   Future<void> _triggerCloudSync() async {
     setState(() => _isLoading = true);
     final synced = await SupabaseService().syncPendingServiceReports();
-    _loadReports();
+    await _loadReports();
 
     if (mounted) {
       if (synced > 0) {
@@ -101,7 +174,7 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Reports are up to date or waiting for connection.'),
+            content: Text('Reports are up to date with cloud database.'),
             backgroundColor: Colors.blueAccent,
           ),
         );
@@ -110,23 +183,26 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
   }
 
   void _previewPdf(ServiceReportData reportData) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final headerColor = AppTheme.currentColors.primaryFor(Theme.of(context).brightness);
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
         height: MediaQuery.of(context).size.height * 0.9,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              decoration: BoxDecoration(
+                color: headerColor,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -186,26 +262,37 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
       appBar: AppBar(
         title: const Row(
           children: [
-            Icon(Icons.assignment_turned_in_rounded, size: 22),
+            Icon(Icons.assignment_turned_in_rounded, color: Colors.white, size: 22),
             SizedBox(width: 10),
             Text(
               'Generated Reports History',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ],
         ),
         backgroundColor: primaryColor,
         foregroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Colors.white),
+        actionsIconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
         actions: [
           IconButton(
+            tooltip: 'Clear Local Cache',
+            icon: const Icon(Icons.delete_sweep_rounded, color: Colors.white),
+            onPressed: _confirmClearCache,
+          ),
+          IconButton(
             tooltip: 'Sync Reports',
-            icon: const Icon(Icons.cloud_upload_rounded),
+            icon: const Icon(Icons.cloud_upload_rounded, color: Colors.white),
             onPressed: _triggerCloudSync,
           ),
           IconButton(
             tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded),
+            icon: const Icon(Icons.refresh_rounded, color: Colors.white),
             onPressed: _loadReports,
           ),
         ],
@@ -384,13 +471,14 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
                                       ),
                                       const SizedBox(height: 10),
 
-                                      // Property & Job Details
+                                       // Property & Job Details
                                       if (reportData.propertyDetails.isNotEmpty)
                                         Text(
                                           reportData.propertyDetails,
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 14,
+                                            color: isDark ? Colors.white : AppColors.textPrimaryLight,
                                           ),
                                         ),
                                       if (reportData.jobNo.isNotEmpty)
@@ -413,7 +501,7 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
                                             'Created: $createdStr',
                                             style: TextStyle(
                                               fontSize: 11,
-                                              color: isDark ? Colors.white38 : Colors.black38,
+                                              color: isDark ? Colors.white60 : Colors.black54,
                                             ),
                                           ),
                                           if (reportData.technicianName.isNotEmpty)
@@ -421,8 +509,8 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
                                               'Tech: ${reportData.technicianName}',
                                               style: TextStyle(
                                                 fontSize: 11,
-                                                fontWeight: FontWeight.w500,
-                                                color: AppColors.primary,
+                                                fontWeight: FontWeight.bold,
+                                                color: isDark ? AppColors.primaryLight : AppColors.primary,
                                               ),
                                             ),
                                         ],
@@ -436,12 +524,25 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
                                         children: [
                                           OutlinedButton.icon(
                                             onPressed: () => _editReport(reportData),
-                                            icon: const Icon(Icons.edit_note_rounded, size: 18),
-                                            label: const Text('Edit Report'),
+                                            icon: Icon(
+                                              Icons.edit_note_rounded,
+                                              size: 18,
+                                              color: isDark ? AppColors.primaryLight : AppColors.primary,
+                                            ),
+                                            label: Text(
+                                              'Edit Report',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: isDark ? AppColors.primaryLight : AppColors.primary,
+                                              ),
+                                            ),
                                             style: OutlinedButton.styleFrom(
-                                              foregroundColor: AppColors.primary,
+                                              foregroundColor: isDark ? AppColors.primaryLight : AppColors.primary,
                                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                              side: BorderSide(color: AppColors.primary),
+                                              side: BorderSide(
+                                                color: isDark ? AppColors.primaryLight : AppColors.primary,
+                                                width: 1.2,
+                                              ),
                                             ),
                                           ),
                                           const SizedBox(width: 8),
@@ -450,7 +551,7 @@ class _EmployeeReportsListScreenState extends State<EmployeeReportsListScreen> {
                                             icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
                                             label: const Text('View PDF'),
                                             style: ElevatedButton.styleFrom(
-                                              backgroundColor: AppColors.primary,
+                                              backgroundColor: isDark ? AppColors.primaryLight : AppColors.primary,
                                               foregroundColor: Colors.white,
                                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                             ),

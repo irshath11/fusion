@@ -954,12 +954,26 @@ class LocalDatabaseService {
     return 'E01';
   }
 
-  /// Fetch next local sequence number starting at 2001 for given employee prefix
+  /// Fetch next sequence number starting at 2001 for given employee prefix,
+  /// automatically scanning existing saved reports so sequence is strictly sequential (+1)!
   int getNextLocalServiceReportSeq(String prefix) {
-    final key = 'sr_seq_$prefix';
-    final val = _settingsBox?.get(key, defaultValue: 2001);
-    if (val is num) return val.toInt();
-    return 2001;
+    int maxSeq = 2000;
+
+    // Scan all saved reports to find highest existing sequence for this prefix
+    final reports = getAllSavedServiceReports();
+    final prefixPattern = 'SR-$prefix-';
+    for (final item in reports) {
+      final ref = (item['reportRefNumber'] ?? item['ref_number'] ?? '').toString();
+      if (ref.startsWith(prefixPattern)) {
+        final numPart = ref.substring(prefixPattern.length);
+        final parsed = int.tryParse(numPart);
+        if (parsed != null && parsed > maxSeq) {
+          maxSeq = parsed;
+        }
+      }
+    }
+
+    return maxSeq + 1;
   }
 
   /// Increment and save local sequence number for given employee prefix
@@ -998,6 +1012,8 @@ class LocalDatabaseService {
         decoded[existingIdx] = payload;
       } else {
         decoded.add(payload);
+        final prefix = currentEmployeePrefix;
+        await incrementLocalServiceReportSeq(prefix);
       }
 
       await _settingsBox?.put(
@@ -1053,6 +1069,45 @@ class LocalDatabaseService {
       return decoded.map((item) => Map<String, dynamic>.from(item)).toList();
     } catch (e) {
       return [];
+    }
+  }
+
+  /// Clear all locally cached service reports from local storage
+  Future<void> clearServiceReportsCache() async {
+    try {
+      await _settingsBox?.delete('pending_service_reports_json');
+      debugPrint('Service reports local cache cleared successfully.');
+    } catch (e) {
+      debugPrint('Error clearing service reports cache: $e');
+    }
+  }
+
+  /// Merge cloud-synced service reports from Supabase into local storage
+  Future<void> mergeCloudServiceReports(List<Map<String, dynamic>> cloudReports) async {
+    try {
+      final String jsonStr =
+          _settingsBox?.get('pending_service_reports_json', defaultValue: '[]');
+      final List decoded = jsonDecode(jsonStr);
+
+      for (final cloud in cloudReports) {
+        final String refNumber = cloud['reportRefNumber'] ?? '';
+        if (refNumber.isEmpty) continue;
+
+        final idx = decoded.indexWhere((item) => item['reportRefNumber'] == refNumber);
+        if (idx >= 0) {
+          final localSync = decoded[idx]['syncStatus'];
+          if (localSync != 'pending') {
+            decoded[idx] = cloud;
+          }
+        } else {
+          decoded.add(cloud);
+        }
+      }
+
+      await _settingsBox?.put(
+          'pending_service_reports_json', jsonEncode(decoded));
+    } catch (e) {
+      debugPrint('Error merging cloud service reports: $e');
     }
   }
 

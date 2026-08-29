@@ -1810,6 +1810,41 @@ class SupabaseService {
     return syncedCount;
   }
 
+  /// Fetch all Service Reports from Supabase cloud database
+  Future<List<Map<String, dynamic>>> fetchServiceReportsFromSupabase() async {
+    if (!_isInitialized || client == null) return [];
+
+    try {
+      final response = await client!
+          .from('service_reports')
+          .select()
+          .order('created_at', ascending: false);
+
+      final List list = response as List;
+      final List<Map<String, dynamic>> results = [];
+
+      for (final item in list) {
+        final Map<String, dynamic> row = Map<String, dynamic>.from(item);
+        final refNumber = row['ref_number']?.toString() ?? '';
+        final reportData = row['report_data'] != null
+            ? Map<String, dynamic>.from(row['report_data'])
+            : <String, dynamic>{};
+        final createdAt = row['created_at']?.toString() ?? '';
+
+        results.add({
+          'reportRefNumber': refNumber,
+          'reportData': reportData,
+          'syncStatus': 'synced',
+          'createdAt': createdAt,
+        });
+      }
+      return results;
+    } catch (e) {
+      debugPrint('Supabase fetchServiceReportsFromSupabase error: $e');
+      return [];
+    }
+  }
+
   /// Syncs all locally queued offline attendance records to Supabase
   Future<int> syncPendingAttendanceRecords() async {
     if (!_isInitialized || client == null) return 0;
