@@ -26,7 +26,11 @@ class _AiVoiceReportBottomSheetState extends State<AiVoiceReportBottomSheet>
   bool _isListening = false;
   bool _speechAvailable = false;
   bool _isProcessing = false;
+  bool _isCleaningSpeech = false;
   bool _showApiKeyInput = false;
+
+  String _baseTextBeforeListen = '';
+  String _selectedTargetCategory = 'all'; // 'all', 'defects', 'work', 'materials'
 
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
@@ -90,12 +94,24 @@ class _AiVoiceReportBottomSheetState extends State<AiVoiceReportBottomSheet>
         await _initSpeech();
       }
       if (_speechAvailable) {
+        _baseTextBeforeListen = _notesController.text.trim();
         setState(() => _isListening = true);
+
         await _speech.listen(
+          listenOptions: stt.SpeechListenOptions(
+            listenMode: stt.ListenMode.dictation,
+            cancelOnError: false,
+            partialResults: true,
+          ),
           onResult: (result) {
             if (mounted && result.recognizedWords.isNotEmpty) {
+              final recognized = result.recognizedWords.trim();
+              final combined = _baseTextBeforeListen.isNotEmpty
+                  ? '$_baseTextBeforeListen $recognized'
+                  : recognized;
+
               setState(() {
-                _notesController.text = result.recognizedWords;
+                _notesController.text = combined;
                 _notesController.selection = TextSelection.fromPosition(
                   TextPosition(offset: _notesController.text.length),
                 );
@@ -111,6 +127,36 @@ class _AiVoiceReportBottomSheetState extends State<AiVoiceReportBottomSheet>
           ),
         );
       }
+    }
+  }
+
+  Future<void> _cleanSpeechWithAi() async {
+    final text = _notesController.text.trim();
+    if (text.isEmpty) return;
+
+    setState(() => _isCleaningSpeech = true);
+    try {
+      final cleaned = await _aiService.cleanSpeechText(
+        text,
+        customApiKey: _apiKeyController.text.trim(),
+      );
+
+      if (mounted) {
+        setState(() {
+          _notesController.text = cleaned;
+          _isCleaningSpeech = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🪄 Speech text cleaned & technical terms corrected!'),
+            backgroundColor: AppColors.success,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isCleaningSpeech = false);
     }
   }
 
@@ -132,6 +178,7 @@ class _AiVoiceReportBottomSheetState extends State<AiVoiceReportBottomSheet>
       final data = await _aiService.extractReportFields(
         text,
         customApiKey: _apiKeyController.text.trim(),
+        targetCategory: _selectedTargetCategory,
       );
 
       if (mounted) {
@@ -149,6 +196,30 @@ class _AiVoiceReportBottomSheetState extends State<AiVoiceReportBottomSheet>
         );
       }
     }
+  }
+
+  Widget _buildTargetCategoryChip(String categoryId, String label) {
+    final isSelected = _selectedTargetCategory == categoryId;
+    return ChoiceChip(
+      label: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected ? Colors.white : AppColors.primary,
+        ),
+      ),
+      selected: isSelected,
+      selectedColor: AppColors.primary,
+      backgroundColor: AppColors.primary.withValues(alpha: 0.08),
+      showCheckmark: false,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+      onSelected: (val) {
+        if (val) {
+          setState(() => _selectedTargetCategory = categoryId);
+        }
+      },
+    );
   }
 
   @override
@@ -230,7 +301,34 @@ class _AiVoiceReportBottomSheetState extends State<AiVoiceReportBottomSheet>
                 ],
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+
+              // Target Category Selector
+              Text(
+                'Target Form Section:',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: textSecondary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildTargetCategoryChip('all', '✨ Auto-Detect All'),
+                    const SizedBox(width: 6),
+                    _buildTargetCategoryChip('defects', '🔍 Defects Only'),
+                    const SizedBox(width: 6),
+                    _buildTargetCategoryChip('work', '🛠️ Work Done Only'),
+                    const SizedBox(width: 6),
+                    _buildTargetCategoryChip('materials', '📦 Materials Only'),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 14),
 
               // Voice Dictation Box
               Container(
@@ -267,21 +365,63 @@ class _AiVoiceReportBottomSheetState extends State<AiVoiceReportBottomSheet>
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          _isListening
-                              ? '🎙️ Listening... Speak now'
-                              : (_notesController.text.isNotEmpty
-                                  ? '${_notesController.text.split(' ').length} words'
-                                  : 'Tap mic to speak'),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: _isListening
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                            color: _isListening
-                                ? AppColors.primary
-                                : textSecondary,
-                          ),
+                        Row(
+                          children: [
+                            Text(
+                              _isListening
+                                  ? '🎙️ Listening... Speak now'
+                                  : (_notesController.text.isNotEmpty
+                                      ? '${_notesController.text.split(' ').where((w) => w.isNotEmpty).length} words'
+                                      : 'Tap mic to speak'),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: _isListening
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                color: _isListening
+                                    ? AppColors.primary
+                                    : textSecondary,
+                              ),
+                            ),
+                            if (_notesController.text.isNotEmpty && !_isListening) ...[
+                              const SizedBox(width: 12),
+                              InkWell(
+                                onTap: _isCleaningSpeech ? null : _cleanSpeechWithAi,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      if (_isCleaningSpeech)
+                                        const SizedBox(
+                                          width: 10,
+                                          height: 10,
+                                          child: CircularProgressIndicator(strokeWidth: 1.5),
+                                        )
+                                      else
+                                        const Icon(
+                                          Icons.auto_fix_high,
+                                          size: 13,
+                                          color: AppColors.primary,
+                                        ),
+                                      const SizedBox(width: 4),
+                                      const Text(
+                                        'Clean Speech',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         ScaleTransition(
                           scale: _isListening
