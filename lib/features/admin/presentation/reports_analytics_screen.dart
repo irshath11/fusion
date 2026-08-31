@@ -307,7 +307,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       }
     }
 
-    return employeeMap.values.toList();
+    final list = employeeMap.values.toList();
+    list.sort((a, b) =>
+        a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
+    return list;
   }
 
   EmployeeEntity _resolveEmployee(String? employeeId) {
@@ -328,14 +331,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         e.id.toLowerCase() == cleanId ||
         e.employeeCode.toLowerCase() == cleanId ||
         e.name.toLowerCase().trim() == cleanId ||
-        e.email.toLowerCase().trim() == cleanId ||
-        (cleanId.length >= 4 && e.id.toLowerCase().startsWith(cleanId)) ||
-        (cleanId.length >= 4 &&
-            e.employeeCode.toLowerCase().contains(cleanId)) ||
-        (cleanId.isNotEmpty && e.name.toLowerCase().trim().contains(cleanId)) ||
-        (cleanId.isNotEmpty &&
-            cleanId.contains(e.name.toLowerCase().trim())));
+        e.email.toLowerCase().trim() == cleanId);
     if (match.isNotEmpty) return match.first;
+
+    final idMatch = all.where((e) =>
+        (cleanId.length >= 8 && e.id.toLowerCase().startsWith(cleanId)) ||
+        (cleanId.length >= 8 && cleanId.startsWith(e.id.toLowerCase())));
+    if (idMatch.isNotEmpty) return idMatch.first;
 
     return EmployeeEntity(
       id: employeeId,
@@ -409,6 +411,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
 
     final allEmployees = employeeMap.values.toList();
+    allEmployees.sort((a, b) =>
+        a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
 
     final filteredEmployees = allEmployees.where((e) {
       final q = _searchQuery.trim().toLowerCase();
@@ -580,10 +584,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                       .primaryFor(isDark ? Brightness.dark : Brightness.light);
                   final emp = filteredEmployees[index];
                   final empRecords = allRecords
-                      .where((r) =>
-                          r.employeeId == emp.id ||
-                          r.employeeName.toLowerCase() ==
-                              emp.name.toLowerCase())
+                      .where((r) => _recordMatchesEmployee(r, emp))
                       .toList();
 
                   // Distinct dates count
@@ -678,18 +679,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     final emp = _resolveEmployee(_selectedEmployeeId);
 
     final empRecords = _db.getAttendanceRecords().where((r) {
-      final rEmpId = r.employeeId.trim().toLowerCase();
-      final rEmpName = r.employeeName.trim().toLowerCase();
-      final eId = emp.id.trim().toLowerCase();
-      final eName = emp.name.trim().toLowerCase();
-      final eCode = emp.employeeCode.trim().toLowerCase();
-      return (eId.isNotEmpty && rEmpId == eId) ||
-          (eName.isNotEmpty && rEmpName == eName) ||
-          (eCode.isNotEmpty && rEmpId == eCode) ||
-          (eId.length >= 4 && rEmpId.startsWith(eId)) ||
-          (rEmpId.length >= 4 && eId.startsWith(rEmpId)) ||
-          (eName.isNotEmpty &&
-              (rEmpName.contains(eName) || eName.contains(rEmpName)));
+      return _recordMatchesEmployee(r, emp);
     }).toList();
 
     // Group records by date (yyyy-MM-dd)
@@ -2159,18 +2149,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     final selectedDateStr = DateFormat('yyyy-MM-dd').format(_selectedDate!);
 
     final dateRecords = _db.getAttendanceRecords().where((r) {
-      final rEmpId = r.employeeId.trim().toLowerCase();
-      final rEmpName = r.employeeName.trim().toLowerCase();
-      final eId = emp.id.trim().toLowerCase();
-      final eName = emp.name.trim().toLowerCase();
-      final eCode = emp.employeeCode.trim().toLowerCase();
-      final matchesUser = (eId.isNotEmpty && rEmpId == eId) ||
-          (eName.isNotEmpty && rEmpName == eName) ||
-          (eCode.isNotEmpty && rEmpId == eCode) ||
-          (eId.length >= 4 && rEmpId.startsWith(eId)) ||
-          (rEmpId.length >= 4 && eId.startsWith(rEmpId)) ||
-          (eName.isNotEmpty &&
-              (rEmpName.contains(eName) || eName.contains(rEmpName)));
+      final matchesUser = _recordMatchesEmployee(r, emp);
       final matchesDate =
           DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()) == selectedDateStr;
       return matchesUser && matchesDate;
@@ -3460,13 +3439,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     final eId = emp.id.trim().toLowerCase();
     final eName = emp.name.trim().toLowerCase();
     final eCode = emp.employeeCode.trim().toLowerCase();
-    return (eId.isNotEmpty && rEmpId == eId) ||
-        (eName.isNotEmpty && rEmpName == eName) ||
-        (eCode.isNotEmpty && rEmpId == eCode) ||
-        (eId.length >= 4 && rEmpId.startsWith(eId)) ||
-        (rEmpId.length >= 4 && eId.startsWith(rEmpId)) ||
-        (eName.isNotEmpty &&
-            (rEmpName.contains(eName) || eName.contains(rEmpName)));
+
+    if (eId.isNotEmpty && rEmpId == eId) return true;
+    if (eName.isNotEmpty && rEmpName == eName) return true;
+    if (eCode.isNotEmpty && (rEmpId == eCode || rEmpId == 'emp-$eCode')) return true;
+    if (eId.length >= 8 && rEmpId.length >= 8 && (rEmpId.startsWith(eId) || eId.startsWith(rEmpId))) return true;
+
+    return false;
   }
 
   // ==========================================
@@ -3510,6 +3489,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         ),
       );
     }
+
+    summaries.sort((a, b) => a.employee.name
+        .trim()
+        .toLowerCase()
+        .compareTo(b.employee.name.trim().toLowerCase()));
 
     final grandCombined = grandReg + grandOt;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -3821,10 +3805,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                       // Site-Wise Hours Spent Section for Employee
                       () {
                         final empRecs = allRecords
-                            .where((r) =>
-                                r.employeeId == emp.id ||
-                                r.employeeName.toLowerCase() ==
-                                    emp.name.toLowerCase())
+                            .where((r) => _recordMatchesEmployee(r, emp))
                             .toList();
                         final empSiteBreakdown =
                             TimesheetCalculator.calculateSiteManHours(empRecs);

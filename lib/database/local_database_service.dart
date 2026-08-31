@@ -241,7 +241,9 @@ class LocalDatabaseService {
         uniqueMap[key] = _currentUser!;
       }
     }
-    return List.unmodifiable(uniqueMap.values.toList());
+    final result = uniqueMap.values.toList();
+    result.sort((a, b) => a.fullName.trim().toLowerCase().compareTo(b.fullName.trim().toLowerCase()));
+    return List.unmodifiable(result);
   }
 
   void saveUser(UserEntity user) {
@@ -352,7 +354,9 @@ class LocalDatabaseService {
         );
       }
     }
-    return List.unmodifiable(uniqueMap.values.toList());
+    final result = uniqueMap.values.toList();
+    result.sort((a, b) => a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
+    return List.unmodifiable(result);
   }
 
   void setEmployees(List<EmployeeEntity> employees) {

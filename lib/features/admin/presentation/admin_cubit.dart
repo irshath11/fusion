@@ -143,8 +143,10 @@ class AdminCubit extends Cubit<AdminState> {
       }
 
       // 3. If cloud is initialized and fetched, synchronize down to local database
+      final empList = empMap.values.toList();
+      empList.sort((a, b) => a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
       if (_supabase.isInitialized) {
-        _db.setEmployees(empMap.values.toList());
+        _db.setEmployees(empList);
       }
     } catch (_) {}
 
