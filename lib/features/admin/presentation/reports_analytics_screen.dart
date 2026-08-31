@@ -18,6 +18,8 @@ import '../../attendance/domain/attendance_record.dart';
 import 'admin_edit_attendance_dialog.dart';
 import '../../employee/presentation/employee_reports_list_screen.dart';
 import '../../employee/presentation/work_photo_history_screen.dart';
+import '../../timesheet/domain/timesheet_entry.dart';
+
 
 class ReportsAnalyticsScreen extends StatefulWidget {
   const ReportsAnalyticsScreen({super.key});
@@ -52,6 +54,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   bool _isSyncing = false;
   int _activeTab =
       0; // 0 = Directory, 1 = Cumulative Summary, 2 = Site / Client Man-Hours
+  int _empDetailSubTab =
+      0; // 0 = Attendance & Timesheet Logs, 1 = Emergency Duty Details
   String _siteDateFilter = 'all'; // 'all', 'month', 'week', 'today'
   bool _siteGroupByClient =
       false; // true = Group by Client, false = Specific Site
@@ -726,6 +730,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   setState(() {
                     _selectedEmployeeId = null;
                     _selectedDate = null;
+                    _empDetailSubTab = 0;
                   });
                 },
               ),
@@ -859,9 +864,39 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 12),
+          // Sub-Tab Navigation Bar: Attendance & Timesheet Logs vs Emergency Duty Details
+          AppAnimatedTabSwitcher(
+            selectedIndex: _empDetailSubTab,
+            tabs: const [
+              TabItemData(
+                label: 'Attendance & Timesheet Logs',
+                icon: Icons.calendar_month_rounded,
+              ),
+              TabItemData(
+                label: 'Emergency Duty Details',
+                icon: Icons.warning_amber_rounded,
+              ),
+            ],
+            onTabChanged: (index) {
+              setState(() => _empDetailSubTab = index);
+            },
+          ),
+          const SizedBox(height: 12),
 
-          // Executive Timesheet Summary Cards
-          Row(
+          if (_empDetailSubTab == 1)
+            _buildEmergencyDutyDetailsView(
+              emp,
+              empRecords,
+              timesheets,
+              totalOtHours,
+              isDark,
+              palette,
+              activePrimary,
+            )
+          else ...[
+            // Executive Timesheet Summary Cards
+            Row(
             children: [
               Expanded(
                 child: Container(
@@ -1588,8 +1623,530 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                 );
               },
             ),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _buildEmergencyDutyDetailsView(
+    EmployeeEntity emp,
+    List<AttendanceRecord> empRecords,
+    List<DailyTimesheetEntry> timesheets,
+    double totalOtHours,
+    bool isDark,
+    dynamic palette,
+    Color activePrimary,
+  ) {
+    // Calculate Emergency Duty OT vs Other OT
+    double totalEmergencyOt = 0.0;
+    for (final t in timesheets) {
+      totalEmergencyOt += t.emergencyDutyHours;
+    }
+    double totalOtherOt = (totalOtHours - totalEmergencyOt);
+    if (totalOtherOt < 0) totalOtherOt = 0.0;
+
+    // Filter Emergency Duty Records
+    final emergencyRecords = empRecords.where((r) {
+      return r.workflowStep == WorkflowStep.emergencyCheckIn ||
+          r.workflowStep == WorkflowStep.emergencyCheckOut;
+    }).toList();
+    emergencyRecords.sort((a, b) => b.eventTimestamp.compareTo(a.eventTimestamp));
+
+    // Pair Emergency Sessions
+    final List<Map<String, dynamic>> emergencySessions = [];
+    final List<AttendanceRecord> checkIns = emergencyRecords
+        .where((r) => r.workflowStep == WorkflowStep.emergencyCheckIn)
+        .toList()
+      ..sort((a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
+
+    final List<AttendanceRecord> checkOuts = emergencyRecords
+        .where((r) => r.workflowStep == WorkflowStep.emergencyCheckOut)
+        .toList()
+      ..sort((a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
+
+    final Set<String> pairedCheckoutIds = {};
+
+    for (final inRec in checkIns) {
+      AttendanceRecord? outRec;
+      for (final o in checkOuts) {
+        if (!pairedCheckoutIds.contains(o.id) &&
+            o.eventTimestamp.isAfter(inRec.eventTimestamp)) {
+          if (outRec == null ||
+              o.eventTimestamp.isBefore(outRec.eventTimestamp)) {
+            outRec = o;
+          }
+        }
+      }
+      if (outRec != null) {
+        pairedCheckoutIds.add(outRec.id);
+      }
+      double durationHrs = 0.0;
+      if (outRec != null) {
+        durationHrs =
+            outRec.eventTimestamp.difference(inRec.eventTimestamp).inMinutes /
+                60.0;
+      }
+      emergencySessions.add({
+        'in': inRec,
+        'out': outRec,
+        'durationHrs': durationHrs,
+      });
+    }
+
+    // Sort sessions latest first
+    emergencySessions.sort((a, b) {
+      final aTime = (a['in'] as AttendanceRecord).eventTimestamp;
+      final bTime = (b['in'] as AttendanceRecord).eventTimestamp;
+      return bTime.compareTo(aTime);
+    });
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. OT Breakdown Metric Banner / Card
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isDark
+                ? palette.surfaceDark
+                : Colors.orange.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? palette.cardBorderDark : Colors.orange.shade200,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded,
+                      color: Colors.orange.shade700, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Overtime (OT) Breakdown',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: isDark
+                          ? palette.textPrimaryDark
+                          : palette.textPrimaryLight,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  // Emergency Duty OT Tile
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 10, horizontal: 6),
+                      decoration: BoxDecoration(
+                        color:
+                            isDark ? AppColors.surfaceDark : Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.red.shade900
+                              : Colors.red.shade200,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Emergency OT',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '${totalEmergencyOt.toStringAsFixed(1)} hrs',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Text('+',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: Colors.grey)),
+                  const SizedBox(width: 4),
+                  // Other OT Tile
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 10, horizontal: 6),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? AppColors.surfaceDark
+                            : Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.orange.shade900
+                              : Colors.orange.shade200,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Other OT',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? Colors.orange.shade300
+                                    : Colors.orange.shade900,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '${totalOtherOt.toStringAsFixed(1)} hrs',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? Colors.orange.shade300
+                                    : Colors.orange.shade900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Text('=',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: Colors.grey)),
+                  const SizedBox(width: 4),
+                  // Total OT Tile
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 10, horizontal: 6),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? AppColors.surfaceDark
+                            : AppColors.success.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isDark
+                              ? AppColors.cardBorderDark
+                              : AppColors.success.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Total OT',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.success,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '${totalOtHours.toStringAsFixed(1)} hrs',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.success,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  'Emergency OT (${totalEmergencyOt.toStringAsFixed(1)}h) + Other OT (${totalOtherOt.toStringAsFixed(1)}h) = Total OT (${totalOtHours.toStringAsFixed(1)}h)',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        Text(
+          'Emergency Duty Logs (${emergencySessions.length} Session${emergencySessions.length != 1 ? "s" : ""})',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: isDark ? palette.textPrimaryDark : palette.textPrimaryLight,
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        if (emergencySessions.isEmpty)
+          Card(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.shield_outlined,
+                        size: 48, color: Colors.grey.shade400),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No Emergency Duty records logged for ${emp.name}.',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w500, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: emergencySessions.length,
+            itemBuilder: (ctx, idx) {
+              final session = emergencySessions[idx];
+              final AttendanceRecord inRec = session['in'];
+              final AttendanceRecord? outRec = session['out'];
+              final double durationHrs = session['durationHrs'];
+
+              final dateStr = DateFormat('EEE, dd MMM yyyy')
+                  .format(inRec.eventTimestamp.toLocal());
+              final checkInTimeStr = DateFormat('hh:mm a')
+                  .format(inRec.eventTimestamp.toLocal());
+              final checkOutTimeStr = outRec != null
+                  ? DateFormat('hh:mm a')
+                      .format(outRec.eventTimestamp.toLocal())
+                  : 'In Progress / Pending';
+
+              final siteName = TimesheetCalculator.resolveSiteName(inRec);
+              final address = TimesheetCalculator.resolveFullAddress(inRec);
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark ? palette.surfaceDark : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.red.shade900.withValues(alpha: 0.5)
+                        : Colors.red.shade100,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color:
+                          Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade100,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(Icons.warning_amber_rounded,
+                                  color: Colors.red.shade800, size: 16),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              dateStr,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade700,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            outRec != null
+                                ? '${durationHrs.toStringAsFixed(1)} hrs OT'
+                                : 'Active Duty',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.login_rounded,
+                                      size: 14, color: Colors.green),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Check-In: $checkInTimeStr',
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(
+                                    outRec != null
+                                        ? Icons.logout_rounded
+                                        : Icons.access_time_rounded,
+                                    size: 14,
+                                    color:
+                                        outRec != null ? Colors.red : Colors.orange,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Check-Out: $checkOutTimeStr',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: outRec != null
+                                          ? null
+                                          : Colors.orange.shade800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (inRec.photoBase64.trim().isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: () => _showFullImageDialog(inRec),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Stack(
+                                children: [
+                                  _buildPhotoWidget(inRec.photoBase64),
+                                  Positioned.fill(
+                                    child: Container(
+                                      color: Colors.black26,
+                                      child: const Icon(Icons.zoom_in_rounded,
+                                          color: Colors.white, size: 18),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined,
+                            size: 13, color: Colors.grey),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            '$siteName • $address',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (inRec.remarks != null &&
+                        inRec.remarks!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Remarks: ${inRec.remarks}',
+                        style: const TextStyle(
+                            fontSize: 11,
+                            fontStyle: FontStyle.italic,
+                            color: Colors.grey),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            },
+          ),
+      ],
     );
   }
 
