@@ -110,16 +110,20 @@ class LocalDatabaseService {
         } catch (_) {}
       }
 
-      final savedAttendanceJson = _settingsBox?.get('attendance_records_json');
-      if (savedAttendanceJson != null &&
-          savedAttendanceJson.toString().isNotEmpty) {
-        try {
-          final List<dynamic> decoded = jsonDecode(savedAttendanceJson);
-          _attendanceRecords.clear();
-          for (final item in decoded) {
-            _attendanceRecords.add(AttendanceRecord.fromJson(item));
-          }
-        } catch (_) {}
+      if (kIsWeb) {
+        clearAttendanceCache();
+      } else {
+        final savedAttendanceJson = _settingsBox?.get('attendance_records_json');
+        if (savedAttendanceJson != null &&
+            savedAttendanceJson.toString().isNotEmpty) {
+          try {
+            final List<dynamic> decoded = jsonDecode(savedAttendanceJson);
+            _attendanceRecords.clear();
+            for (final item in decoded) {
+              _attendanceRecords.add(AttendanceRecord.fromJson(item));
+            }
+          } catch (_) {}
+        }
       }
 
       // Check live setup status against Supabase table 'organizations'
@@ -433,7 +437,7 @@ class LocalDatabaseService {
 
   void clearAttendanceCache() {
     _attendanceRecords.clear();
-    _persistAttendanceRecords();
+    _settingsBox?.delete('attendance_records_json');
   }
 
   void saveAttendanceRecord(AttendanceRecord record) {
