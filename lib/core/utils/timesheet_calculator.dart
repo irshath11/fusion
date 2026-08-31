@@ -370,6 +370,19 @@ class TimesheetCalculator {
         netWorkedDuration = Duration(minutes: (effectiveTotalHours * 60).round());
       }
 
+      // If Sunday, convert all worked time to Overtime (0.0 regular hours)
+      if (date.weekday == DateTime.sunday) {
+        if (dayManualOt != null) {
+          overtimeHours = dayManualOt;
+          regularHours = 0.0;
+          netWorkedDuration = Duration(minutes: (overtimeHours * 60).round());
+        } else {
+          final double workedHrs = netWorkedDuration.inMinutes / 60.0;
+          overtimeHours = workedHrs;
+          regularHours = 0.0;
+        }
+      }
+
       entries.add(
         DailyTimesheetEntry(
           date: date,
