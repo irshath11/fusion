@@ -101,7 +101,9 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         }
       }
 
-      emit(UserManagementLoaded(userMap.values.toList()));
+      final usersList = userMap.values.toList();
+      usersList.sort((a, b) => a.fullName.trim().toLowerCase().compareTo(b.fullName.trim().toLowerCase()));
+      emit(UserManagementLoaded(usersList));
     } catch (e) {
       emit(UserManagementError('Failed to fetch user list: ${e.toString()}'));
     }

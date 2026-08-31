@@ -69,11 +69,15 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
             final matchesRole = _selectedRoleFilter == 'ALL' ||
                 u.role.nameString == _selectedRoleFilter;
             return matchesSearch && matchesRole;
-          }).toList();
+          }).toList()
+            ..sort((a, b) =>
+                a.fullName.trim().toLowerCase().compareTo(b.fullName.trim().toLowerCase()));
 
           final candidateAdmins = users
               .where((u) => u.role == UserRole.admin && u.isActive)
-              .toList();
+              .toList()
+            ..sort((a, b) =>
+                a.fullName.trim().toLowerCase().compareTo(b.fullName.trim().toLowerCase()));
 
           return Scaffold(
             appBar: AppBar(

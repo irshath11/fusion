@@ -239,7 +239,36 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       }
     }
 
-    return employeeMap.values.toList();
+    final list = employeeMap.values.toList();
+    list.sort((a, b) => a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
+    return list;
+  }
+
+  bool _recordMatchesEmployee(AttendanceRecord r, EmployeeEntity emp) {
+    final rEmpId = r.employeeId.trim().toLowerCase();
+    final rEmpName = r.employeeName.trim().toLowerCase();
+    final eId = emp.id.trim().toLowerCase();
+    final eName = emp.name.trim().toLowerCase();
+    final eCode = emp.employeeCode.trim().toLowerCase();
+
+    // 1. Match by ID (exact or prefix match if at least 4 chars)
+    if (eId.isNotEmpty && rEmpId.isNotEmpty) {
+      if (rEmpId == eId) return true;
+      if (eId.length >= 4 && rEmpId.startsWith(eId)) return true;
+      if (rEmpId.length >= 4 && eId.startsWith(rEmpId)) return true;
+    }
+
+    // 2. Match by Employee Code (exact)
+    if (eCode.isNotEmpty && rEmpId.isNotEmpty && rEmpId == eCode) {
+      return true;
+    }
+
+    // 3. Match by Name (exact match only - prevents partial string matches like krishnan vs ramakrishnan)
+    if (eName.isNotEmpty && rEmpName.isNotEmpty && rEmpName == eName) {
+      return true;
+    }
+
+    return false;
   }
 
   EmployeeEntity _resolveEmployee(String? employeeId) {
@@ -256,18 +285,20 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
     final all = _getSynthesizedEmployees();
     final cleanId = employeeId.trim().toLowerCase();
-    final match = all.where((e) =>
-        e.id.toLowerCase() == cleanId ||
-        e.employeeCode.toLowerCase() == cleanId ||
-        e.name.toLowerCase().trim() == cleanId ||
-        e.email.toLowerCase().trim() == cleanId ||
+
+    // 1. First try exact matches
+    final exactMatch = all.where((e) =>
+        (e.id.isNotEmpty && e.id.toLowerCase() == cleanId) ||
+        (e.employeeCode.isNotEmpty && e.employeeCode.toLowerCase() == cleanId) ||
+        (e.name.isNotEmpty && e.name.toLowerCase().trim() == cleanId) ||
+        (e.email.isNotEmpty && e.email.toLowerCase().trim() == cleanId));
+    if (exactMatch.isNotEmpty) return exactMatch.first;
+
+    // 2. Try ID prefix match if cleanId is at least 4 chars long
+    final prefixMatch = all.where((e) =>
         (cleanId.length >= 4 && e.id.toLowerCase().startsWith(cleanId)) ||
-        (cleanId.length >= 4 &&
-            e.employeeCode.toLowerCase().contains(cleanId)) ||
-        (cleanId.isNotEmpty && e.name.toLowerCase().trim().contains(cleanId)) ||
-        (cleanId.isNotEmpty &&
-            cleanId.contains(e.name.toLowerCase().trim())));
-    if (match.isNotEmpty) return match.first;
+        (e.id.length >= 4 && cleanId.length >= 4 && cleanId.startsWith(e.id.toLowerCase())));
+    if (prefixMatch.isNotEmpty) return prefixMatch.first;
 
     return EmployeeEntity(
       id: employeeId,
@@ -601,20 +632,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   Widget _buildLevel2DateListView() {
     final emp = _resolveEmployee(_selectedEmployeeId);
 
-    final empRecords = _db.getAttendanceRecords().where((r) {
-      final rEmpId = r.employeeId.trim().toLowerCase();
-      final rEmpName = r.employeeName.trim().toLowerCase();
-      final eId = emp.id.trim().toLowerCase();
-      final eName = emp.name.trim().toLowerCase();
-      final eCode = emp.employeeCode.trim().toLowerCase();
-      return (eId.isNotEmpty && rEmpId == eId) ||
-          (eName.isNotEmpty && rEmpName == eName) ||
-          (eCode.isNotEmpty && rEmpId == eCode) ||
-          (eId.length >= 4 && rEmpId.startsWith(eId)) ||
-          (rEmpId.length >= 4 && eId.startsWith(rEmpId)) ||
-          (eName.isNotEmpty &&
-              (rEmpName.contains(eName) || eName.contains(rEmpName)));
-    }).toList();
+    final empRecords = _db
+        .getAttendanceRecords()
+        .where((r) => _recordMatchesEmployee(r, emp))
+        .toList();
 
     // Group records by date (yyyy-MM-dd)
     final Map<String, List<AttendanceRecord>> groupedByDate = {};
@@ -1409,18 +1430,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     final selectedDateStr = DateFormat('yyyy-MM-dd').format(_selectedDate!);
 
     final dateRecords = _db.getAttendanceRecords().where((r) {
-      final rEmpId = r.employeeId.trim().toLowerCase();
-      final rEmpName = r.employeeName.trim().toLowerCase();
-      final eId = emp.id.trim().toLowerCase();
-      final eName = emp.name.trim().toLowerCase();
-      final eCode = emp.employeeCode.trim().toLowerCase();
-      final matchesUser = (eId.isNotEmpty && rEmpId == eId) ||
-          (eName.isNotEmpty && rEmpName == eName) ||
-          (eCode.isNotEmpty && rEmpId == eCode) ||
-          (eId.length >= 4 && rEmpId.startsWith(eId)) ||
-          (rEmpId.length >= 4 && eId.startsWith(rEmpId)) ||
-          (eName.isNotEmpty &&
-              (rEmpName.contains(eName) || eName.contains(rEmpName)));
+      final matchesUser = _recordMatchesEmployee(r, emp);
       final matchesDate =
           DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()) == selectedDateStr;
       return matchesUser && matchesDate;
@@ -2563,20 +2573,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     double grandOt = 0.0;
 
     for (final emp in employees) {
-      final empRecords = allRecords.where((r) {
-        final rEmpId = r.employeeId.trim().toLowerCase();
-        final rEmpName = r.employeeName.trim().toLowerCase();
-        final eId = emp.id.trim().toLowerCase();
-        final eName = emp.name.trim().toLowerCase();
-        final eCode = emp.employeeCode.trim().toLowerCase();
-        return (eId.isNotEmpty && rEmpId == eId) ||
-            (eName.isNotEmpty && rEmpName == eName) ||
-            (eCode.isNotEmpty && rEmpId == eCode) ||
-            (eId.length >= 4 && rEmpId.startsWith(eId)) ||
-            (rEmpId.length >= 4 && eId.startsWith(rEmpId)) ||
-            (eName.isNotEmpty &&
-                (rEmpName.contains(eName) || eName.contains(rEmpName)));
-      }).toList();
+      final empRecords = allRecords
+          .where((r) => _recordMatchesEmployee(r, emp))
+          .toList();
 
       final timesheets =
           TimesheetCalculator.calculateDailyTimesheets(empRecords);
