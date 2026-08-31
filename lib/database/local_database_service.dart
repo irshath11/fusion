@@ -788,6 +788,18 @@ class LocalDatabaseService {
     }
   }
 
+  /// Checks if employee currently has an active Emergency Duty check-in without check-out today
+  bool isEmergencyDutyActiveToday([String? employeeId]) {
+    final todayRecords = getTodayAttendanceRecords(employeeId);
+    if (todayRecords.isEmpty) return false;
+    for (int i = todayRecords.length - 1; i >= 0; i--) {
+      final step = todayRecords[i].workflowStep;
+      if (step == WorkflowStep.emergencyCheckIn) return true;
+      if (step == WorkflowStep.emergencyCheckOut) return false;
+    }
+    return false;
+  }
+
   /// Checks if the employee is currently on break
   bool isEmployeeOnBreakToday([String? employeeId]) {
     final todayRecords = getTodayAttendanceRecords(employeeId);

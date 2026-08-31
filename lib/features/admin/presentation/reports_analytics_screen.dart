@@ -2796,6 +2796,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         return Icons.logout_rounded;
       case WorkflowStep.completed:
         return Icons.check_circle_rounded;
+      case WorkflowStep.emergencyCheckIn:
+        return Icons.warning_amber_rounded;
+      case WorkflowStep.emergencyCheckOut:
+        return Icons.warning_rounded;
     }
   }
 
@@ -2816,6 +2820,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         return palette.secondary;
       case WorkflowStep.completed:
         return palette.success;
+      case WorkflowStep.emergencyCheckIn:
+        return palette.error;
+      case WorkflowStep.emergencyCheckOut:
+        return palette.error;
     }
   }
 
@@ -2889,6 +2897,21 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
   }
 
+  bool _recordMatchesEmployee(AttendanceRecord r, EmployeeEntity emp) {
+    final rEmpId = r.employeeId.trim().toLowerCase();
+    final rEmpName = r.employeeName.trim().toLowerCase();
+    final eId = emp.id.trim().toLowerCase();
+    final eName = emp.name.trim().toLowerCase();
+    final eCode = emp.employeeCode.trim().toLowerCase();
+    return (eId.isNotEmpty && rEmpId == eId) ||
+        (eName.isNotEmpty && rEmpName == eName) ||
+        (eCode.isNotEmpty && rEmpId == eCode) ||
+        (eId.length >= 4 && rEmpId.startsWith(eId)) ||
+        (rEmpId.length >= 4 && eId.startsWith(rEmpId)) ||
+        (eName.isNotEmpty &&
+            (rEmpName.contains(eName) || eName.contains(rEmpName)));
+  }
+
   // ==========================================
   // CUMULATIVE SUMMARY VIEW FOR ALL EMPLOYEES
   // ==========================================
@@ -2899,30 +2922,21 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     double grandOt = 0.0;
 
     for (final emp in employees) {
-      final empRecords = allRecords.where((r) {
-        final rEmpId = r.employeeId.trim().toLowerCase();
-        final rEmpName = r.employeeName.trim().toLowerCase();
-        final eId = emp.id.trim().toLowerCase();
-        final eName = emp.name.trim().toLowerCase();
-        final eCode = emp.employeeCode.trim().toLowerCase();
-        return (eId.isNotEmpty && rEmpId == eId) ||
-            (eName.isNotEmpty && rEmpName == eName) ||
-            (eCode.isNotEmpty && rEmpId == eCode) ||
-            (eId.length >= 4 && rEmpId.startsWith(eId)) ||
-            (rEmpId.length >= 4 && eId.startsWith(rEmpId)) ||
-            (eName.isNotEmpty &&
-                (rEmpName.contains(eName) || eName.contains(rEmpName)));
-      }).toList();
+      final empRecords = allRecords
+          .where((r) => _recordMatchesEmployee(r, emp))
+          .toList();
 
       final timesheets =
           TimesheetCalculator.calculateDailyTimesheets(empRecords);
 
       double regHours = 0.0;
       double otHours = 0.0;
+      double emgHours = 0.0;
 
       for (final entry in timesheets) {
         regHours += entry.regularHours;
         otHours += entry.overtimeHours;
+        emgHours += entry.emergencyDutyHours;
       }
 
       grandReg += regHours;
@@ -2933,6 +2947,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           employee: emp,
           regularHours: regHours,
           overtimeHours: otHours,
+          emergencyDutyHours: emgHours,
           combinedHours: regHours + otHours,
           daysWorked: timesheets.length,
         ),
@@ -4287,6 +4302,7 @@ class _EmpCumulativeData {
   final EmployeeEntity employee;
   final double regularHours;
   final double overtimeHours;
+  final double emergencyDutyHours;
   final double combinedHours;
   final int daysWorked;
 
@@ -4294,6 +4310,7 @@ class _EmpCumulativeData {
     required this.employee,
     required this.regularHours,
     required this.overtimeHours,
+    this.emergencyDutyHours = 0.0,
     required this.combinedHours,
     required this.daysWorked,
   });

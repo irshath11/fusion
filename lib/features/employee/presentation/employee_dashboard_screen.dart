@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
@@ -9,6 +12,7 @@ import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../../../core/widgets/offline_banner.dart';
 import '../../attendance/presentation/attendance_cubit.dart';
+import '../../attendance/domain/attendance_record.dart';
 import '../../attendance/presentation/camera_capture_modal.dart';
 import '../../attendance/presentation/site_name_dialog.dart';
 import '../../attendance/presentation/break_type_dialog.dart';
@@ -265,7 +269,9 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
             step: step,
             siteName: '$bName Ended',
           );
-    } else if (step == WorkflowStep.officeCheckOut) {
+    } else if (step == WorkflowStep.officeCheckOut ||
+        step == WorkflowStep.emergencyCheckIn ||
+        step == WorkflowStep.emergencyCheckOut) {
       _openCameraModal(step);
     }
   }
@@ -564,6 +570,11 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
         label: 'Duty Radar',
       ),
       NavDestinationItem(
+        icon: Icons.medical_services_outlined,
+        activeIcon: Icons.medical_services_rounded,
+        label: 'Emergency Duty',
+      ),
+      NavDestinationItem(
         icon: Icons.receipt_long_outlined,
         activeIcon: Icons.receipt_long_rounded,
         label: 'Timesheet',
@@ -582,13 +593,18 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
 
     Widget bodyWidget;
     if (_selectedNavIndex == 1) {
+      bodyWidget = BlocConsumer<AttendanceCubit, AttendanceState>(
+        listener: _attendanceStateListener,
+        builder: (context, state) => _buildEmergencyDutyScreen(context, state),
+      );
+    } else if (_selectedNavIndex == 2) {
       bodyWidget = EmployeeTimesheetScreen(
         employeeId: user?.id ?? user?.firebaseUid,
         employeeName: user?.fullName,
       );
-    } else if (_selectedNavIndex == 2) {
-      bodyWidget = const EmployeeReportGeneratorScreen();
     } else if (_selectedNavIndex == 3) {
+      bodyWidget = const EmployeeReportGeneratorScreen();
+    } else if (_selectedNavIndex == 4) {
       bodyWidget = const WorkPhotosReportScreen();
     } else {
       bodyWidget = SafeArea(
@@ -1581,5 +1597,584 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
         ),
       ],
     );
+  }
+
+  void _attendanceStateListener(BuildContext context, AttendanceState state) {
+    if (state is AttendanceStepSuccess) {
+      _refreshSyncCount();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              '${state.record.workflowStep.displayName} Captured Successfully!'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } else if (state is GeofenceViolationError) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.gpp_bad_rounded,
+                  color: AppColors.error),
+              SizedBox(width: 10),
+              Text('Geofence Violation'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                state.message,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.error),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                  'Distance to target: ${state.distanceMeters.toStringAsFixed(1)} meters'),
+              Text(
+                  'Permitted Geofence Radius: ${state.allowedRadiusMeters.toStringAsFixed(1)} meters'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            )
+          ],
+        ),
+      );
+    } else if (state is LocationServicesDisabledError) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.location_off_rounded,
+                  color: AppColors.error, size: 28),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Location Required',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                state.message,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.error,
+                    fontSize: 13),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Attendance log cannot be saved without valid GPS location. Please turn on Location (GPS) services on your device and try logging again.',
+                style:
+                    TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            OutlinedButton.icon(
+              icon: const Icon(Icons.location_on_rounded,
+                  size: 18),
+              label: Text(state.isPermissionDenied
+                  ? 'Open App Settings'
+                  : 'Turn On Location'),
+              onPressed: () {
+                Navigator.pop(ctx);
+                if (state.isPermissionDenied) {
+                  Geolocator.openAppSettings();
+                } else {
+                  Geolocator.openLocationSettings();
+                }
+              },
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } else if (state is AttendanceFailure) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(state.errorMessage),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
+  Widget _buildEmergencyDutyScreen(
+      BuildContext context, AttendanceState state) {
+    final user = _db.currentUser;
+    final empId = user?.id ?? user?.firebaseUid;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = AppTheme.currentColors;
+
+    final isEmergencyActive = _db.isEmergencyDutyActiveToday(user?.id);
+    final allRecords = _db.getAttendanceRecords();
+    final emergencyRecords = allRecords
+        .where((r) =>
+            (r.employeeId == empId ||
+                r.employeeId == user?.id ||
+                r.employeeId == user?.firebaseUid) &&
+            (r.workflowStep == WorkflowStep.emergencyCheckIn ||
+                r.workflowStep == WorkflowStep.emergencyCheckOut))
+        .toList()
+      ..sort((a, b) => b.eventTimestamp.compareTo(a.eventTimestamp));
+
+    return SafeArea(
+      child: Column(
+        children: [
+          OfflineBanner(
+            pendingCount: _pendingSyncCount,
+            isSyncing: _isSyncing,
+            onSyncPressed: _manualSync,
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Emergency Duty Header Banner
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: isDark
+                            ? [const Color(0xFF4A1212), const Color(0xFF2C0A0A)]
+                            : [Colors.red.shade700, Colors.red.shade900],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.red.withValues(alpha: 0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.medical_services_rounded,
+                                color: Colors.white,
+                                size: 26,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Emergency Duty & Callouts',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Sunday, Holiday & Post-Shift Callouts',
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Log emergency duty work hours for urgent callouts or emergency site visits. All duration logged here is 100% computed as Overtime (OT).',
+                          style: TextStyle(
+                              color: Color(0xE6FFFFFF), fontSize: 13, height: 1.35),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Active Action Card
+                  Card(
+                    color: isEmergencyActive
+                        ? Colors.red.shade900.withValues(alpha: 0.15)
+                        : (isDark ? palette.surfaceDark : Colors.red.shade50),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(
+                        color:
+                            isEmergencyActive ? Colors.red : Colors.red.shade300,
+                        width: isEmergencyActive ? 1.8 : 1.0,
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(18.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                isEmergencyActive
+                                    ? Icons.warning_amber_rounded
+                                    : Icons.flash_on_rounded,
+                                color: Colors.red.shade700,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  isEmergencyActive
+                                      ? 'Emergency Duty in Progress'
+                                      : 'Emergency Duty Control',
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? Colors.red.shade300
+                                        : Colors.red.shade800,
+                                  ),
+                                ),
+                              ),
+                              StatusBadge(
+                                label: isEmergencyActive
+                                    ? '🚨 IN PROGRESS'
+                                    : 'READY',
+                                color: isEmergencyActive
+                                    ? Colors.red
+                                    : Colors.green,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            isEmergencyActive
+                                ? 'You are currently checked in for Emergency Duty. Tap below to complete your emergency callout session.'
+                                : 'Tap below to initiate an Emergency Duty Check-In. Live camera photo and GPS location will be captured.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark
+                                  ? palette.textSecondaryDark
+                                  : Colors.red.shade900,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          AppButton(
+                            text: state is AttendanceProcessing
+                                ? 'Processing Emergency Duty...'
+                                : (isEmergencyActive
+                                    ? 'Execute Emergency Duty Check-Out'
+                                    : 'Execute Emergency Duty Check-In'),
+                            isLoading: state is AttendanceProcessing,
+                            icon: isEmergencyActive
+                                ? Icons.logout_rounded
+                                : Icons.flash_on_rounded,
+                            onPressed: () => _handleAttendanceStep(
+                              isEmergencyActive
+                                  ? WorkflowStep.emergencyCheckOut
+                                  : WorkflowStep.emergencyCheckIn,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Emergency Duty Logs Timeline
+                  Text(
+                    'Emergency Callout Log History',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 10),
+                  if (emergencyRecords.isEmpty)
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              Icon(Icons.history_rounded,
+                                  size: 36, color: Colors.grey.shade400),
+                              const SizedBox(height: 8),
+                              Text(
+                                'No emergency callout logs recorded yet.',
+                                style: TextStyle(
+                                    color: palette.textSecondaryLight,
+                                    fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: emergencyRecords.length,
+                      itemBuilder: (context, index) {
+                        final record = emergencyRecords[index];
+                        final formattedDate =
+                            DateFormat('EEE, MMM d, yyyy • hh:mm a')
+                                .format(record.eventTimestamp);
+                        final isCheckIn =
+                            record.workflowStep == WorkflowStep.emergencyCheckIn;
+                        final hasPhoto = record.photoBase64.trim().isNotEmpty;
+
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          child: ListTile(
+                            onTap: () => _showEmergencyPhotoDialog(context, record),
+                            leading: hasPhoto
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: SizedBox(
+                                      width: 44,
+                                      height: 44,
+                                      child: _buildEmergencyPhotoWidget(record.photoBase64),
+                                    ),
+                                  )
+                                : CircleAvatar(
+                                    backgroundColor: isCheckIn
+                                        ? Colors.red.shade100
+                                        : Colors.orange.shade100,
+                                    child: Icon(
+                                      isCheckIn
+                                          ? Icons.login_rounded
+                                          : Icons.logout_rounded,
+                                      color: isCheckIn
+                                          ? Colors.red.shade800
+                                          : Colors.orange.shade800,
+                                      size: 20,
+                                    ),
+                                  ),
+                            title: Text(
+                              record.workflowStep.displayName,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 2),
+                                Text(
+                                  formattedDate,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: palette.textSecondaryLight),
+                                ),
+                                if (record.address.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    record.address,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontSize: 11, color: Colors.grey),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            trailing: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                StatusBadge(
+                                  label: '100% OT',
+                                  color: Colors.red.shade700,
+                                ),
+                                const SizedBox(height: 4),
+                                StatusBadge(
+                                  label: record.syncStatus == SyncStatus.synced
+                                      ? 'Synced'
+                                      : 'Offline',
+                                  color: record.syncStatus == SyncStatus.synced
+                                      ? Colors.green
+                                      : Colors.orange,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEmergencyPhotoDialog(BuildContext context, AttendanceRecord record) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(
+              record.workflowStep == WorkflowStep.emergencyCheckIn
+                  ? Icons.login_rounded
+                  : Icons.logout_rounded,
+              color: Colors.red.shade700,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                record.workflowStep.displayName,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (record.photoBase64.trim().isNotEmpty) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: AspectRatio(
+                    aspectRatio: 4 / 3,
+                    child: _buildEmergencyPhotoWidget(record.photoBase64),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              Row(
+                children: [
+                  const Icon(Icons.access_time_rounded, size: 16, color: Colors.grey),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      DateFormat('EEE, MMM d, yyyy • hh:mm a')
+                          .format(record.eventTimestamp),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+              if (record.address.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.location_on_rounded, size: 16, color: Colors.grey),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        record.address,
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  StatusBadge(
+                    label: record.syncStatus == SyncStatus.synced
+                        ? 'Synced to Cloud'
+                        : 'Pending Offline Sync',
+                    color: record.syncStatus == SyncStatus.synced
+                        ? Colors.green
+                        : Colors.orange,
+                  ),
+                  const SizedBox(width: 8),
+                  StatusBadge(
+                    label: '100% OT',
+                    color: Colors.red.shade700,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmergencyPhotoWidget(String photoStr) {
+    final clean = photoStr.trim();
+    if (clean.isEmpty) {
+      return Container(
+        color: Colors.grey.shade300,
+        child: const Icon(Icons.camera_alt_rounded, size: 30, color: Colors.grey),
+      );
+    }
+    if (clean.startsWith('http://') || clean.startsWith('https://')) {
+      return Image.network(
+        clean,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          color: Colors.grey.shade300,
+          child: const Icon(Icons.broken_image_rounded, size: 30, color: Colors.grey),
+        ),
+      );
+    }
+    if (!kIsWeb && File(clean).existsSync()) {
+      return Image.file(File(clean), fit: BoxFit.cover);
+    }
+    try {
+      String base64Data = clean;
+      if (clean.contains(',')) {
+        base64Data = clean.split(',').last;
+      }
+      final bytes = base64Decode(base64Data);
+      return Image.memory(bytes, fit: BoxFit.cover);
+    } catch (_) {
+      return Container(
+        color: Colors.grey.shade300,
+        child: const Icon(Icons.camera_alt_rounded, size: 30, color: Colors.grey),
+      );
+    }
   }
 }

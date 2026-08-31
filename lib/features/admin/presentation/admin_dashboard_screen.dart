@@ -640,6 +640,10 @@ class AdminOverviewTab extends StatelessWidget {
         return _StepInfo('Office Check-Out', Icons.task_alt_rounded, palette.success);
       case WorkflowStep.completed:
         return _StepInfo('Shift Completed', Icons.verified_rounded, palette.success);
+      case WorkflowStep.emergencyCheckIn:
+        return _StepInfo('Emergency Check-In', Icons.warning_amber_rounded, palette.error);
+      case WorkflowStep.emergencyCheckOut:
+        return _StepInfo('Emergency Check-Out', Icons.warning_rounded, palette.error);
     }
   }
 
