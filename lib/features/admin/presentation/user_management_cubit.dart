@@ -53,6 +53,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
       return null;
     }
   }
+
   final Uuid _uuid = const Uuid();
 
   UserManagementCubit() : super(UserManagementInitial());
@@ -105,7 +106,10 @@ class UserManagementCubit extends Cubit<UserManagementState> {
       }
 
       final usersList = userMap.values.toList();
-      usersList.sort((a, b) => a.fullName.trim().toLowerCase().compareTo(b.fullName.trim().toLowerCase()));
+      usersList.sort((a, b) => a.fullName
+          .trim()
+          .toLowerCase()
+          .compareTo(b.fullName.trim().toLowerCase()));
       emit(UserManagementLoaded(usersList));
     } catch (e) {
       emit(UserManagementError('Failed to fetch user list: ${e.toString()}'));
@@ -135,7 +139,9 @@ class UserManagementCubit extends Cubit<UserManagementState> {
       final passToUse =
           (temporaryPassword != null && temporaryPassword.trim().isNotEmpty)
               ? temporaryPassword.trim()
-              : (employeeCode.trim().isNotEmpty ? employeeCode.trim() : 'Pass#${DateTime.now().millisecond}');
+              : (employeeCode.trim().isNotEmpty
+                  ? employeeCode.trim()
+                  : 'Pass#${DateTime.now().millisecond}');
 
       // 1. Create Firebase Authentication user with temporary password using secondary app instance so Admin session remains active
       try {
@@ -275,12 +281,15 @@ class UserManagementCubit extends Cubit<UserManagementState> {
 
       // Update local UserEntity if present
       final localUsers = _db.getUsers();
-      final userIndex = localUsers.indexWhere((u) => u.id == userId || u.email == userId);
+      final userIndex =
+          localUsers.indexWhere((u) => u.id == userId || u.email == userId);
       if (userIndex >= 0) {
         final existingUser = localUsers[userIndex];
         final updatedUser = existingUser.copyWith(
           fullName: fullName.trim(),
-          email: (email != null && email.trim().isNotEmpty) ? email.trim() : existingUser.email,
+          email: (email != null && email.trim().isNotEmpty)
+              ? email.trim()
+              : existingUser.email,
           phoneNumber: phoneNumber?.trim() ?? existingUser.phoneNumber,
           role: role ?? existingUser.role,
         );
@@ -311,7 +320,9 @@ class UserManagementCubit extends Cubit<UserManagementState> {
             : existingEmp.employeeCode,
         name: fullName.trim(),
         mobileNumber: phoneNumber?.trim() ?? existingEmp.mobileNumber,
-        email: (email != null && email.trim().isNotEmpty) ? email.trim() : existingEmp.email,
+        email: (email != null && email.trim().isNotEmpty)
+            ? email.trim()
+            : existingEmp.email,
         designation: designation?.trim() ?? existingEmp.designation,
         department: department?.trim() ?? existingEmp.department,
         useDefaultOffice: useDefaultOffice ?? existingEmp.useDefaultOffice,
@@ -388,7 +399,8 @@ class UserManagementCubit extends Cubit<UserManagementState> {
     }
   }
 
-  Future<void> softDeleteUser(String userId, {String? email, String? fullName}) async {
+  Future<void> softDeleteUser(String userId,
+      {String? email, String? fullName}) async {
     emit(UserManagementLoading());
     try {
       final orgId =
@@ -429,7 +441,8 @@ class UserManagementCubit extends Cubit<UserManagementState> {
     emit(UserManagementLoading());
     try {
       try {
-        await _fbAuth?.sendPasswordResetEmail(email: email.trim().toLowerCase());
+        await _fbAuth?.sendPasswordResetEmail(
+            email: email.trim().toLowerCase());
       } catch (_) {}
 
       // Set temporary password change flag in Supabase

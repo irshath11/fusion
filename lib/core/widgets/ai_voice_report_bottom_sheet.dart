@@ -29,7 +29,9 @@ class _AiVoiceReportBottomSheetState extends State<AiVoiceReportBottomSheet>
   bool _isCleaningSpeech = false;
   bool _showApiKeyInput = false;
 
-  String _baseTextBeforeListen = '';
+  String _baseTextForCurrentSession = '';
+  String _accumulatedSessionText = '';
+  String _lastPartialText = '';
   String _selectedTargetCategory = 'all'; // 'all', 'defects', 'work', 'materials'
 
   late AnimationController _pulseController;
@@ -69,12 +71,22 @@ class _AiVoiceReportBottomSheetState extends State<AiVoiceReportBottomSheet>
     try {
       bool available = await _speech.initialize(
         onStatus: (status) {
+          debugPrint('Speech status: $status');
           if (status == 'done' || status == 'notListening') {
-            if (mounted) setState(() => _isListening = false);
+            if (mounted) {
+              setState(() {
+                _isListening = false;
+              });
+            }
           }
         },
         onError: (errorNotification) {
-          if (mounted) setState(() => _isListening = false);
+          debugPrint('Speech error: ${errorNotification.errorMsg}');
+          if (mounted) {
+            setState(() {
+              _isListening = false;
+            });
+          }
         },
       );
       if (mounted) {
@@ -88,13 +100,17 @@ class _AiVoiceReportBottomSheetState extends State<AiVoiceReportBottomSheet>
   void _toggleListening() async {
     if (_isListening) {
       await _speech.stop();
-      setState(() => _isListening = false);
+      if (mounted) {
+        setState(() => _isListening = false);
+      }
     } else {
       if (!_speechAvailable) {
         await _initSpeech();
       }
       if (_speechAvailable) {
-        _baseTextBeforeListen = _notesController.text.trim();
+        _baseTextForCurrentSession = _notesController.text.trim();
+        _accumulatedSessionText = '';
+        _lastPartialText = '';
         setState(() => _isListening = true);
 
         await _speech.listen(
@@ -102,15 +118,44 @@ class _AiVoiceReportBottomSheetState extends State<AiVoiceReportBottomSheet>
             listenMode: stt.ListenMode.dictation,
             cancelOnError: false,
             partialResults: true,
+            pauseFor: const Duration(seconds: 10),
+            listenFor: const Duration(minutes: 2),
+            autoPunctuation: true,
           ),
           onResult: (result) {
             if (mounted && result.recognizedWords.isNotEmpty) {
-              final recognized = result.recognizedWords.trim();
-              final combined = _baseTextBeforeListen.isNotEmpty
-                  ? '$_baseTextBeforeListen $recognized'
-                  : recognized;
+              final incoming = result.recognizedWords.trim();
 
               setState(() {
+                if (_lastPartialText.isNotEmpty &&
+                    !incoming.toLowerCase().startsWith(_lastPartialText.toLowerCase()) &&
+                    !_lastPartialText.toLowerCase().startsWith(incoming.toLowerCase())) {
+                  // Engine started a new phrase segment after a pause. Lock in previous partial.
+                  _accumulatedSessionText = _accumulatedSessionText.isNotEmpty
+                      ? '$_accumulatedSessionText $_lastPartialText'
+                      : _lastPartialText;
+                  _lastPartialText = incoming;
+                } else {
+                  _lastPartialText = incoming;
+                }
+
+                if (result.finalResult) {
+                  _accumulatedSessionText = _accumulatedSessionText.isNotEmpty
+                      ? '$_accumulatedSessionText $_lastPartialText'
+                      : _lastPartialText;
+                  _lastPartialText = '';
+                }
+
+                final currentStream = _accumulatedSessionText.isNotEmpty
+                    ? (_lastPartialText.isNotEmpty
+                        ? '$_accumulatedSessionText $_lastPartialText'
+                        : _accumulatedSessionText)
+                    : _lastPartialText;
+
+                final combined = _baseTextForCurrentSession.isNotEmpty
+                    ? '$_baseTextForCurrentSession $currentStream'
+                    : currentStream;
+
                 _notesController.text = combined;
                 _notesController.selection = TextSelection.fromPosition(
                   TextPosition(offset: _notesController.text.length),
@@ -198,20 +243,27 @@ class _AiVoiceReportBottomSheetState extends State<AiVoiceReportBottomSheet>
     }
   }
 
-  Widget _buildTargetCategoryChip(String categoryId, String label) {
+  Widget _buildTargetCategoryChip(String categoryId, String label, bool isDark) {
     final isSelected = _selectedTargetCategory == categoryId;
     return ChoiceChip(
       label: Text(
         label,
         style: TextStyle(
           fontSize: 11,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          color: isSelected ? Colors.white : AppColors.primary,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+          color: isSelected
+              ? Colors.white
+              : (isDark ? AppColors.slate200 : AppColors.slate700),
         ),
       ),
       selected: isSelected,
       selectedColor: AppColors.primary,
-      backgroundColor: AppColors.primary.withValues(alpha: 0.08),
+      backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
+      side: BorderSide(
+        color: isSelected
+            ? AppColors.primary
+            : (isDark ? AppColors.slate700 : AppColors.slate300),
+      ),
       showCheckmark: false,
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
       onSelected: (val) {
@@ -317,13 +369,13 @@ class _AiVoiceReportBottomSheetState extends State<AiVoiceReportBottomSheet>
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _buildTargetCategoryChip('all', '✨ Auto-Detect All'),
+                    _buildTargetCategoryChip('all', '✨ Auto-Detect All', isDark),
                     const SizedBox(width: 6),
-                    _buildTargetCategoryChip('defects', '🔍 Defects Only'),
+                    _buildTargetCategoryChip('defects', '🔍 Defects Only', isDark),
                     const SizedBox(width: 6),
-                    _buildTargetCategoryChip('work', '🛠️ Work Done Only'),
+                    _buildTargetCategoryChip('work', '🛠️ Work Done Only', isDark),
                     const SizedBox(width: 6),
-                    _buildTargetCategoryChip('materials', '📦 Materials Only'),
+                    _buildTargetCategoryChip('materials', '📦 Materials Only', isDark),
                   ],
                 ),
               ),

@@ -92,7 +92,7 @@ class AiReportService {
     if (apiKey.isNotEmpty) {
       try {
         final model = GenerativeModel(
-          model: 'gemini-1.5-flash-latest',
+          model: 'gemini-3.6-flash',
           apiKey: apiKey,
         );
         const prompt = '''
@@ -127,7 +127,7 @@ Only return the corrected dictation text with proper punctuation. Do not add con
     String? customApiKey,
     String targetCategory = 'all',
   }) async {
-    final text = await cleanSpeechText(rawText, customApiKey: customApiKey);
+    final text = rawText.trim();
     if (text.isEmpty) {
       return _emptyReport();
     }
@@ -156,7 +156,7 @@ Only return the corrected dictation text with proper punctuation. Do not add con
     String targetCategory = 'all',
   }) async {
     final model = GenerativeModel(
-      model: 'gemini-1.5-flash-latest',
+      model: 'gemini-3.6-flash',
       apiKey: apiKey,
       generationConfig: GenerationConfig(
         responseMimeType: 'application/json',
@@ -324,13 +324,15 @@ SPEECH CORRECTION & DISAMBIGUATION RULES:
     const defectKeywords = [
       'found', 'observed', 'issue', 'defect', 'damaged', 'broken',
       'leak', 'leaking', 'fault', 'tripped', 'burnt', 'failed',
-      'noise', 'error', 'not working', 'high temp', 'low pressure', 'complaint'
+      'noise', 'error', 'not working', 'high temp', 'low pressure', 'complaint',
+      'problem', 'bad', 'stopped', 'dirty', 'clogged'
     ];
 
     const workKeywords = [
       'replaced', 'repaired', 'fixed', 'cleaned', 'installed', 'tested',
       'checked', 'resolved', 'serviced', 'calibrated', 'tightened',
-      'adjusted', 'refilled', 'welded', 'changed'
+      'adjusted', 'refilled', 'welded', 'changed', 'done', 'complete',
+      'completed', 'verified', 'inspect', 'inspected'
     ];
 
     for (final clause in clauses) {
@@ -345,7 +347,7 @@ SPEECH CORRECTION & DISAMBIGUATION RULES:
       } else if (hasWorkKw && hasDefectKw) {
         workClauses.add(clause);
       } else {
-        if (cLower.startsWith('replaced') || cLower.startsWith('installed') || cLower.startsWith('cleaned')) {
+        if (cLower.contains('replaced') || cLower.contains('installed') || cLower.contains('cleaned') || cLower.contains('checked') || cLower.contains('complete')) {
           workClauses.add(clause);
         } else {
           defectClauses.add(clause);
@@ -356,14 +358,14 @@ SPEECH CORRECTION & DISAMBIGUATION RULES:
     String defectsText = defectClauses.isNotEmpty
         ? '${defectClauses.join('. ')}.'
         : (workClauses.isNotEmpty
-            ? 'Inspection conducted for reported service call.'
-            : cleanedText);
+            ? 'Reported service inspection request.'
+            : 'Initial inspection conducted for reported issue.');
 
     String workDoneText = workClauses.isNotEmpty
         ? '${workClauses.join('. ')}.'
         : (defectClauses.isNotEmpty
-            ? 'Inspected and verified on site.'
-            : cleanedText);
+            ? 'Inspected, tested, and verified on site.'
+            : '$cleanedText.');
 
     // Apply target category filter if specified
     if (targetCategory == 'defects') {
