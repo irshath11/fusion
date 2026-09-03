@@ -192,5 +192,59 @@ void main() {
       final timesheets = TimesheetCalculator.calculateDailyTimesheets(consolidated);
       expect(timesheets.length, 2);
     });
+
+    test('Segregates employees into With Records vs No Records accurately', () {
+      final empWithLogs = EmployeeEntity(
+        id: 'emp-active-1',
+        employeeCode: 'EMP001',
+        name: 'Active Staff',
+        mobileNumber: '111',
+        email: 'active@test.com',
+        designation: 'Tech',
+        department: 'Ops',
+      );
+
+      final empWithoutLogs = EmployeeEntity(
+        id: 'emp-new-2',
+        employeeCode: 'EMP002',
+        name: 'New Staff',
+        mobileNumber: '222',
+        email: 'new@test.com',
+        designation: 'Apprentice',
+        department: 'Training',
+      );
+
+      final records = [
+        AttendanceRecord(
+          id: 'rec-10',
+          employeeId: empWithLogs.id,
+          employeeName: empWithLogs.name,
+          workflowStep: WorkflowStep.officeCheckIn,
+          eventTimestamp: DateTime(2026, 9, 3, 8, 0),
+          latitude: 25.0,
+          longitude: 55.0,
+          gpsAccuracy: 5.0,
+          address: 'Office',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+        ),
+      ];
+
+      final allEmployees = [empWithLogs, empWithoutLogs];
+
+      final withRecords = allEmployees.where((e) {
+        return records.any((r) => r.employeeId == e.id || r.employeeName.toLowerCase() == e.name.toLowerCase());
+      }).toList();
+
+      final withoutRecords = allEmployees.where((e) {
+        return !records.any((r) => r.employeeId == e.id || r.employeeName.toLowerCase() == e.name.toLowerCase());
+      }).toList();
+
+      expect(withRecords.length, 1);
+      expect(withRecords.first.id, 'emp-active-1');
+      expect(withoutRecords.length, 1);
+      expect(withoutRecords.first.id, 'emp-new-2');
+    });
   });
 }

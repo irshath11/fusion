@@ -33,6 +33,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   bool _isLoadingCloud = false;
   int _activeTab =
       0; // 0 = Directory, 1 = Cumulative Summary, 2 = Site / Client Man-Hours
+  int _employeeRecordFilterTab =
+      0; // 0 = With Records, 1 = No Records
   int _empDetailSubTab =
       0; // 0 = Attendance & Timesheet Logs, 1 = Emergency Duty Details
   String _siteDateFilter = 'all'; // 'all', 'month', 'week', 'today'
@@ -386,6 +388,27 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           e.department.toLowerCase().contains(q);
     }).toList();
 
+    // Segregate filtered employees into With Records vs No Records
+    final employeesWithRecords = <MapEntry<EmployeeEntity, int>>[];
+    final employeesWithoutRecords = <EmployeeEntity>[];
+
+    for (final emp in filteredEmployees) {
+      final empRecords = allRecords
+          .where((r) => _recordMatchesEmployee(r, emp))
+          .toList();
+      final datesCount = empRecords
+          .map((r) =>
+              DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()))
+          .toSet()
+          .length;
+
+      if (datesCount > 0) {
+        employeesWithRecords.add(MapEntry(emp, datesCount));
+      } else {
+        employeesWithoutRecords.add(emp);
+      }
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -524,106 +547,429 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           const SizedBox(height: 16),
 
           if (_activeTab == 0) ...[
-            if (filteredEmployees.isEmpty)
-              const Card(
-                child: Padding(
-                  padding: EdgeInsets.all(30.0),
-                  child: Center(
-                    child: Text('No employees found.'),
-                  ),
+            // 2 Segregation Tabs: With Records vs No Records
+            AppAnimatedTabSwitcher(
+              selectedIndex: _employeeRecordFilterTab,
+              tabs: [
+                TabItemData(
+                  label: 'With Records (${employeesWithRecords.length})',
+                  icon: Icons.assignment_turned_in_rounded,
                 ),
-              )
-            else
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: filteredEmployees.length,
-                itemBuilder: (context, index) {
-                  final isDark =
-                      Theme.of(context).brightness == Brightness.dark;
-                  final palette = AppTheme.currentColors;
-                  final activePrimary = palette
-                      .primaryFor(isDark ? Brightness.dark : Brightness.light);
-                  final emp = filteredEmployees[index];
-                  final empRecords = allRecords
-                      .where((r) => _recordMatchesEmployee(r, emp))
-                      .toList();
+                TabItemData(
+                  label: 'No Records (${employeesWithoutRecords.length})',
+                  icon: Icons.history_toggle_off_rounded,
+                ),
+              ],
+              onTabChanged: (index) =>
+                  setState(() => _employeeRecordFilterTab = index),
+            ),
+            const SizedBox(height: 16),
 
-                  // Distinct dates count
-                  final datesCount = empRecords
-                      .map((r) =>
-                          DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()))
-                      .toSet()
-                      .length;
+            if (_employeeRecordFilterTab == 0) ...[
+              if (employeesWithRecords.isEmpty)
+                Builder(
+                  builder: (context) {
+                    final isDark =
+                        Theme.of(context).brightness == Brightness.dark;
+                    final palette = AppTheme.currentColors;
 
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                    elevation: 1.5,
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      leading: CircleAvatar(
-                        radius: 24,
-                        backgroundColor: activePrimary,
-                        child: Text(
-                          emp.name.isNotEmpty
-                              ? emp.name.substring(0, 1).toUpperCase()
-                              : 'E',
-                          style: const TextStyle(
-                              color: Colors.white, fontWeight: FontWeight.bold),
+                    return Card(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(
+                          color: isDark
+                              ? palette.cardBorderDark
+                              : Colors.grey.shade300,
                         ),
                       ),
-                      title: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              emp.name,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 16),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: activePrimary.withValues(
-                                  alpha: isDark ? 0.2 : 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              emp.employeeCode,
-                              style: TextStyle(
-                                  fontSize: 10,
+                      elevation: 0,
+                      color: isDark ? palette.surfaceDark : Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 36),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.assignment_late_outlined,
+                                size: 48,
+                                color: isDark
+                                    ? palette.textSecondaryDark
+                                    : Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'No Employees with Attendance Records',
+                                style: TextStyle(
+                                  fontSize: 15,
                                   fontWeight: FontWeight.bold,
-                                  color: activePrimary),
-                            ),
+                                  color: isDark
+                                      ? palette.textPrimaryDark
+                                      : palette.textPrimaryLight,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _searchQuery.isNotEmpty
+                                    ? 'No matching employees with records found for "$_searchQuery".'
+                                    : 'None of the registered employees have attendance records logged yet.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? palette.textSecondaryDark
+                                      : Colors.grey.shade600,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      subtitle: Padding(
-                        padding: const EdgeInsets.only(top: 4.0),
-                        child: Text(
-                          'Department: ${emp.department.isNotEmpty ? emp.department : 'General'}\n'
-                          '${datesCount > 0 ? "$datesCount Attendance Date(s) Logged" : "No records recorded yet"}',
-                          style: const TextStyle(fontSize: 12),
                         ),
                       ),
-                      trailing: const Icon(Icons.arrow_forward_ios_rounded,
-                          size: 16, color: AppColors.textSecondaryLight),
-                      onTap: () {
-                        setState(() {
-                          _selectedEmployeeId = emp.id;
-                          _selectedDate = null;
-                        });
-                      },
-                    ),
-                  );
-                },
-              ),
+                    );
+                  },
+                )
+              else
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: employeesWithRecords.length,
+                  itemBuilder: (context, index) {
+                    final isDark =
+                        Theme.of(context).brightness == Brightness.dark;
+                    final palette = AppTheme.currentColors;
+                    final activePrimary = palette
+                        .primaryFor(isDark ? Brightness.dark : Brightness.light);
+                    final entry = employeesWithRecords[index];
+                    final emp = entry.key;
+                    final datesCount = entry.value;
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(
+                          color: isDark
+                              ? palette.cardBorderDark
+                              : Colors.grey.shade200,
+                          width: 1,
+                        ),
+                      ),
+                      elevation: 1,
+                      color: isDark ? palette.surfaceDark : Colors.white,
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        leading: CircleAvatar(
+                          radius: 24,
+                          backgroundColor: activePrimary,
+                          child: Text(
+                            emp.name.isNotEmpty
+                                ? emp.name.substring(0, 1).toUpperCase()
+                                : 'E',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                emp.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 16),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: activePrimary.withValues(
+                                    alpha: isDark ? 0.2 : 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                emp.employeeCode,
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: activePrimary),
+                              ),
+                            ),
+                          ],
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 6.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Department: ${emp.department.isNotEmpty ? emp.department : 'General'}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? palette.textSecondaryDark
+                                      : Colors.grey.shade600,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withValues(
+                                      alpha: isDark ? 0.22 : 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.check_circle_outline_rounded,
+                                      size: 13,
+                                      color: Colors.green,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '$datesCount Attendance Date(s) Logged',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.green,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        trailing: const Icon(Icons.arrow_forward_ios_rounded,
+                            size: 16, color: AppColors.textSecondaryLight),
+                        onTap: () {
+                          setState(() {
+                            _selectedEmployeeId = emp.id;
+                            _selectedDate = null;
+                          });
+                        },
+                      ),
+                    );
+                  },
+                ),
+            ] else ...[
+              if (employeesWithoutRecords.isEmpty)
+                Builder(
+                  builder: (context) {
+                    final isDark =
+                        Theme.of(context).brightness == Brightness.dark;
+                    final palette = AppTheme.currentColors;
+
+                    return Card(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(
+                          color: isDark
+                              ? palette.cardBorderDark
+                              : Colors.grey.shade300,
+                        ),
+                      ),
+                      elevation: 0,
+                      color: isDark ? palette.surfaceDark : Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 36),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.check_circle_outline_rounded,
+                                size: 48,
+                                color: Colors.green.shade600,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'All Employees Have Attendance Records',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark
+                                      ? palette.textPrimaryDark
+                                      : palette.textPrimaryLight,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _searchQuery.isNotEmpty
+                                    ? 'No pending employees found for "$_searchQuery".'
+                                    : 'Every registered employee currently has attendance logs recorded.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? palette.textSecondaryDark
+                                      : Colors.grey.shade600,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                )
+              else
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: employeesWithoutRecords.length,
+                  itemBuilder: (context, index) {
+                    final isDark =
+                        Theme.of(context).brightness == Brightness.dark;
+                    final palette = AppTheme.currentColors;
+                    final activePrimary = palette
+                        .primaryFor(isDark ? Brightness.dark : Brightness.light);
+                    final emp = employeesWithoutRecords[index];
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(
+                          color: isDark
+                              ? palette.cardBorderDark
+                              : Colors.grey.shade200,
+                          width: 1,
+                        ),
+                      ),
+                      elevation: 1,
+                      color: isDark ? palette.surfaceDark : Colors.white,
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        leading: CircleAvatar(
+                          radius: 24,
+                          backgroundColor: Colors.grey.shade400,
+                          child: Text(
+                            emp.name.isNotEmpty
+                                ? emp.name.substring(0, 1).toUpperCase()
+                                : 'E',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                emp.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 16),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.grey.shade800
+                                    : Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                emp.employeeCode,
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? Colors.grey.shade300
+                                        : Colors.grey.shade700),
+                              ),
+                            ),
+                          ],
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 6.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Department: ${emp.department.isNotEmpty ? emp.department : 'General'}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? palette.textSecondaryDark
+                                      : Colors.grey.shade600,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withValues(
+                                      alpha: isDark ? 0.22 : 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.history_toggle_off_rounded,
+                                      size: 13,
+                                      color: Colors.orange,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'No Attendance Recorded',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.orange,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextButton.icon(
+                              onPressed: () =>
+                                  _addNewDateEntryLogForEmployee(emp),
+                              icon: const Icon(Icons.add_rounded, size: 16),
+                              label: const Text('Add Log',
+                                  style: TextStyle(fontSize: 12)),
+                              style: TextButton.styleFrom(
+                                foregroundColor: activePrimary,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                              ),
+                            ),
+                            const Icon(Icons.arrow_forward_ios_rounded,
+                                size: 16, color: AppColors.textSecondaryLight),
+                          ],
+                        ),
+                        onTap: () {
+                          setState(() {
+                            _selectedEmployeeId = emp.id;
+                            _selectedDate = null;
+                          });
+                        },
+                      ),
+                    );
+                  },
+                ),
+            ],
           ] else if (_activeTab == 1) ...[
             _buildCumulativeSummaryView(filteredEmployees, allRecords),
           ] else ...[
