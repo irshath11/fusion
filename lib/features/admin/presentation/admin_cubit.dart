@@ -127,7 +127,20 @@ class AdminCubit extends Cubit<AdminState> {
         }
       }
 
-      // 3. If cloud is initialized and fetched, synchronize down to local database
+      // 3. Preserve any local employees not yet synced to cloud so they are never lost
+      final localEmployees = _db.getEmployees();
+      for (final le in localEmployees) {
+        final key = le.id.isNotEmpty
+            ? le.id
+            : (le.email.isNotEmpty
+                ? le.email.trim().toLowerCase()
+                : le.name.trim().toLowerCase());
+        if (!empMap.containsKey(key)) {
+          empMap[key] = le;
+        }
+      }
+
+      // 4. If cloud is initialized and fetched, synchronize down to local database
       if (_supabase.isInitialized) {
         _db.setEmployees(empMap.values.toList());
       }

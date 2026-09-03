@@ -69,8 +69,24 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       final cloudEmployees =
           await SupabaseService().fetchEmployeesFromSupabase(orgId);
       if (cloudEmployees.isNotEmpty) {
-        _db.setEmployees(cloudEmployees);
+        final currentLocal = _db.getEmployees();
+        final Map<String, EmployeeEntity> merged = {};
+        for (final ce in cloudEmployees) {
+          merged[ce.id] = ce;
+        }
+        for (final le in currentLocal) {
+          if (!merged.containsKey(le.id) &&
+              !merged.values.any((e) =>
+                  (le.email.isNotEmpty && e.email.toLowerCase() == le.email.toLowerCase()) ||
+                  (le.name.isNotEmpty && e.name.toLowerCase() == le.name.toLowerCase()))) {
+            merged[le.id] = le;
+          }
+        }
+        _db.setEmployees(merged.values.toList());
       }
+
+      // Consolidate any duplicate/phantom 'Anand' records into Anandh Veeramani
+      await _db.sanitizeDuplicateEmployees();
     } catch (e) {
       debugPrint('Cloud attendance fetch error: $e');
     } finally {
@@ -131,6 +147,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         }
         if (name.isNotEmpty &&
             e.name.trim().toLowerCase() == name.trim().toLowerCase()) {
+          return entry.key;
+        }
+        // Aliases: match 'Anand' or 'emp-anan' to 'Anandh Veeramani'
+        if ((name.trim().toLowerCase() == 'anand' || id.toLowerCase() == 'emp-anan') &&
+            (e.name.toLowerCase().contains('anandh') || e.email.toLowerCase() == 'anand@gmail.com')) {
           return entry.key;
         }
       }
@@ -223,7 +244,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       final nameKey = r.employeeName.trim().toLowerCase();
       final idKey = r.employeeId;
 
-      bool alreadyExists = employeeMap.values.any((e) =>
+      // Special alias: if record is tagged as 'anand' or 'emp-anan', map it to Anandh Veeramani
+      final isAnandhAlias = (nameKey == 'anand' || idKey.toLowerCase() == 'emp-anan' || idKey.toLowerCase() == 'anand') &&
+          employeeMap.values.any((e) =>
+              e.name.toLowerCase().contains('anandh') ||
+              e.email.toLowerCase() == 'anand@gmail.com');
+
+      bool alreadyExists = isAnandhAlias || employeeMap.values.any((e) =>
           e.id == idKey ||
           (e.employeeCode.isNotEmpty &&
               e.employeeCode.toLowerCase() == idKey.toLowerCase()) ||
@@ -243,7 +270,18 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       }
     }
 
-    final list = employeeMap.values.toList();
+    final list = employeeMap.values.where((e) {
+      final eName = e.name.trim().toLowerCase();
+      final eCode = e.employeeCode.trim().toUpperCase();
+      // Completely remove phantom 'Anand' / 'EMP-ANAN' if 'Anandh Veeramani' is present
+      if ((eName == 'anand' || eCode == 'EMP-ANAN') &&
+          employeeMap.values.any((other) =>
+              other.name.trim().toLowerCase().contains('anandh') ||
+              other.email.trim().toLowerCase() == 'anand@gmail.com')) {
+        return false;
+      }
+      return true;
+    }).toList();
     list.sort((a, b) => a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
     return list;
   }
@@ -255,11 +293,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     final eName = emp.name.trim().toLowerCase();
     final eCode = emp.employeeCode.trim().toLowerCase();
 
-    // 1. Match by ID (exact or prefix match if at least 4 chars)
-    if (eId.isNotEmpty && rEmpId.isNotEmpty) {
-      if (rEmpId == eId) return true;
-      if (eId.length >= 4 && rEmpId.startsWith(eId)) return true;
-      if (rEmpId.length >= 4 && eId.startsWith(rEmpId)) return true;
+    // 1. Match by exact ID
+    if (eId.isNotEmpty && rEmpId.isNotEmpty && rEmpId == eId) {
+      return true;
     }
 
     // 2. Match by Employee Code (exact)
@@ -270,6 +306,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     // 3. Match by Name (exact match only - prevents partial string matches like krishnan vs ramakrishnan)
     if (eName.isNotEmpty && rEmpName.isNotEmpty && rEmpName == eName) {
       return true;
+    }
+
+    // 4. Anandh Veeramani alias matching for records logged under 'Anand' or 'emp-anan'
+    if (eName.contains('anandh') || emp.email.trim().toLowerCase() == 'anand@gmail.com' || eCode == 'emp-ana') {
+      if (rEmpName == 'anand' || rEmpId == 'emp-anan' || rEmpId == 'anand') {
+        return true;
+      }
     }
 
     return false;
@@ -290,19 +333,21 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     final all = _getSynthesizedEmployees();
     final cleanId = employeeId.trim().toLowerCase();
 
-    // 1. First try exact matches
+    // If resolving 'anand' or 'emp-anan', resolve directly to Anandh Veeramani
+    if (cleanId == 'anand' || cleanId == 'emp-anan') {
+      final anandh = all.where((e) =>
+          e.name.toLowerCase().contains('anandh') ||
+          e.email.toLowerCase() == 'anand@gmail.com');
+      if (anandh.isNotEmpty) return anandh.first;
+    }
+
+    // Exact matches by ID, code, name, or email
     final exactMatch = all.where((e) =>
         (e.id.isNotEmpty && e.id.toLowerCase() == cleanId) ||
         (e.employeeCode.isNotEmpty && e.employeeCode.toLowerCase() == cleanId) ||
         (e.name.isNotEmpty && e.name.toLowerCase().trim() == cleanId) ||
         (e.email.isNotEmpty && e.email.toLowerCase().trim() == cleanId));
     if (exactMatch.isNotEmpty) return exactMatch.first;
-
-    // 2. Try ID prefix match if cleanId is at least 4 chars long
-    final prefixMatch = all.where((e) =>
-        (cleanId.length >= 4 && e.id.toLowerCase().startsWith(cleanId)) ||
-        (e.id.length >= 4 && cleanId.length >= 4 && cleanId.startsWith(e.id.toLowerCase())));
-    if (prefixMatch.isNotEmpty) return prefixMatch.first;
 
     return EmployeeEntity(
       id: employeeId,
@@ -501,10 +546,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                       .primaryFor(isDark ? Brightness.dark : Brightness.light);
                   final emp = filteredEmployees[index];
                   final empRecords = allRecords
-                      .where((r) =>
-                          r.employeeId == emp.id ||
-                          r.employeeName.toLowerCase() ==
-                              emp.name.toLowerCase())
+                      .where((r) => _recordMatchesEmployee(r, emp))
                       .toList();
 
                   // Distinct dates count
@@ -633,6 +675,242 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
   }
 
+  Widget _buildMisattributedLogsBanner(EmployeeEntity currentEmp, List<AttendanceRecord> records) {
+    final users = _db.getUsers();
+    final suspiciousRecords = <AttendanceRecord>[];
+    String? detectedOwnerName;
+    String? detectedOwnerId;
+
+    for (final r in records) {
+      if (r.deviceId.startsWith('device-hw-')) {
+        final rawUid = r.deviceId.substring('device-hw-'.length);
+        final match = users.where((u) => u.id == rawUid || (u.firebaseUid.isNotEmpty && u.firebaseUid == rawUid));
+        if (match.isNotEmpty &&
+            match.first.fullName.trim().toLowerCase() != currentEmp.name.trim().toLowerCase()) {
+          suspiciousRecords.add(r);
+          detectedOwnerName ??= match.first.fullName;
+          detectedOwnerId ??= match.first.id;
+        }
+      }
+    }
+
+    if (suspiciousRecords.isEmpty || detectedOwnerName == null || detectedOwnerId == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.amber.shade700),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Misattributed Logs Detected',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Colors.amber.shade900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${suspiciousRecords.length} log(s) appear to have been captured from $detectedOwnerName\'s account instead of ${currentEmp.name}.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.amber.shade900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          ElevatedButton.icon(
+            onPressed: () async {
+              final count = await _db.reassignEmployeeAttendanceRecords(
+                fromEmployeeId: currentEmp.id,
+                fromEmployeeName: currentEmp.name,
+                toEmployeeId: detectedOwnerId!,
+                toEmployeeName: detectedOwnerName!,
+              );
+              if (mounted) {
+                setState(() {});
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Successfully transferred $count log(s) to $detectedOwnerName!'),
+                    backgroundColor: AppColors.success,
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+            label: Text('Transfer to $detectedOwnerName'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.amber.shade800,
+              foregroundColor: Colors.white,
+              elevation: 2,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showReassignRecordsDialog(EmployeeEntity sourceEmp, List<AttendanceRecord> records) async {
+    final allEmployees = _getSynthesizedEmployees()
+        .where((e) => e.id != sourceEmp.id && e.name.trim().toLowerCase() != sourceEmp.name.trim().toLowerCase())
+        .toList();
+
+    if (allEmployees.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No other employee available to reassign records to.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    String targetEmpId = allEmployees.first.id;
+    String? selectedDateStr;
+
+    final Set<String> dateStrs = {};
+    for (final r in records) {
+      dateStrs.add(DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()));
+    }
+    final sortedDates = dateStrs.toList()..sort((a, b) => b.compareTo(a));
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final palette = AppTheme.currentColors;
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            backgroundColor: isDark ? palette.surfaceDark : Colors.white,
+            title: Row(
+              children: [
+                Icon(Icons.swap_horiz_rounded, color: Colors.indigo.shade700),
+                const SizedBox(width: 10),
+                const Text('Reassign Attendance Logs', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Reassign attendance logs from ${sourceEmp.name} to another employee:',
+                  style: const TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 14),
+                const Text('Target Employee', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade400),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: targetEmpId,
+                      isExpanded: true,
+                      items: allEmployees.map((e) {
+                        return DropdownMenuItem<String>(
+                          value: e.id,
+                          child: Text('${e.name} (${e.employeeCode})'),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) setDlgState(() => targetEmpId = val);
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text('Date Scope', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade400),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String?>(
+                      value: selectedDateStr,
+                      isExpanded: true,
+                      items: [
+                        DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('All Dates (All ${records.length} records)'),
+                        ),
+                        ...sortedDates.map((d) {
+                          DateTime parsed = DateTime.parse(d);
+                          return DropdownMenuItem<String?>(
+                            value: d,
+                            child: Text(DateFormat('dd MMM yyyy (EEEE)').format(parsed)),
+                          );
+                        }),
+                      ],
+                      onChanged: (val) => setDlgState(() => selectedDateStr = val),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo.shade700, foregroundColor: Colors.white),
+                child: const Text('Confirm & Reassign'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final targetEmp = allEmployees.firstWhere((e) => e.id == targetEmpId);
+      final count = await _db.reassignEmployeeAttendanceRecords(
+        fromEmployeeId: sourceEmp.id,
+        fromEmployeeName: sourceEmp.name,
+        toEmployeeId: targetEmp.id,
+        toEmployeeName: targetEmp.name,
+        specificDate: selectedDateStr != null ? DateTime.parse(selectedDateStr!) : null,
+      );
+
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Successfully reassigned $count record(s) to ${targetEmp.name}!'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildLevel2DateListView() {
     final emp = _resolveEmployee(_selectedEmployeeId);
 
@@ -739,9 +1017,29 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   ),
                 ),
               ),
+              const SizedBox(width: 6),
+              ElevatedButton.icon(
+                onPressed: () => _showReassignRecordsDialog(emp, empRecords),
+                icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+                label: const Text('Reassign Logs',
+                    style:
+                        TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.indigo.shade700,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
+
+          // Misattributed logs detection banner
+          _buildMisattributedLogsBanner(emp, empRecords),
 
           // Executive Timesheet Summary Cards
           Row(
@@ -1828,6 +2126,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               final AttendanceRecord inRec = session['in'];
               final AttendanceRecord? outRec = session['out'];
               final double durationHrs = session['durationHrs'];
+              final bool isSessionEdited =
+                  inRec.isEdited || (outRec != null && outRec.isEdited);
 
               final formattedInTime = DateFormat('dd MMM yyyy • hh:mm a')
                   .format(inRec.eventTimestamp.toLocal());
@@ -1864,11 +2164,39 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    formattedInTime,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        formattedInTime,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13),
+                                      ),
+                                      if (isSessionEdited) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.purple
+                                                .withValues(alpha: 0.15),
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                            border: Border.all(
+                                                color: Colors.purple
+                                                    .withValues(alpha: 0.3)),
+                                          ),
+                                          child: const Text(
+                                            'ADMIN MODIFIED',
+                                            style: TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.purple,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                   Text(
                                     outRec != null
@@ -1905,6 +2233,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                     color: Colors.white,
                                   ),
                                 ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.edit_outlined,
+                                    size: 18, color: Colors.blueAccent),
+                                tooltip: 'Edit Emergency Log',
+                                onPressed: () => _showEditEmergencyLogDialog(
+                                    emp, inRec, outRec),
                               ),
                               IconButton(
                                 icon: const Icon(Icons.delete_outline,
@@ -2427,6 +2762,446 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           SnackBar(
             content: Text('Emergency Duty log saved for ${emp.name}.'),
             backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showEditEmergencyLogDialog(
+    EmployeeEntity emp,
+    AttendanceRecord inRec,
+    AttendanceRecord? outRec,
+  ) async {
+    DateTime selectedDate = inRec.eventTimestamp.toLocal();
+    TimeOfDay checkInTime =
+        TimeOfDay.fromDateTime(inRec.eventTimestamp.toLocal());
+    TimeOfDay checkOutTime = outRec != null
+        ? TimeOfDay.fromDateTime(outRec.eventTimestamp.toLocal())
+        : TimeOfDay(
+            hour: (inRec.eventTimestamp.toLocal().hour + 2) % 24,
+            minute: inRec.eventTimestamp.toLocal().minute,
+          );
+    bool isCompletedSession = outRec != null;
+    final TextEditingController locationReasonController =
+        TextEditingController(
+      text: inRec.siteName ?? inRec.address,
+    );
+    final TextEditingController remarksController = TextEditingController(
+      text: inRec.remarks ??
+          (outRec?.remarks ?? 'Manual Emergency Duty Logged by Admin'),
+    );
+
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final allEmployees = _getSynthesizedEmployees();
+    String selectedEmpId = emp.id;
+    String selectedEmpName = emp.name;
+
+    final bool? updated = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final formattedDate =
+                DateFormat('dd MMM yyyy').format(selectedDate);
+            final formattedInTime = checkInTime.format(ctx);
+            final formattedOutTime = checkOutTime.format(ctx);
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.edit_note_rounded,
+                        color: Colors.blue, size: 22),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Edit Emergency Duty Log',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          selectedEmpName,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Assigned Employee
+                    const Text(
+                      'Assigned Employee',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isDark ? Colors.white24 : Colors.grey.shade400,
+                        ),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: allEmployees.any((e) => e.id == selectedEmpId)
+                              ? selectedEmpId
+                              : (allEmployees.isNotEmpty ? allEmployees.first.id : null),
+                          isExpanded: true,
+                          items: allEmployees.map((e) {
+                            return DropdownMenuItem<String>(
+                              value: e.id,
+                              child: Text(
+                                '${e.name} (${e.employeeCode})',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              final match = allEmployees.firstWhere((e) => e.id == val);
+                              setDialogState(() {
+                                selectedEmpId = match.id;
+                                selectedEmpName = match.name;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Date Selector
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            selectedDate = picked;
+                          });
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade400),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Date: $formattedDate',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
+                            const Icon(Icons.calendar_today,
+                                size: 18, color: Colors.blue),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Session completion toggle
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Completed Session',
+                          style: TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.bold)),
+                      subtitle: Text(
+                        isCompletedSession
+                            ? 'Log Check-In & Check-Out'
+                            : 'Active Callout (Check-In Only)',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      value: isCompletedSession,
+                      activeThumbColor: Colors.blue,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          isCompletedSession = val;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Time Pickers
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () async {
+                              final picked = await showTimePicker(
+                                context: ctx,
+                                initialTime: checkInTime,
+                              );
+                              if (picked != null) {
+                                setDialogState(() {
+                                  checkInTime = picked;
+                                });
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.blue.shade300),
+                                borderRadius: BorderRadius.circular(10),
+                                color: Colors.blue.withValues(alpha: 0.05),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Check-In Time',
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.blue,
+                                          fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 4),
+                                  Text(formattedInTime,
+                                      style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (isCompletedSession) ...[
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () async {
+                                final picked = await showTimePicker(
+                                  context: ctx,
+                                  initialTime: checkOutTime,
+                                );
+                                if (picked != null) {
+                                  setDialogState(() {
+                                    checkOutTime = picked;
+                                  });
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                      color: Colors.green.shade300),
+                                  borderRadius: BorderRadius.circular(10),
+                                  color: Colors.green.withValues(alpha: 0.05),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Check-Out Time',
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.green,
+                                            fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 4),
+                                    Text(formattedOutTime,
+                                        style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Callout Reason / Site
+                    TextField(
+                      controller: locationReasonController,
+                      decoration: InputDecoration(
+                        labelText: 'Location / Callout Reason',
+                        hintText: 'e.g. Substation Transformer Repair',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Remarks
+                    TextField(
+                      controller: remarksController,
+                      decoration: InputDecoration(
+                        labelText: 'Admin Remarks',
+                        hintText: 'Reason for manual entry / modification',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        isDense: true,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade700,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () async {
+                    final inDateTime = DateTime(
+                      selectedDate.year,
+                      selectedDate.month,
+                      selectedDate.day,
+                      checkInTime.hour,
+                      checkInTime.minute,
+                    );
+
+                    final outDateTime = isCompletedSession
+                        ? DateTime(
+                            selectedDate.year,
+                            selectedDate.month,
+                            selectedDate.day,
+                            checkOutTime.hour,
+                            checkOutTime.minute,
+                          )
+                        : null;
+
+                    if (outDateTime != null &&
+                        outDateTime.isBefore(inDateTime)) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(
+                            content: Text(
+                                'Check-Out time cannot be before Check-In time.')),
+                      );
+                      return;
+                    }
+
+                    final String siteReason =
+                        locationReasonController.text.trim().isNotEmpty
+                            ? locationReasonController.text.trim()
+                            : (inRec.siteName ??
+                                (inRec.address.isNotEmpty
+                                    ? inRec.address
+                                    : 'Emergency Duty'));
+                    final String remarks =
+                        remarksController.text.trim().isNotEmpty
+                            ? remarksController.text.trim()
+                            : (inRec.remarks ??
+                                'Manual Emergency Duty Logged by Admin');
+
+                    final updatedCheckIn = inRec.copyWith(
+                      employeeId: selectedEmpId,
+                      employeeName: selectedEmpName,
+                      eventTimestamp: inDateTime,
+                      siteName: siteReason,
+                      address: siteReason,
+                      remarks: remarks,
+                      isEdited: true,
+                      editedBy: 'Admin',
+                      syncStatus: SyncStatus.pending,
+                    );
+
+                    _db.updateAttendanceRecord(updatedCheckIn);
+
+                    AttendanceRecord? finalOutRecord;
+                    if (isCompletedSession && outDateTime != null) {
+                      if (outRec != null) {
+                        finalOutRecord = outRec.copyWith(
+                          employeeId: selectedEmpId,
+                          employeeName: selectedEmpName,
+                          eventTimestamp: outDateTime,
+                          siteName: siteReason,
+                          address: siteReason,
+                          remarks: remarks,
+                          isEdited: true,
+                          editedBy: 'Admin',
+                          syncStatus: SyncStatus.pending,
+                        );
+                        _db.updateAttendanceRecord(finalOutRecord);
+                      } else {
+                        finalOutRecord = AttendanceRecord(
+                          id: const Uuid().v4(),
+                          employeeId: selectedEmpId,
+                          employeeName: selectedEmpName,
+                          workflowStep: WorkflowStep.emergencyCheckOut,
+                          eventTimestamp: outDateTime,
+                          latitude: inRec.latitude,
+                          longitude: inRec.longitude,
+                          gpsAccuracy: inRec.gpsAccuracy,
+                          address: siteReason,
+                          deviceId: inRec.deviceId,
+                          photoBase64: inRec.photoBase64,
+                          isGeofenceValid: true,
+                          siteName: siteReason,
+                          syncStatus: SyncStatus.pending,
+                          remarks: remarks,
+                          isEdited: true,
+                          editedBy: 'Admin',
+                        );
+                        _db.saveAttendanceRecord(finalOutRecord);
+                      }
+                    } else if (!isCompletedSession && outRec != null) {
+                      // Converted from completed to active callout: remove outRec
+                      _db.deleteAttendanceRecord(outRec.id);
+                    }
+
+                    // Push to Supabase Cloud asynchronously
+                    SupabaseService().saveAdminAttendanceOverride(
+                      records: [
+                        updatedCheckIn,
+                        if (finalOutRecord != null) finalOutRecord,
+                      ],
+                    );
+
+                    Navigator.of(ctx).pop(true);
+                  },
+                  child: const Text('Save Changes'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (updated == true) {
+      setState(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Emergency Duty log updated for $selectedEmpName.'),
+            backgroundColor: Colors.blue.shade700,
           ),
         );
       }

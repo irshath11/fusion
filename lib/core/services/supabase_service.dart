@@ -385,16 +385,24 @@ class SupabaseService {
 
       List<dynamic> usersResp = [];
       try {
-        usersResp = await client!
+        final allUsers = await client!
             .from('users')
             .select()
-            .eq('organization_id', targetOrgId)
             .eq('is_deleted', false)
             .order('created_at', ascending: false);
-      } catch (_) {}
 
-      // Fallback: If orgId filter returned empty list, fetch all non-deleted users
-      if (usersResp.isEmpty) {
+        if (targetOrgId.isNotEmpty) {
+          usersResp = allUsers.where((u) {
+            final uOrg = u['organization_id']?.toString().trim();
+            return uOrg == null ||
+                uOrg.isEmpty ||
+                uOrg == targetOrgId ||
+                uOrg == '00000000-0000-0000-0000-000000000001';
+          }).toList();
+        } else {
+          usersResp = allUsers;
+        }
+      } catch (_) {
         try {
           usersResp = await client!
               .from('users')
@@ -476,34 +484,42 @@ class SupabaseService {
           ? await ensureOrganizationExistsInCloud(orgId) ?? orgId
           : null;
 
+      final List<dynamic> allUsers = await client!
+          .from('users')
+          .select()
+          .eq('is_deleted', false);
+
       final List<dynamic> usersResp;
       if (targetOrgId != null && targetOrgId.isNotEmpty) {
-        final filtered = await client!
-            .from('users')
-            .select()
-            .eq('organization_id', targetOrgId)
-            .eq('is_deleted', false);
-        usersResp = filtered.isNotEmpty
-            ? filtered
-            : await client!.from('users').select().eq('is_deleted', false);
+        usersResp = allUsers.where((u) {
+          if (u is! Map) return false;
+          final uOrg = u['organization_id']?.toString().trim();
+          return uOrg == null ||
+              uOrg.isEmpty ||
+              uOrg == targetOrgId ||
+              uOrg == '00000000-0000-0000-0000-000000000001';
+        }).toList();
       } else {
-        usersResp =
-            await client!.from('users').select().eq('is_deleted', false);
+        usersResp = allUsers;
       }
+
+      final List<dynamic> allEmployees = await client!
+          .from('employees')
+          .select()
+          .eq('is_deleted', false);
 
       final List<dynamic> empResp;
       if (targetOrgId != null && targetOrgId.isNotEmpty) {
-        final filtered = await client!
-            .from('employees')
-            .select()
-            .eq('organization_id', targetOrgId)
-            .eq('is_deleted', false);
-        empResp = filtered.isNotEmpty
-            ? filtered
-            : await client!.from('employees').select().eq('is_deleted', false);
+        empResp = allEmployees.where((e) {
+          if (e is! Map) return false;
+          final eOrg = e['organization_id']?.toString().trim();
+          return eOrg == null ||
+              eOrg.isEmpty ||
+              eOrg == targetOrgId ||
+              eOrg == '00000000-0000-0000-0000-000000000001';
+        }).toList();
       } else {
-        empResp =
-            await client!.from('employees').select().eq('is_deleted', false);
+        empResp = allEmployees;
       }
 
       final offices = await fetchOfficesFromSupabase();

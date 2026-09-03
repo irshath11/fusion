@@ -137,12 +137,16 @@ class TimesheetCalculator {
       final checkInRecordIndex = dayRecords.indexWhere(
         (r) => r.workflowStep == WorkflowStep.officeCheckIn,
       );
+      final bool hasRegularCheckIn = checkInRecordIndex != -1 ||
+          dayRecords.any((r) => r.workflowStep == WorkflowStep.siteCheckIn);
+
       final checkInRecord = checkInRecordIndex != -1
           ? dayRecords[checkInRecordIndex]
-          : dayRecords.firstWhere(
-              (r) => r.workflowStep == WorkflowStep.siteCheckIn,
-              orElse: () => dayRecords.first,
-            );
+          : (hasRegularCheckIn
+              ? dayRecords.firstWhere(
+                  (r) => r.workflowStep == WorkflowStep.siteCheckIn,
+                )
+              : dayRecords.first);
 
       // 2. Office Check-Out or Last Site Check-Out as effective end time
       DateTime? checkOutTimestamp;
@@ -234,6 +238,12 @@ class TimesheetCalculator {
 
       bool isAutoCompleted = isPreviouslyAutoCompleted;
       bool isCompleted = hasExplicitOfficeCheckOut;
+      if (!hasRegularCheckIn && dayRecords.any((r) => r.workflowStep == WorkflowStep.emergencyCheckOut)) {
+        isCompleted = true;
+        checkOutTimestamp = dayRecords
+            .lastWhere((r) => r.workflowStep == WorkflowStep.emergencyCheckOut)
+            .eventTimestamp;
+      }
 
       Duration netWorkedDuration = Duration.zero;
       Duration finalBreakDuration = totalBreakDuration;
@@ -241,7 +251,7 @@ class TimesheetCalculator {
       double regularHours = 0.0;
       double overtimeHours = 0.0;
 
-      if (checkInTimestamp != null) {
+      if (hasRegularCheckIn && checkInTimestamp != null) {
         final now = DateTime.now();
         final elapsedSinceCheckIn = now.difference(checkInTimestamp);
 

@@ -141,6 +141,9 @@ class LocalDatabaseService {
     // Automatically resolve any dangling check-ins older than 24 hours
     autoResolveExpiredCheckIns();
 
+    // Sanitize any phantom/duplicate employee records (e.g. 'Anand' -> 'Anandh Veeramani')
+    sanitizeDuplicateEmployees();
+
     _persistOffices();
     _persistEmployees();
     _persistWorkSites();
@@ -498,23 +501,50 @@ class LocalDatabaseService {
     double? manualOvertimeHours,
     String? remarks,
     String? adminName,
+    String? originalEmployeeId,
+    String? originalEmployeeName,
   }) async {
     final localDate = date.toLocal();
     final dateStr =
         "${localDate.year}-${localDate.month.toString().padLeft(2, '0')}-${localDate.day.toString().padLeft(2, '0')}";
 
-    // Filter existing records for this employee on this date
+    final searchEmpId = (originalEmployeeId != null && originalEmployeeId.trim().isNotEmpty)
+        ? originalEmployeeId.trim()
+        : employeeId;
+    final searchEmpName = (originalEmployeeName != null && originalEmployeeName.trim().isNotEmpty)
+        ? originalEmployeeName.trim()
+        : employeeName;
+
+    // Filter existing records for this employee (or original employee) on this date
     final dayRecords = _attendanceRecords.where((r) {
-      final isEmp = r.employeeId == employeeId ||
+      final isEmp = r.employeeId == searchEmpId ||
+          r.employeeId == employeeId ||
           (r.employeeName.trim().isNotEmpty &&
-              employeeName.trim().isNotEmpty &&
-              r.employeeName.trim().toLowerCase() ==
-                  employeeName.trim().toLowerCase());
+              (r.employeeName.trim().toLowerCase() == searchEmpName.trim().toLowerCase() ||
+               r.employeeName.trim().toLowerCase() == employeeName.trim().toLowerCase()));
       final localEv = r.eventTimestamp.toLocal();
       final rDateStr =
           "${localEv.year}-${localEv.month.toString().padLeft(2, '0')}-${localEv.day.toString().padLeft(2, '0')}";
       return isEmp && rDateStr == dateStr;
     }).toList();
+
+    // If reassigning to another employee, update any other records on this date to the new employee identity
+    final isReassigning = searchEmpId != employeeId ||
+        (searchEmpName.isNotEmpty && searchEmpName.toLowerCase() != employeeName.toLowerCase());
+    if (isReassigning) {
+      for (final r in dayRecords) {
+        if (r.employeeId != employeeId || r.employeeName != employeeName) {
+          final reassigned = r.copyWith(
+            employeeId: employeeId,
+            employeeName: employeeName,
+            isEdited: true,
+            editedBy: adminName ?? 'Administrator',
+            syncStatus: SyncStatus.pending,
+          );
+          updateAttendanceRecord(reassigned);
+        }
+      }
+    }
 
     final List<AttendanceRecord> updatedOrCreated = [];
 
@@ -531,6 +561,8 @@ class LocalDatabaseService {
     if (inIndex >= 0) {
       final orig = dayRecords[inIndex];
       final updated = orig.copyWith(
+        employeeId: employeeId,
+        employeeName: employeeName,
         eventTimestamp: checkInTime,
         manualOvertimeHours: manualOvertimeHours,
         overrideManualOvertimeHours: true,
@@ -579,6 +611,8 @@ class LocalDatabaseService {
     if (outIndex >= 0) {
       final orig = dayRecords[outIndex];
       final updated = orig.copyWith(
+        employeeId: employeeId,
+        employeeName: employeeName,
         eventTimestamp: checkOutTime,
         manualOvertimeHours: manualOvertimeHours,
         overrideManualOvertimeHours: true,
@@ -619,6 +653,8 @@ class LocalDatabaseService {
       if (i != inIndex && i != outIndex) {
         final orig = dayRecords[i];
         final updated = orig.copyWith(
+          employeeId: employeeId,
+          employeeName: employeeName,
           manualOvertimeHours: manualOvertimeHours,
           overrideManualOvertimeHours: true,
           remarks: remarks,
@@ -646,6 +682,136 @@ class LocalDatabaseService {
       debugPrint('Cloud sync note during admin override: $e');
       return false;
     }
+  }
+
+  /// Reassigns attendance records from one employee to another (e.g. fixing logs captured on another account)
+  Future<int> reassignEmployeeAttendanceRecords({
+    required String fromEmployeeId,
+    required String fromEmployeeName,
+    required String toEmployeeId,
+    required String toEmployeeName,
+    DateTime? specificDate,
+  }) async {
+    final cleanFromId = fromEmployeeId.trim().toLowerCase();
+    final cleanFromName = fromEmployeeName.trim().toLowerCase();
+    int count = 0;
+    final List<AttendanceRecord> updatedRecords = [];
+
+    for (int i = 0; i < _attendanceRecords.length; i++) {
+      final r = _attendanceRecords[i];
+      final rId = r.employeeId.trim().toLowerCase();
+      final rName = r.employeeName.trim().toLowerCase();
+
+      final matchesFrom = (cleanFromId.isNotEmpty && rId == cleanFromId) ||
+          (cleanFromName.isNotEmpty && rName == cleanFromName);
+
+      if (!matchesFrom) continue;
+
+      if (specificDate != null) {
+        final rDate = r.eventTimestamp.toLocal();
+        final sDate = specificDate.toLocal();
+        if (rDate.year != sDate.year || rDate.month != sDate.month || rDate.day != sDate.day) {
+          continue;
+        }
+      }
+
+      final updated = r.copyWith(
+        employeeId: toEmployeeId,
+        employeeName: toEmployeeName,
+        isEdited: true,
+        editedBy: 'Admin (Reassigned)',
+        syncStatus: SyncStatus.pending,
+      );
+      _attendanceRecords[i] = updated;
+      updatedRecords.add(updated);
+      count++;
+    }
+
+    if (count > 0) {
+      _persistAttendanceRecords();
+      try {
+        await SupabaseService().saveAdminAttendanceOverride(records: updatedRecords);
+      } catch (e) {
+        debugPrint('Cloud sync note during reassign: $e');
+      }
+    }
+
+    return count;
+  }
+
+  /// Merges phantom/truncated duplicate employees (specifically "Anand" into official "Anandh Veeramani")
+  Future<int> sanitizeDuplicateEmployees() async {
+    final anandhUser = _users.firstWhere(
+      (u) => u.fullName.trim().toLowerCase() == 'anandh veeramani' ||
+             u.email.trim().toLowerCase() == 'anand@gmail.com' ||
+             (u.employeeCode != null && u.employeeCode!.trim().toUpperCase() == 'EMP-ANA'),
+      orElse: () => _users.firstWhere(
+        (u) => u.fullName.trim().toLowerCase().contains('anandh'),
+        orElse: () => UserEntity(
+          id: '',
+          firebaseUid: '',
+          email: '',
+          fullName: '',
+          role: UserRole.employee,
+          organizationId: '',
+        ),
+      ),
+    );
+
+    int migratedCount = 0;
+    if (anandhUser.id.isNotEmpty) {
+      final targetId = anandhUser.id;
+      final targetName = anandhUser.fullName;
+
+      // 1. Migrate attendance records from phantom 'Anand' or 'emp-anan'
+      final List<AttendanceRecord> updatedRecords = [];
+      for (int i = 0; i < _attendanceRecords.length; i++) {
+        final r = _attendanceRecords[i];
+        final rName = r.employeeName.trim().toLowerCase();
+        final rId = r.employeeId.trim().toLowerCase();
+
+        final isPhantomAnand = (rName == 'anand' || rId == 'emp-anan' || rId == 'anand') &&
+            rName != targetName.toLowerCase() &&
+            r.employeeId != targetId;
+
+        if (isPhantomAnand) {
+          final updated = r.copyWith(
+            employeeId: targetId,
+            employeeName: targetName,
+            isEdited: true,
+            editedBy: 'System Consolidation',
+            syncStatus: SyncStatus.pending,
+          );
+          _attendanceRecords[i] = updated;
+          updatedRecords.add(updated);
+          migratedCount++;
+        }
+      }
+
+      if (updatedRecords.isNotEmpty) {
+        _persistAttendanceRecords();
+        try {
+          await SupabaseService().saveAdminAttendanceOverride(records: updatedRecords);
+        } catch (e) {
+          debugPrint('Cloud sync note during sanitizeDuplicateEmployees: $e');
+        }
+      }
+
+      // 2. Remove phantom 'Anand' / 'EMP-ANAN' from _employees
+      final originalLen = _employees.length;
+      _employees.removeWhere((e) {
+        final eName = e.name.trim().toLowerCase();
+        final eCode = e.employeeCode.trim().toUpperCase();
+        return (eName == 'anand' || eCode == 'EMP-ANAN') &&
+            eName != targetName.toLowerCase() &&
+            e.id != targetId;
+      });
+
+      if (_employees.length != originalLen) {
+        _persistEmployees();
+      }
+    }
+    return migratedCount;
   }
 
   /// Scans all attendance records for unclosed sessions (officeCheckIn with no subsequent officeCheckOut).
@@ -738,11 +904,22 @@ class LocalDatabaseService {
   List<AttendanceRecord> getTodayAttendanceRecords([String? employeeId]) {
     autoResolveExpiredCheckIns();
 
-    final targetId = employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
-    if (targetId == null || targetId.isEmpty) return [];
-
     final now = DateTime.now().toLocal();
     final today = DateTime(now.year, now.month, now.day);
+
+    if (employeeId != null && employeeId.trim().isNotEmpty) {
+      final cleanTarget = employeeId.trim().toLowerCase();
+      return _attendanceRecords.where((r) {
+        final matchesId = r.employeeId.trim().toLowerCase() == cleanTarget;
+        final matchesName = r.employeeName.trim().toLowerCase() == cleanTarget;
+        final localEv = r.eventTimestamp.toLocal();
+        final rDate = DateTime(localEv.year, localEv.month, localEv.day);
+        return (matchesId || matchesName) && rDate.isAtSameMomentAs(today);
+      }).toList();
+    }
+
+    final targetId = _currentUser?.id ?? _currentUser?.firebaseUid;
+    if (targetId == null || targetId.isEmpty) return [];
 
     return _attendanceRecords.where((r) {
       final matchesUser = (r.employeeId == targetId ||

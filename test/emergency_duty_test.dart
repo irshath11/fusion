@@ -139,5 +139,77 @@ void main() {
       expect(entry.overtimeHours, 2.5); // 100% of emergency duty is OT
       expect(entry.totalHours, 10.5);
     });
+
+    test('Editing an emergency log updates hours, remarks, and sets isEdited flag', () {
+      final baseDate = DateTime(2026, 8, 15, 20, 0); // 08:00 PM
+
+      final originalIn = AttendanceRecord(
+        id: 'emg-1',
+        employeeId: 'emp-101',
+        employeeName: 'Charlie',
+        workflowStep: WorkflowStep.emergencyCheckIn,
+        eventTimestamp: baseDate,
+        siteName: 'Substation B',
+        latitude: 25.2048,
+        longitude: 55.2708,
+        gpsAccuracy: 5.0,
+        address: 'Substation B',
+        deviceId: 'dev-1',
+        photoBase64: '',
+        isGeofenceValid: true,
+      );
+
+      final originalOut = AttendanceRecord(
+        id: 'emg-2',
+        employeeId: 'emp-101',
+        employeeName: 'Charlie',
+        workflowStep: WorkflowStep.emergencyCheckOut,
+        eventTimestamp: baseDate.add(const Duration(hours: 2)), // 10:00 PM (2 hours)
+        siteName: 'Substation B',
+        latitude: 25.2048,
+        longitude: 55.2708,
+        gpsAccuracy: 5.0,
+        address: 'Substation B',
+        deviceId: 'dev-1',
+        photoBase64: '',
+        isGeofenceValid: true,
+      );
+
+      // Initial timesheet calculation
+      var timesheets = TimesheetCalculator.calculateDailyTimesheets([originalIn, originalOut]);
+      expect(timesheets.first.emergencyDutyHours, 2.0);
+      expect(timesheets.first.overtimeHours, 2.0);
+      expect(timesheets.first.isEdited, false);
+
+      // Simulate Admin editing the emergency log: extended to 3.5 hours, updated site and added remarks
+      final newOutTime = baseDate.add(const Duration(hours: 3, minutes: 30));
+      final updatedIn = originalIn.copyWith(
+        siteName: 'Substation B - High Voltage Transformer',
+        address: 'Substation B - High Voltage Transformer',
+        remarks: 'Extended emergency shift approved by Admin',
+        isEdited: true,
+        editedBy: 'Admin',
+      );
+      final updatedOut = originalOut.copyWith(
+        eventTimestamp: newOutTime,
+        siteName: 'Substation B - High Voltage Transformer',
+        address: 'Substation B - High Voltage Transformer',
+        remarks: 'Extended emergency shift approved by Admin',
+        isEdited: true,
+        editedBy: 'Admin',
+      );
+
+      expect(updatedIn.isEdited, true);
+      expect(updatedIn.editedBy, 'Admin');
+      expect(updatedIn.siteName, 'Substation B - High Voltage Transformer');
+      expect(updatedOut.isEdited, true);
+
+      // Recalculate timesheets with edited emergency duty records
+      timesheets = TimesheetCalculator.calculateDailyTimesheets([updatedIn, updatedOut]);
+      expect(timesheets.first.emergencyDutyHours, 3.5);
+      expect(timesheets.first.overtimeHours, 3.5);
+      expect(timesheets.first.isEdited, true);
+      expect(timesheets.first.totalHours, 3.5);
+    });
   });
 }

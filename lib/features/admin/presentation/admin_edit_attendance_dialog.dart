@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_theme.dart';
 import '../../../database/local_database_service.dart';
+import '../domain/employee_entity.dart';
 
 class AdminEditAttendanceDialog extends StatefulWidget {
   final String employeeId;
@@ -60,6 +61,9 @@ class _AdminEditAttendanceDialogState
   late TimeOfDay _checkOutTime;
   late TextEditingController _otController;
   late TextEditingController _remarksController;
+  late String _selectedEmployeeId;
+  late String _selectedEmployeeName;
+  List<EmployeeEntity> _availableEmployees = [];
   bool _isSaving = false;
 
   double _calculateAutoOt(TimeOfDay checkIn, TimeOfDay checkOut) {
@@ -81,6 +85,42 @@ class _AdminEditAttendanceDialogState
   @override
   void initState() {
     super.initState();
+    _selectedEmployeeId = widget.employeeId;
+    _selectedEmployeeName = widget.employeeName;
+
+    final db = LocalDatabaseService();
+    final all = db.getEmployees();
+    final Map<String, EmployeeEntity> uniqueEmp = {};
+    for (final e in all) {
+      uniqueEmp[e.id] = e;
+    }
+    if (!uniqueEmp.containsKey(widget.employeeId)) {
+      uniqueEmp[widget.employeeId] = EmployeeEntity(
+        id: widget.employeeId,
+        employeeCode: 'EMP',
+        name: widget.employeeName,
+        mobileNumber: '',
+        email: '',
+        designation: 'Staff',
+        department: 'General',
+      );
+    }
+    for (final u in db.getUsers()) {
+      if (!uniqueEmp.containsKey(u.id)) {
+        uniqueEmp[u.id] = EmployeeEntity(
+          id: u.id,
+          employeeCode: u.employeeCode ?? 'EMP',
+          name: u.fullName,
+          mobileNumber: u.phoneNumber ?? '',
+          email: u.email,
+          designation: u.designation ?? 'Staff',
+          department: u.department ?? 'General',
+        );
+      }
+    }
+    _availableEmployees = uniqueEmp.values.toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
     final defaultIn = widget.initialCheckIn ??
         DateTime(widget.date.year, widget.date.month, widget.date.day, 8, 0);
     final defaultOut = widget.initialCheckOut ??
@@ -205,14 +245,16 @@ class _AdminEditAttendanceDialogState
       final adminName = adminUser?.fullName ?? 'Administrator';
 
       await db.updateOrAddAdminAttendanceOverride(
-        employeeId: widget.employeeId,
-        employeeName: widget.employeeName,
+        employeeId: _selectedEmployeeId,
+        employeeName: _selectedEmployeeName,
         date: widget.date,
         checkInTime: fullCheckIn,
         checkOutTime: fullCheckOut,
         manualOvertimeHours: parsedOt,
         remarks: remarksStr.isNotEmpty ? remarksStr : 'Shift adjusted by admin',
         adminName: adminName,
+        originalEmployeeId: widget.employeeId,
+        originalEmployeeName: widget.employeeName,
       );
 
       if (!mounted) return;
@@ -261,7 +303,7 @@ class _AdminEditAttendanceDialogState
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 Text(
-                  '${widget.employeeName} • $formattedDateStr',
+                  '$_selectedEmployeeName • $formattedDateStr',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.normal,
@@ -281,6 +323,53 @@ class _AdminEditAttendanceDialogState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 8),
+
+            // Assigned Employee Dropdown Selector
+            const Text(
+              'Assigned Employee',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isDark ? palette.cardBorderDark : Colors.grey.shade400,
+                ),
+                color: isDark ? palette.surfaceDark : Colors.grey.shade50,
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _availableEmployees.any((e) => e.id == _selectedEmployeeId)
+                      ? _selectedEmployeeId
+                      : (_availableEmployees.isNotEmpty ? _availableEmployees.first.id : null),
+                  isExpanded: true,
+                  icon: const Icon(Icons.arrow_drop_down),
+                  items: _availableEmployees.map((emp) {
+                    return DropdownMenuItem<String>(
+                      value: emp.id,
+                      child: Text(
+                        '${emp.name} (${emp.employeeCode})',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: _isSaving
+                      ? null
+                      : (val) {
+                          if (val != null) {
+                            final match = _availableEmployees.firstWhere((e) => e.id == val);
+                            setState(() {
+                              _selectedEmployeeId = match.id;
+                              _selectedEmployeeName = match.name;
+                            });
+                          }
+                        },
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
 
             // Time Pickers Row
             Row(

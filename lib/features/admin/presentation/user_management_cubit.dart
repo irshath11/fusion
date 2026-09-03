@@ -78,25 +78,36 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         userMap[key] = u;
       }
 
-      // If remote was unreachable (offline mode and uninitialized), fallback to local cache
-      if (remoteUsers.isEmpty && !_supabase.isInitialized) {
-        final localEmployees = _db.getEmployees();
-        for (final e in localEmployees) {
+      // Always merge local employees into userMap so locally active/registered employees are never omitted
+      final localEmployees = _db.getEmployees();
+      for (final e in localEmployees) {
+        final key = e.email.trim().isNotEmpty
+            ? e.email.trim().toLowerCase()
+            : (e.name.trim().isNotEmpty
+                ? e.name.trim().toLowerCase()
+                : e.id);
+        final alreadyPresent = userMap.containsKey(key) ||
+            userMap.values.any((u) =>
+                (u.id.isNotEmpty && u.id == e.id) ||
+                (e.email.isNotEmpty &&
+                    u.email.trim().toLowerCase() == e.email.trim().toLowerCase()) ||
+                (e.name.isNotEmpty &&
+                    u.fullName.trim().toLowerCase() == e.name.trim().toLowerCase()));
+
+        if (!alreadyPresent) {
           final localUser = UserEntity(
             id: e.id,
             firebaseUid: e.id,
             email: e.email,
             fullName: e.name,
             phoneNumber: e.mobileNumber,
+            employeeCode: e.employeeCode,
+            designation: e.designation,
+            department: e.department,
             role: UserRole.employee,
             organizationId: orgId,
             isActive: e.isActive,
           );
-          final key = localUser.email.trim().isNotEmpty
-              ? localUser.email.trim().toLowerCase()
-              : (localUser.fullName.trim().isNotEmpty
-                  ? localUser.fullName.trim().toLowerCase()
-                  : localUser.id);
           userMap[key] = localUser;
         }
       }
