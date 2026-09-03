@@ -31,6 +31,7 @@ class DailyTimesheetEntry extends Equatable {
   final Duration travelToleranceDuration; // Travel tolerance time allocated
   final double regularHours;
   final double overtimeHours;
+  final double emergencyDutyHours;
   final int stepCount;
   final bool isCompleted;
   final bool isAutoCompleted;
@@ -51,6 +52,7 @@ class DailyTimesheetEntry extends Equatable {
     this.travelToleranceDuration = Duration.zero,
     required this.regularHours,
     required this.overtimeHours,
+    this.emergencyDutyHours = 0.0,
     this.stepCount = 0,
     this.isCompleted = false,
     this.isAutoCompleted = false,
@@ -85,6 +87,7 @@ class DailyTimesheetEntry extends Equatable {
         travelToleranceDuration,
         regularHours,
         overtimeHours,
+        emergencyDutyHours,
         stepCount,
         isCompleted,
         isAutoCompleted,

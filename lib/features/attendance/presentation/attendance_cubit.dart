@@ -221,6 +221,9 @@ class AttendanceCubit extends Cubit<AttendanceState> {
               ? emp.assignedOfficeName!.trim()
               : defaultOffice.name;
         }
+      } else if (step == WorkflowStep.emergencyCheckIn ||
+          step == WorkflowStep.emergencyCheckOut) {
+        resolvedLocationName = 'Emergency Duty';
       } else {
         final activeSite = _db.getActiveSiteNameToday(emp.id);
         resolvedLocationName = (activeSite != null && activeSite.trim().isNotEmpty)

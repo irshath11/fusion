@@ -321,6 +321,37 @@ class TimesheetCalculator {
         }
       }
 
+      // Calculate Emergency Duty Hours (100% OT)
+      double emergencyDutyHours = 0.0;
+      for (int i = 0; i < dayRecords.length; i++) {
+        final r = dayRecords[i];
+        if (r.workflowStep == WorkflowStep.emergencyCheckIn) {
+          DateTime eIn = r.eventTimestamp;
+          DateTime? eOut;
+          for (int j = i + 1; j < dayRecords.length; j++) {
+            if (dayRecords[j].workflowStep == WorkflowStep.emergencyCheckOut) {
+              eOut = dayRecords[j].eventTimestamp;
+              break;
+            }
+          }
+          if (eOut == null) {
+            final now = DateTime.now();
+            if (now.difference(eIn).inHours < 24) {
+              eOut = now;
+            }
+          }
+          if (eOut != null && eOut.isAfter(eIn)) {
+            emergencyDutyHours += eOut.difference(eIn).inMinutes / 60.0;
+          }
+        }
+      }
+
+      if (emergencyDutyHours > 0) {
+        overtimeHours += emergencyDutyHours;
+        netWorkedDuration +=
+            Duration(minutes: (emergencyDutyHours * 60).round());
+      }
+
       // Check for manual OT override, remarks, and edited status from records
       double? dayManualOt;
       String? dayRemarks;
@@ -395,6 +426,7 @@ class TimesheetCalculator {
           travelToleranceDuration: travelToleranceDuration,
           regularHours: regularHours,
           overtimeHours: overtimeHours,
+          emergencyDutyHours: emergencyDutyHours,
           stepCount: dayRecords.length,
           isCompleted: isCompleted,
           isAutoCompleted: isAutoCompleted,

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 import '../../../database/local_database_service.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_theme.dart';
@@ -13,6 +14,7 @@ import '../../../core/utils/timesheet_calculator.dart';
 import '../../../core/widgets/app_animated_tab_switcher.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../attendance/domain/attendance_record.dart';
+import '../../timesheet/domain/timesheet_entry.dart';
 import 'admin_edit_attendance_dialog.dart';
 
 class ReportsAnalyticsScreen extends StatefulWidget {
@@ -31,6 +33,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   bool _isLoadingCloud = false;
   int _activeTab =
       0; // 0 = Directory, 1 = Cumulative Summary, 2 = Site / Client Man-Hours
+  int _empDetailSubTab =
+      0; // 0 = Attendance & Timesheet Logs, 1 = Emergency Duty Details
   String _siteDateFilter = 'all'; // 'all', 'month', 'week', 'today'
   bool _siteGroupByClient =
       false; // true = Group by Client, false = Specific Site
@@ -1024,401 +1028,1409 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           }(),
           const Divider(height: 20),
 
-          if (sortedDateKeys.isEmpty)
-            Card(
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14)),
-              child: Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: Center(
-                  child: Column(
-                    children: [
-                      const Icon(Icons.event_busy_rounded,
-                          size: 48, color: Colors.grey),
-                      const SizedBox(height: 12),
-                      Text(
-                        'No attendance logs recorded for ${emp.name} yet.',
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: () => _addNewDateEntryLogForEmployee(emp),
-                        icon: const Icon(Icons.post_add_rounded, size: 18),
-                        label: const Text('Create New Date Entry Log',
-                            style: TextStyle(
-                                fontSize: 13, fontWeight: FontWeight.bold)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: activePrimary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+          const SizedBox(height: 4),
+          // Sub-Tab Navigation Bar: Attendance & Timesheet Logs vs Emergency Duty Details
+          AppAnimatedTabSwitcher(
+            selectedIndex: _empDetailSubTab,
+            tabs: const [
+              TabItemData(
+                label: 'Attendance & Timesheet Logs',
+                icon: Icons.calendar_month_rounded,
               ),
+              TabItemData(
+                label: 'Emergency Duty Details',
+                icon: Icons.warning_amber_rounded,
+              ),
+            ],
+            onTabChanged: (index) {
+              setState(() {
+                _empDetailSubTab = index;
+              });
+            },
+          ),
+          const SizedBox(height: 12),
+
+          if (_empDetailSubTab == 1)
+            _buildEmergencyDutyDetailsView(
+              emp,
+              empRecords,
+              timesheets,
+              totalOtHours,
+              isDark,
+              palette,
+              activePrimary,
             )
-          else
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: sortedDateKeys.length,
-              itemBuilder: (context, index) {
-                final dateKey = sortedDateKeys[index];
-                final dateRecords = groupedByDate[dateKey]!;
-                dateRecords.sort(
-                    (a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
-
-                final parsedDate = DateTime.parse(dateKey);
-                final formattedDateStr =
-                    DateFormat('EEEE, dd MMMM yyyy').format(parsedDate);
-
-                final allValidGeofence =
-                    dateRecords.every((r) => r.isGeofenceValid);
-                final firstTime = DateFormat('hh:mm a')
-                    .format(dateRecords.first.eventTimestamp.toLocal());
-
-                final siteOutRecs = dateRecords
-                    .where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
-                final officeOutRecs = dateRecords.where(
-                    (r) => r.workflowStep == WorkflowStep.officeCheckOut);
-                final endRecordTime = officeOutRecs.isNotEmpty
-                    ? officeOutRecs.last.eventTimestamp
-                    : (siteOutRecs.isNotEmpty
-                        ? siteOutRecs.last.eventTimestamp
-                        : dateRecords.last.eventTimestamp);
-                final lastTime = DateFormat('hh:mm a').format(endRecordTime.toLocal());
-
-                final siteCheckIns = dateRecords.where((r) =>
-                    r.workflowStep == WorkflowStep.siteCheckIn ||
-                    (r.siteName != null && r.siteName!.trim().isNotEmpty));
-                final siteNamesStr = siteCheckIns.isNotEmpty
-                    ? siteCheckIns
-                        .map((r) => TimesheetCalculator.resolveSiteName(r))
-                        .toSet()
-                        .join(', ')
-                    : null;
-
-                final dayTimesheets =
-                    TimesheetCalculator.calculateDailyTimesheets(dateRecords);
-                final dayEntry =
-                    dayTimesheets.isNotEmpty ? dayTimesheets.first : null;
-                final dayReg = dayEntry?.regularHours ?? 0.0;
-                final dayOt = dayEntry?.overtimeHours ?? 0.0;
-                final dayBreakMin = dayEntry?.breakDuration.inMinutes ?? 0;
-
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                  elevation: 1.5,
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
-                    leading: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: activePrimary.withValues(
-                            alpha: isDark ? 0.2 : 0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.calendar_month_rounded,
-                          color: activePrimary),
-                    ),
-                    title: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          else ...[
+            if (sortedDateKeys.isEmpty)
+              Card(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: Center(
+                    child: Column(
                       children: [
-                        Expanded(
-                          child: Text(
-                            formattedDateStr,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 15),
-                            overflow: TextOverflow.ellipsis,
+                        const Icon(Icons.event_busy_rounded,
+                            size: 48, color: Colors.grey),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No attendance logs recorded for ${emp.name} yet.',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: () => _addNewDateEntryLogForEmployee(emp),
+                          icon: const Icon(Icons.post_add_rounded, size: 18),
+                          label: const Text('Create New Date Entry Log',
+                              style: TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: activePrimary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
                         ),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: activePrimary.withValues(
-                                    alpha: isDark ? 0.2 : 0.12),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                '${dayReg.toStringAsFixed(1)}h Reg',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: activePrimary),
-                              ),
-                            ),
-                            if (dayOt > 0) ...[
-                              const SizedBox(width: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? Colors.orange.withValues(alpha: 0.2)
-                                      : Colors.orange.shade100,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: isDark
-                                      ? Border.all(
-                                          color: Colors.orange.shade800)
-                                      : null,
-                                ),
-                                child: Text(
-                                  '+${dayOt.toStringAsFixed(1)}h OT',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: isDark
-                                          ? Colors.orange.shade300
-                                          : Colors.orange.shade900),
-                                ),
-                              ),
-                            ],
-                            if (dayBreakMin > 0) ...[
-                              const SizedBox(width: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? Colors.amber.withValues(alpha: 0.2)
-                                      : Colors.amber.shade100,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: isDark
-                                      ? Border.all(color: Colors.amber.shade800)
-                                      : null,
-                                ),
-                                child: Text(
-                                  '☕ ${dayBreakMin}m Break',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: isDark
-                                          ? Colors.amber.shade300
-                                          : Colors.amber.shade900),
-                                ),
-                              ),
-                            ],
-                          ],
-                        )
                       ],
                     ),
-                    subtitle: Padding(
-                      padding: const EdgeInsets.only(top: 6.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  ),
+                ),
+              )
+            else
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: sortedDateKeys.length,
+                itemBuilder: (context, index) {
+                  final dateKey = sortedDateKeys[index];
+                  final dateRecords = groupedByDate[dateKey]!;
+                  dateRecords.sort(
+                      (a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
+
+                  final parsedDate = DateTime.parse(dateKey);
+                  final formattedDateStr =
+                      DateFormat('EEEE, dd MMMM yyyy').format(parsedDate);
+
+                  final allValidGeofence =
+                      dateRecords.every((r) => r.isGeofenceValid);
+                  final firstTime = DateFormat('hh:mm a')
+                      .format(dateRecords.first.eventTimestamp.toLocal());
+
+                  final siteOutRecs = dateRecords
+                      .where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
+                  final officeOutRecs = dateRecords.where(
+                      (r) => r.workflowStep == WorkflowStep.officeCheckOut);
+                  final endRecordTime = officeOutRecs.isNotEmpty
+                      ? officeOutRecs.last.eventTimestamp
+                      : (siteOutRecs.isNotEmpty
+                          ? siteOutRecs.last.eventTimestamp
+                          : dateRecords.last.eventTimestamp);
+                  final lastTime = DateFormat('hh:mm a').format(endRecordTime.toLocal());
+
+                  final siteCheckIns = dateRecords.where((r) =>
+                      r.workflowStep == WorkflowStep.siteCheckIn ||
+                      (r.siteName != null && r.siteName!.trim().isNotEmpty));
+                  final siteNamesStr = siteCheckIns.isNotEmpty
+                      ? siteCheckIns
+                          .map((r) => TimesheetCalculator.resolveSiteName(r))
+                          .toSet()
+                          .join(', ')
+                      : null;
+
+                  final dayTimesheets =
+                      TimesheetCalculator.calculateDailyTimesheets(dateRecords);
+                  final dayEntry =
+                      dayTimesheets.isNotEmpty ? dayTimesheets.first : null;
+                  final dayReg = dayEntry?.regularHours ?? 0.0;
+                  final dayOt = dayEntry?.overtimeHours ?? 0.0;
+                  final dayBreakMin = dayEntry?.breakDuration.inMinutes ?? 0;
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    elevation: 1.5,
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      leading: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: activePrimary.withValues(
+                              alpha: isDark ? 0.2 : 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.calendar_month_rounded,
+                            color: activePrimary),
+                      ),
+                      title: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
+                          Expanded(
+                            child: Text(
+                              formattedDateStr,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 15),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                           Row(
                             children: [
-                              Icon(Icons.schedule_rounded,
-                                  size: 14,
-                                  color: isDark
-                                      ? AppColors.textSecondaryDark
-                                      : Colors.grey.shade600),
-                              const SizedBox(width: 4),
-                              Text(
-                                '$firstTime - $lastTime (${dateRecords.length} Step Logs)',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isDark
-                                      ? AppColors.textSecondaryDark
-                                      : Colors.grey.shade700,
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: activePrimary.withValues(
+                                      alpha: isDark ? 0.2 : 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '${dayReg.toStringAsFixed(1)}h Reg',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: activePrimary),
                                 ),
                               ),
-                            ],
-                          ),
-                          // Date-Specific Site Hours Chips
-                          () {
-                            final dateSiteSummaries =
-                                TimesheetCalculator.calculateSiteManHours(
-                                    dateRecords);
-                            if (dateSiteSummaries.isEmpty) {
-                              if (siteNamesStr != null) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 3.0),
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.place_rounded,
-                                          size: 14, color: activePrimary),
-                                      const SizedBox(width: 4),
-                                      Expanded(
-                                        child: Text(
-                                          'Sites: $siteNamesStr',
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                              color: activePrimary),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
+                              if (dayOt > 0) ...[
+                                const SizedBox(width: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.orange.withValues(alpha: 0.2)
+                                        : Colors.orange.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: isDark
+                                        ? Border.all(
+                                            color: Colors.orange.shade800)
+                                        : null,
                                   ),
-                                );
-                              }
-                              return const SizedBox.shrink();
-                            }
-
-                            return Padding(
-                              padding:
-                                  const EdgeInsets.only(top: 5.0, bottom: 2.0),
-                              child: Wrap(
-                                spacing: 6,
-                                runSpacing: 4,
-                                children: dateSiteSummaries.map((s) {
-                                  final col = _getClientColor(s.siteName);
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 7, vertical: 2.5),
-                                    decoration: BoxDecoration(
-                                      color: col.withValues(
-                                          alpha: isDark ? 0.18 : 0.1),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(
-                                          color: col.withValues(
-                                              alpha: isDark ? 0.4 : 0.25)),
-                                    ),
+                                  child: Text(
+                                    '+${dayOt.toStringAsFixed(1)}h OT',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark
+                                            ? Colors.orange.shade300
+                                            : Colors.orange.shade900),
+                                  ),
+                                ),
+                              ],
+                              if (dayBreakMin > 0) ...[
+                                const SizedBox(width: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.amber.withValues(alpha: 0.2)
+                                        : Colors.amber.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: isDark
+                                        ? Border.all(color: Colors.amber.shade800)
+                                        : null,
+                                  ),
+                                  child: Text(
+                                    '☕ ${dayBreakMin}m Break',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark
+                                            ? Colors.amber.shade300
+                                            : Colors.amber.shade900),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          )
+                        ],
+                      ),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 6.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.schedule_rounded,
+                                    size: 14,
+                                    color: isDark
+                                        ? AppColors.textSecondaryDark
+                                        : Colors.grey.shade600),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '$firstTime - $lastTime (${dateRecords.length} Step Logs)',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDark
+                                        ? AppColors.textSecondaryDark
+                                        : Colors.grey.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            // Date-Specific Site Hours Chips
+                            () {
+                              final dateSiteSummaries =
+                                  TimesheetCalculator.calculateSiteManHours(
+                                      dateRecords);
+                              if (dateSiteSummaries.isEmpty) {
+                                if (siteNamesStr != null) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 3.0),
                                     child: Row(
-                                      mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.location_city_rounded,
-                                            size: 12, color: col),
+                                        Icon(Icons.place_rounded,
+                                            size: 14, color: activePrimary),
                                         const SizedBox(width: 4),
-                                        Text(
-                                          '${s.siteName}: ',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            color: isDark
-                                                ? AppColors.textPrimaryDark
-                                                : Colors.grey.shade800,
-                                          ),
-                                        ),
-                                        Text(
-                                          '${s.totalHours.toStringAsFixed(1)}h',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: col,
+                                        Expanded(
+                                          child: Text(
+                                            'Sites: $siteNamesStr',
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: activePrimary),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
                                       ],
                                     ),
                                   );
-                                }).toList(),
+                                }
+                                return const SizedBox.shrink();
+                              }
+
+                              return Padding(
+                                padding:
+                                    const EdgeInsets.only(top: 5.0, bottom: 2.0),
+                                child: Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  children: dateSiteSummaries.map((s) {
+                                    final col = _getClientColor(s.siteName);
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 7, vertical: 2.5),
+                                      decoration: BoxDecoration(
+                                        color: col.withValues(
+                                            alpha: isDark ? 0.18 : 0.1),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                            color: col.withValues(
+                                                alpha: isDark ? 0.4 : 0.25)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.location_city_rounded,
+                                              size: 12, color: col),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '${s.siteName}: ',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: isDark
+                                                  ? AppColors.textPrimaryDark
+                                                  : Colors.grey.shade800,
+                                            ),
+                                          ),
+                                          Text(
+                                            '${s.totalHours.toStringAsFixed(1)}h',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: col,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              );
+                            }(),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: (allValidGeofence
+                                            ? AppColors.success
+                                            : AppColors.error)
+                                        .withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    allValidGeofence
+                                        ? 'VALID GEOFENCE'
+                                        : 'GEOFENCE VIOLATION',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: allValidGeofence
+                                          ? AppColors.success
+                                          : AppColors.error,
+                                    ),
+                                  ),
+                                ),
+                                if (dayEntry != null && dayEntry.isEdited) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.purple.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                          color: Colors.purple.withValues(alpha: 0.3)),
+                                    ),
+                                    child: const Text(
+                                      'ADMIN MODIFIED',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.purple,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${dateRecords.where((r) => r.photoBase64.isNotEmpty).length} Photo(s)',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: isDark
+                                          ? AppColors.textSecondaryDark
+                                          : Colors.grey),
+                                )
+                              ],
+                            ),
+                            if (dayEntry != null &&
+                                dayEntry.remarks != null &&
+                                dayEntry.remarks!.trim().isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(Icons.note_alt_rounded,
+                                      size: 13, color: Colors.purple.shade400),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      'Remarks: ${dayEntry.remarks}',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontStyle: FontStyle.italic,
+                                        color: isDark
+                                            ? AppColors.textSecondaryDark
+                                            : Colors.grey.shade800,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            );
-                          }(),
+                            ],
+                          ],
+                        ),
+                      ),
+                      trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                      onTap: () {
+                        setState(() {
+                          _selectedDate = parsedDate;
+                        });
+                      },
+                    ),
+                  );
+                },
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmergencyDutyDetailsView(
+    EmployeeEntity emp,
+    List<AttendanceRecord> empRecords,
+    List<DailyTimesheetEntry> timesheets,
+    double totalOtHours,
+    bool isDark,
+    dynamic palette,
+    Color activePrimary,
+  ) {
+    // Calculate Emergency Duty OT vs Other OT
+    double totalEmergencyOt = 0.0;
+    for (final t in timesheets) {
+      totalEmergencyOt += t.emergencyDutyHours;
+    }
+    double totalOtherOt = (totalOtHours - totalEmergencyOt);
+    if (totalOtherOt < 0) totalOtherOt = 0.0;
+
+    // Filter Emergency Duty Records
+    final emergencyRecords = empRecords.where((r) {
+      return r.workflowStep == WorkflowStep.emergencyCheckIn ||
+          r.workflowStep == WorkflowStep.emergencyCheckOut;
+    }).toList();
+    emergencyRecords.sort((a, b) => b.eventTimestamp.compareTo(a.eventTimestamp));
+
+    // Pair Emergency Sessions
+    final List<Map<String, dynamic>> emergencySessions = [];
+    final List<AttendanceRecord> checkIns = emergencyRecords
+        .where((r) => r.workflowStep == WorkflowStep.emergencyCheckIn)
+        .toList()
+      ..sort((a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
+
+    final List<AttendanceRecord> checkOuts = emergencyRecords
+        .where((r) => r.workflowStep == WorkflowStep.emergencyCheckOut)
+        .toList()
+      ..sort((a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
+
+    final Set<String> pairedCheckoutIds = {};
+
+    for (final inRec in checkIns) {
+      AttendanceRecord? outRec;
+      for (final o in checkOuts) {
+        if (!pairedCheckoutIds.contains(o.id) &&
+            o.eventTimestamp.isAfter(inRec.eventTimestamp)) {
+          if (outRec == null ||
+              o.eventTimestamp.isBefore(outRec.eventTimestamp)) {
+            outRec = o;
+          }
+        }
+      }
+      if (outRec != null) {
+        pairedCheckoutIds.add(outRec.id);
+      }
+      double durationHrs = 0.0;
+      if (outRec != null) {
+        durationHrs =
+            outRec.eventTimestamp.difference(inRec.eventTimestamp).inMinutes /
+                60.0;
+      }
+      emergencySessions.add({
+        'in': inRec,
+        'out': outRec,
+        'durationHrs': durationHrs,
+      });
+    }
+
+    // Sort sessions latest first
+    emergencySessions.sort((a, b) {
+      final aTime = (a['in'] as AttendanceRecord).eventTimestamp;
+      final bTime = (b['in'] as AttendanceRecord).eventTimestamp;
+      return bTime.compareTo(aTime);
+    });
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. OT Breakdown Metric Banner / Card
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isDark
+                ? palette.surfaceDark
+                : Colors.orange.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? palette.cardBorderDark : Colors.orange.shade200,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded,
+                      color: Colors.orange.shade700, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Overtime (OT) Breakdown',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: isDark
+                          ? palette.textPrimaryDark
+                          : palette.textPrimaryLight,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  // Emergency Duty OT Tile
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 10, horizontal: 6),
+                      decoration: BoxDecoration(
+                        color:
+                            isDark ? AppColors.surfaceDark : Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.red.shade900
+                              : Colors.red.shade200,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Emergency OT',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
                           const SizedBox(height: 4),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '${totalEmergencyOt.toStringAsFixed(1)} hrs',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Text('+',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: Colors.grey)),
+                  const SizedBox(width: 4),
+                  // Other OT Tile
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 10, horizontal: 6),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? AppColors.surfaceDark
+                            : Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.orange.shade900
+                              : Colors.orange.shade200,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Other OT',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '${totalOtherOt.toStringAsFixed(1)} hrs',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? Colors.orange.shade300
+                                    : Colors.orange.shade900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Text('=',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: Colors.grey)),
+                  const SizedBox(width: 4),
+                  // Total OT Tile
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 10, horizontal: 6),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? AppColors.surfaceDark
+                            : activePrimary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isDark
+                              ? palette.cardBorderDark
+                              : activePrimary.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Total OT',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: activePrimary,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '${totalOtHours.toStringAsFixed(1)} hrs',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: activePrimary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  'Emergency OT (${totalEmergencyOt.toStringAsFixed(1)}h) + Other OT (${totalOtherOt.toStringAsFixed(1)}h) = Total OT (${totalOtHours.toStringAsFixed(1)}h)',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : Colors.grey.shade700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                'Emergency Duty Logs (${emergencySessions.length} Session${emergencySessions.length != 1 ? "s" : ""})',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: isDark
+                      ? palette.textPrimaryDark
+                      : palette.textPrimaryLight,
+                ),
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => _showAddEmergencyLogDialog(emp),
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text(
+                'Add Emergency Log',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade700,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        if (emergencySessions.isEmpty)
+          Card(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            child: Padding(
+              padding: const EdgeInsets.all(28.0),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        size: 48, color: Colors.grey.shade400),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No Emergency Duty records logged for ${emp.name}.',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w500, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 14),
+                    ElevatedButton.icon(
+                      onPressed: () => _showAddEmergencyLogDialog(emp),
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('Add First Emergency Log'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade700,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: emergencySessions.length,
+            itemBuilder: (ctx, idx) {
+              final session = emergencySessions[idx];
+              final AttendanceRecord inRec = session['in'];
+              final AttendanceRecord? outRec = session['out'];
+              final double durationHrs = session['durationHrs'];
+
+              final formattedInTime = DateFormat('dd MMM yyyy • hh:mm a')
+                  .format(inRec.eventTimestamp.toLocal());
+              final formattedOutTime = outRec != null
+                  ? DateFormat('hh:mm a')
+                      .format(outRec.eventTimestamp.toLocal())
+                  : 'In Progress';
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+                elevation: 1.5,
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withValues(alpha: 0.12),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.warning_amber_rounded,
+                                    color: Colors.red, size: 18),
+                              ),
+                              const SizedBox(width: 8),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    formattedInTime,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13),
+                                  ),
+                                  Text(
+                                    outRec != null
+                                        ? 'Completed Session ($formattedOutTime)'
+                                        : 'Active Emergency Callout',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: outRec != null
+                                          ? Colors.green.shade700
+                                          : Colors.orange.shade800,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                           Row(
                             children: [
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
+                                    horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: (allValidGeofence
-                                          ? AppColors.success
-                                          : AppColors.error)
-                                      .withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(6),
+                                  color: Colors.red.shade700,
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
-                                  allValidGeofence
-                                      ? 'VALID GEOFENCE'
-                                      : 'GEOFENCE VIOLATION',
-                                  style: TextStyle(
-                                    fontSize: 10,
+                                  outRec != null
+                                      ? '${durationHrs.toStringAsFixed(1)}h 100% OT'
+                                      : 'ACTIVE OT',
+                                  style: const TextStyle(
+                                    fontSize: 11,
                                     fontWeight: FontWeight.bold,
-                                    color: allValidGeofence
-                                        ? AppColors.success
-                                        : AppColors.error,
+                                    color: Colors.white,
                                   ),
                                 ),
                               ),
-                              if (dayEntry != null && dayEntry.isEdited) ...[
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.purple.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(
-                                        color: Colors.purple.withValues(alpha: 0.3)),
-                                  ),
-                                  child: const Text(
-                                    'ADMIN MODIFIED',
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.purple,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(width: 8),
-                              Text(
-                                '${dateRecords.where((r) => r.photoBase64.isNotEmpty).length} Photo(s)',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: isDark
-                                        ? AppColors.textSecondaryDark
-                                        : Colors.grey),
-                              )
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline,
+                                    size: 18, color: Colors.redAccent),
+                                tooltip: 'Delete Session',
+                                onPressed: () =>
+                                    _deleteEmergencySession(inRec, outRec),
+                              ),
                             ],
                           ),
-                          if (dayEntry != null &&
-                              dayEntry.remarks != null &&
-                              dayEntry.remarks!.trim().isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Icon(Icons.note_alt_rounded,
-                                    size: 13, color: Colors.purple.shade400),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    'Remarks: ${dayEntry.remarks}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontStyle: FontStyle.italic,
-                                      color: isDark
-                                          ? AppColors.textSecondaryDark
-                                          : Colors.grey.shade800,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
                         ],
                       ),
-                    ),
-                    trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
-                    onTap: () {
-                      setState(() {
-                        _selectedDate = parsedDate;
-                      });
-                    },
+                      const SizedBox(height: 10),
+                      if (inRec.photoBase64.isNotEmpty ||
+                          (outRec != null && outRec.photoBase64.isNotEmpty)) ...[
+                        Row(
+                          children: [
+                            if (inRec.photoBase64.isNotEmpty)
+                              GestureDetector(
+                                onTap: () => _showFullImageDialog(inRec),
+                                child: Container(
+                                  height: 60,
+                                  width: 60,
+                                  clipBehavior: Clip.antiAlias,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.red.shade300),
+                                  ),
+                                  child: _buildPhotoWidget(inRec.photoBase64),
+                                ),
+                              ),
+                            if (inRec.photoBase64.isNotEmpty &&
+                                outRec != null &&
+                                outRec.photoBase64.isNotEmpty)
+                              const SizedBox(width: 10),
+                            if (outRec != null && outRec.photoBase64.isNotEmpty)
+                              GestureDetector(
+                                onTap: () => _showFullImageDialog(outRec),
+                                child: Container(
+                                  height: 60,
+                                  width: 60,
+                                  clipBehavior: Clip.antiAlias,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.green.shade300),
+                                  ),
+                                  child: _buildPhotoWidget(outRec.photoBase64),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      if (inRec.address.isNotEmpty) ...[
+                        Row(
+                          children: [
+                            const Icon(Icons.location_on_rounded,
+                                size: 14, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                inRec.address,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : Colors.grey.shade800,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (inRec.remarks != null &&
+                          inRec.remarks!.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.note_alt_outlined,
+                                size: 14, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                'Note: ${inRec.remarks!}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontStyle: FontStyle.italic,
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  Future<void> _deleteEmergencySession(
+      AttendanceRecord inRec, AttendanceRecord? outRec) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Emergency Log'),
+        content: const Text(
+            'Are you sure you want to delete this emergency duty record?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );
+    if (confirm == true) {
+      _db.deleteAttendanceRecord(inRec.id);
+      if (outRec != null) {
+        _db.deleteAttendanceRecord(outRec.id);
+      }
+      setState(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Emergency log deleted.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showAddEmergencyLogDialog(EmployeeEntity emp) async {
+    DateTime selectedDate = _selectedDate ?? DateTime.now();
+    TimeOfDay checkInTime = const TimeOfDay(hour: 8, minute: 0);
+    TimeOfDay checkOutTime = const TimeOfDay(hour: 10, minute: 0);
+    bool isCompletedSession = true;
+    final TextEditingController locationReasonController =
+        TextEditingController(text: 'Emergency Duty');
+    final TextEditingController remarksController =
+        TextEditingController(text: 'Manual Emergency Duty Logged by Admin');
+
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final bool? saved = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final formattedDate =
+                DateFormat('dd MMM yyyy').format(selectedDate);
+            final formattedInTime = checkInTime.format(ctx);
+            final formattedOutTime = checkOutTime.format(ctx);
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.warning_amber_rounded,
+                        color: Colors.red, size: 22),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Add Emergency Duty Log',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          emp.name,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Date Selector
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            selectedDate = picked;
+                          });
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade400),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Date: $formattedDate',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
+                            const Icon(Icons.calendar_today,
+                                size: 18, color: Colors.red),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Session completion toggle
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Completed Session',
+                          style: TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.bold)),
+                      subtitle: Text(
+                        isCompletedSession
+                            ? 'Log Check-In & Check-Out'
+                            : 'Active Callout (Check-In Only)',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      value: isCompletedSession,
+                      activeThumbColor: Colors.red,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          isCompletedSession = val;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Time Pickers
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () async {
+                              final picked = await showTimePicker(
+                                context: ctx,
+                                initialTime: checkInTime,
+                              );
+                              if (picked != null) {
+                                setDialogState(() {
+                                  checkInTime = picked;
+                                });
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.red.shade300),
+                                borderRadius: BorderRadius.circular(10),
+                                color: Colors.red.withValues(alpha: 0.05),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Check-In Time',
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.red,
+                                          fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 4),
+                                  Text(formattedInTime,
+                                      style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (isCompletedSession) ...[
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () async {
+                                final picked = await showTimePicker(
+                                  context: ctx,
+                                  initialTime: checkOutTime,
+                                );
+                                if (picked != null) {
+                                  setDialogState(() {
+                                    checkOutTime = picked;
+                                  });
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.green.shade300),
+                                  borderRadius: BorderRadius.circular(10),
+                                  color: Colors.green.withValues(alpha: 0.05),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Check-Out Time',
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.green,
+                                            fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 4),
+                                    Text(formattedOutTime,
+                                        style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Callout Reason / Site
+                    TextField(
+                      controller: locationReasonController,
+                      decoration: InputDecoration(
+                        labelText: 'Location / Callout Reason',
+                        hintText: 'e.g. Substation Transformer Repair',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Remarks
+                    TextField(
+                      controller: remarksController,
+                      decoration: InputDecoration(
+                        labelText: 'Admin Remarks',
+                        hintText: 'Reason for manual entry',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        isDense: true,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red.shade700,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () async {
+                    final inDateTime = DateTime(
+                      selectedDate.year,
+                      selectedDate.month,
+                      selectedDate.day,
+                      checkInTime.hour,
+                      checkInTime.minute,
+                    );
+
+                    final outDateTime = isCompletedSession
+                        ? DateTime(
+                            selectedDate.year,
+                            selectedDate.month,
+                            selectedDate.day,
+                            checkOutTime.hour,
+                            checkOutTime.minute,
+                          )
+                        : null;
+
+                    if (outDateTime != null &&
+                        outDateTime.isBefore(inDateTime)) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(
+                            content: Text(
+                                'Check-Out time cannot be before Check-In time.')),
+                      );
+                      return;
+                    }
+
+                    final String siteReason =
+                        locationReasonController.text.trim().isNotEmpty
+                            ? locationReasonController.text.trim()
+                            : 'Emergency Duty';
+                    final String remarks =
+                        remarksController.text.trim().isNotEmpty
+                            ? remarksController.text.trim()
+                            : 'Manual Emergency Duty Logged by Admin';
+
+                    final offices = _db.getOffices();
+                    double empLat = 0.0;
+                    double empLng = 0.0;
+                    if (!emp.useDefaultOffice && emp.assignedOfficeId != null) {
+                      final matches =
+                          offices.where((o) => o.id == emp.assignedOfficeId);
+                      if (matches.isNotEmpty) {
+                        empLat = matches.first.latitude;
+                        empLng = matches.first.longitude;
+                      } else if (offices.isNotEmpty) {
+                        final defOffice = offices.firstWhere((o) => o.isDefault,
+                            orElse: () => offices.first);
+                        empLat = defOffice.latitude;
+                        empLng = defOffice.longitude;
+                      }
+                    } else if (offices.isNotEmpty) {
+                      final defOffice = offices.firstWhere((o) => o.isDefault,
+                          orElse: () => offices.first);
+                      empLat = defOffice.latitude;
+                      empLng = defOffice.longitude;
+                    }
+
+                    final checkInRecord = AttendanceRecord(
+                      id: const Uuid().v4(),
+                      employeeId: emp.id,
+                      employeeName: emp.name,
+                      workflowStep: WorkflowStep.emergencyCheckIn,
+                      eventTimestamp: inDateTime,
+                      latitude: empLat,
+                      longitude: empLng,
+                      gpsAccuracy: 10.0,
+                      address: siteReason,
+                      deviceId: 'ADMIN_MANUAL_LOG',
+                      photoBase64: '',
+                      isGeofenceValid: true,
+                      siteName: siteReason,
+                      syncStatus: SyncStatus.pending,
+                      remarks: remarks,
+                      isEdited: true,
+                      editedBy: 'Admin',
+                    );
+
+                    _db.saveAttendanceRecord(checkInRecord);
+
+                    AttendanceRecord? checkOutRecord;
+                    if (isCompletedSession && outDateTime != null) {
+                      checkOutRecord = AttendanceRecord(
+                        id: const Uuid().v4(),
+                        employeeId: emp.id,
+                        employeeName: emp.name,
+                        workflowStep: WorkflowStep.emergencyCheckOut,
+                        eventTimestamp: outDateTime,
+                        latitude: empLat,
+                        longitude: empLng,
+                        gpsAccuracy: 10.0,
+                        address: siteReason,
+                        deviceId: 'ADMIN_MANUAL_LOG',
+                        photoBase64: '',
+                        isGeofenceValid: true,
+                        siteName: siteReason,
+                        syncStatus: SyncStatus.pending,
+                        remarks: remarks,
+                        isEdited: true,
+                        editedBy: 'Admin',
+                      );
+                      _db.saveAttendanceRecord(checkOutRecord);
+                    }
+
+                    // Push to Supabase Cloud asynchronously
+                    SupabaseService().saveAdminAttendanceOverride(
+                      records: [
+                        checkInRecord,
+                        if (checkOutRecord != null) checkOutRecord,
+                      ],
+                    );
+
+                    Navigator.of(ctx).pop(true);
+                  },
+                  child: const Text('Save Emergency Log'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved == true) {
+      setState(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Emergency Duty log saved for ${emp.name}.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
   }
 
   // ==========================================
@@ -2482,6 +3494,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         return Icons.logout_rounded;
       case WorkflowStep.completed:
         return Icons.check_circle_rounded;
+      case WorkflowStep.emergencyCheckIn:
+        return Icons.warning_amber_rounded;
+      case WorkflowStep.emergencyCheckOut:
+        return Icons.warning_rounded;
     }
   }
 
@@ -2502,6 +3518,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         return palette.secondary;
       case WorkflowStep.completed:
         return palette.success;
+      case WorkflowStep.emergencyCheckIn:
+        return palette.error;
+      case WorkflowStep.emergencyCheckOut:
+        return palette.error;
     }
   }
 
@@ -2582,10 +3602,12 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
       double regHours = 0.0;
       double otHours = 0.0;
+      double emgHours = 0.0;
 
       for (final entry in timesheets) {
         regHours += entry.regularHours;
         otHours += entry.overtimeHours;
+        emgHours += entry.emergencyDutyHours;
       }
 
       grandReg += regHours;
@@ -2596,6 +3618,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           employee: emp,
           regularHours: regHours,
           overtimeHours: otHours,
+          emergencyDutyHours: emgHours,
           combinedHours: regHours + otHours,
           daysWorked: timesheets.length,
         ),
@@ -3946,6 +4969,7 @@ class _EmpCumulativeData {
   final EmployeeEntity employee;
   final double regularHours;
   final double overtimeHours;
+  final double emergencyDutyHours;
   final double combinedHours;
   final int daysWorked;
 
@@ -3953,6 +4977,7 @@ class _EmpCumulativeData {
     required this.employee,
     required this.regularHours,
     required this.overtimeHours,
+    this.emergencyDutyHours = 0.0,
     required this.combinedHours,
     required this.daysWorked,
   });

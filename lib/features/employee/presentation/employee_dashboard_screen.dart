@@ -265,6 +265,13 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
           );
     } else if (step == WorkflowStep.officeCheckOut) {
       _openCameraModal(step);
+    } else if (step == WorkflowStep.emergencyCheckIn) {
+      final siteName = await SiteNameDialog.show(context);
+      if (siteName == null || siteName.isEmpty) return;
+      if (!mounted) return;
+      _openCameraModal(step, siteName: siteName);
+    } else if (step == WorkflowStep.emergencyCheckOut) {
+      _openCameraModal(step);
     }
   }
 
@@ -275,7 +282,9 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
       builder: (ctx) => CameraCaptureModal(
         stepName: step == WorkflowStep.siteCheckIn && siteName != null
             ? 'First Site Check-In ($siteName)'
-            : step.displayName,
+            : (step == WorkflowStep.emergencyCheckIn && siteName != null
+                ? 'Emergency Duty Check-In ($siteName)'
+                : step.displayName),
         onPhotoCaptured: (cameraResult) {
           context.read<AttendanceCubit>().executeAttendanceStep(
                 step: step,
@@ -520,6 +529,10 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     final activeBreak = _db.getActiveBreakToday(user?.id ?? user?.firebaseUid);
     final Duration totalBreakToday =
         _db.getTodayBreakDuration(user?.id ?? user?.firebaseUid);
+    final bool isEmergencyDutyActive =
+        _db.isEmergencyDutyActiveToday(empId);
+    final activeEmergencyDuty =
+        _db.getActiveEmergencyDutyRecordToday(empId);
 
     if (todayTimesheetEntry != null) {
       if (todayTimesheetEntry.isAutoCompleted) {
@@ -550,10 +563,14 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
 
     final activeSiteName = _db.getActiveSiteNameToday(empId);
     final offices = _db.getOffices();
-    final activeLocationDisplay =
-        (activeSiteName != null && activeSiteName.trim().isNotEmpty)
+    final activeLocationDisplay = isEmergencyDutyActive
+        ? (activeEmergencyDuty?.siteName != null &&
+                activeEmergencyDuty!.siteName!.trim().isNotEmpty
+            ? '🚨 Emergency: ${activeEmergencyDuty.siteName!.trim()}'
+            : '🚨 Emergency Callout Duty')
+        : ((activeSiteName != null && activeSiteName.trim().isNotEmpty)
             ? activeSiteName.trim()
-            : (offices.isNotEmpty ? offices.first.name : 'Main HQ Office');
+            : (offices.isNotEmpty ? offices.first.name : 'Main HQ Office'));
 
     final destinations = const [
       NavDestinationItem(
@@ -787,18 +804,20 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                       ),
                                     ),
                                     StatusBadge(
-                                      label:
-                                          currentStep == WorkflowStep.completed
-                                              ? 'Shift Complete'
+                                      label: currentStep == WorkflowStep.completed
+                                          ? 'Shift Complete'
+                                          : (isEmergencyDutyActive
+                                              ? '🚨 Emergency Callout'
                                               : (isOnBreak
                                                   ? '☕ On Break'
-                                                  : 'On Duty'),
-                                      color:
-                                          currentStep == WorkflowStep.completed
-                                              ? Colors.grey
+                                                  : 'On Duty')),
+                                      color: currentStep == WorkflowStep.completed
+                                          ? Colors.grey
+                                          : (isEmergencyDutyActive
+                                              ? Colors.red.shade700
                                               : (isOnBreak
                                                   ? Colors.amber.shade800
-                                                  : palette.success),
+                                                  : palette.success)),
                                     )
                                   ],
                                 ),
@@ -856,11 +875,120 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                           switchOutCurve: Curves.easeInCubic,
                           child: KeyedSubtree(
                             key: ValueKey(
-                                'workflow_step_${currentStep}_${isOnBreak}'),
+                                'workflow_step_${currentStep}_${isOnBreak}_$isEmergencyDutyActive'),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (currentStep == WorkflowStep.breakEnd ||
+                                if (currentStep ==
+                                        WorkflowStep.emergencyCheckOut ||
+                                    isEmergencyDutyActive) ...[
+                                  Card(
+                                    color: isDark
+                                        ? const Color(0xFF2C1616)
+                                        : Colors.red.shade50,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      side: BorderSide(
+                                        color: isDark
+                                            ? Colors.red.shade700
+                                            : Colors.red.shade400,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16.0),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.all(8),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.red.shade700,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(
+                                                  Icons.emergency_rounded,
+                                                  color: Colors.white,
+                                                  size: 20,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      'Emergency Duty Callout Active',
+                                                      style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 16,
+                                                        color: isDark
+                                                            ? Colors
+                                                                .red.shade300
+                                                            : Colors
+                                                                .red.shade900,
+                                                      ),
+                                                    ),
+                                                    if (activeEmergencyDuty
+                                                                ?.siteName !=
+                                                            null &&
+                                                        activeEmergencyDuty!
+                                                            .siteName!
+                                                            .trim()
+                                                            .isNotEmpty)
+                                                      Text(
+                                                        'Location: ${activeEmergencyDuty.siteName!.trim()}',
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          color: isDark
+                                                              ? Colors
+                                                                  .red.shade200
+                                                              : Colors
+                                                                  .red.shade800,
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 10),
+                                          Text(
+                                            'You are currently clocked in for emergency callout duty. All time worked is calculated at 100% overtime. Tap below to check out when the emergency duty is completed.',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: isDark
+                                                  ? AppColors.textSecondaryDark
+                                                  : AppColors
+                                                      .textSecondaryLight,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 14),
+                                          AppButton(
+                                            text: state is AttendanceProcessing
+                                                ? 'Acquiring GPS & Checking Out...'
+                                                : 'Check Out Emergency Duty',
+                                            isLoading:
+                                                state is AttendanceProcessing,
+                                            icon: Icons.camera_alt_rounded,
+                                            onPressed: () =>
+                                                _handleAttendanceStep(
+                                                    WorkflowStep
+                                                        .emergencyCheckOut),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ] else if (currentStep == WorkflowStep.breakEnd ||
                                     isOnBreak) ...[
                                   Card(
                                     color: isDark
@@ -1009,6 +1137,37 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                             onPressed: () =>
                                                 _handleAttendanceStep(
                                                     WorkflowStep.officeCheckIn),
+                                          ),
+                                          const SizedBox(height: 10),
+                                          OutlinedButton.icon(
+                                            onPressed: state is AttendanceProcessing
+                                                ? null
+                                                : () => _handleAttendanceStep(
+                                                    WorkflowStep.emergencyCheckIn),
+                                            icon: const Icon(
+                                              Icons.emergency_rounded,
+                                              color: Colors.red,
+                                              size: 18,
+                                            ),
+                                            label: const Text(
+                                              'Start Emergency Duty Callout',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.red,
+                                              ),
+                                            ),
+                                            style: OutlinedButton.styleFrom(
+                                              side: BorderSide(
+                                                color: Colors.red.shade300,
+                                                width: 1.2,
+                                              ),
+                                              minimumSize: const Size(
+                                                  double.infinity, 44),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                              ),
+                                            ),
                                           ),
                                         ],
                                       ),
@@ -1296,7 +1455,37 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                         ),
                                       ],
                                     ),
-                                  )
+                                  ),
+                                  const SizedBox(height: 12),
+                                  OutlinedButton.icon(
+                                    onPressed: state is AttendanceProcessing
+                                        ? null
+                                        : () => _handleAttendanceStep(
+                                            WorkflowStep.emergencyCheckIn),
+                                    icon: const Icon(
+                                      Icons.emergency_rounded,
+                                      color: Colors.red,
+                                      size: 18,
+                                    ),
+                                    label: const Text(
+                                      'Start Emergency Duty Callout',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.red,
+                                      ),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      side: BorderSide(
+                                        color: Colors.red.shade300,
+                                        width: 1.2,
+                                      ),
+                                      minimumSize:
+                                          const Size(double.infinity, 44),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ],
                             ),
@@ -1342,23 +1531,44 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                   record.siteName != null &&
                                   record.siteName!.trim().isNotEmpty;
 
+                              final isEmergencyStart = record.workflowStep ==
+                                  WorkflowStep.emergencyCheckIn;
+                              final isEmergencyEnd = record.workflowStep ==
+                                  WorkflowStep.emergencyCheckOut;
+                              final isEmergency =
+                                  isEmergencyStart || isEmergencyEnd;
+
                               final isBreakStart = record.workflowStep ==
                                   WorkflowStep.breakStart;
                               final isBreakEnd =
                                   record.workflowStep == WorkflowStep.breakEnd;
                               final isBreak = isBreakStart || isBreakEnd;
 
-                              final Color stepColor = isBreak
-                                  ? Colors.amber.shade700
-                                  : AppColors.success;
-                              final IconData stepIcon = isBreakStart
-                                  ? Icons.coffee_rounded
-                                  : (isBreakEnd
-                                      ? Icons.play_arrow_rounded
-                                      : Icons.check);
+                              final Color stepColor = isEmergency
+                                  ? Colors.red.shade700
+                                  : (isBreak
+                                      ? Colors.amber.shade700
+                                      : AppColors.success);
+                              final IconData stepIcon = isEmergency
+                                  ? Icons.emergency_rounded
+                                  : (isBreakStart
+                                      ? Icons.coffee_rounded
+                                      : (isBreakEnd
+                                          ? Icons.play_arrow_rounded
+                                          : Icons.check));
 
                               String stepTitle;
-                              if (isBreakStart) {
+                              if (isEmergencyStart) {
+                                final sName = record.siteName?.trim();
+                                if (sName != null && sName.isNotEmpty) {
+                                  stepTitle =
+                                      '🚨 Emergency Duty Check-In ($sName)';
+                                } else {
+                                  stepTitle = '🚨 Emergency Duty Check-In';
+                                }
+                              } else if (isEmergencyEnd) {
+                                stepTitle = '🚨 Emergency Duty Check-Out';
+                              } else if (isBreakStart) {
                                 final sName = record.siteName?.trim();
                                 if (sName != null &&
                                     sName.isNotEmpty &&

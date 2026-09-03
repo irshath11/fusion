@@ -483,6 +483,11 @@ class LocalDatabaseService {
     saveAttendanceRecord(updatedRecord);
   }
 
+  void deleteAttendanceRecord(String id) {
+    _attendanceRecords.removeWhere((r) => r.id == id);
+    _persistAttendanceRecords();
+  }
+
   /// Admin method to update or insert Check-In, Check-Out, and Overtime (OT) with Remarks for an employee on a given date.
   Future<bool> updateOrAddAdminAttendanceOverride({
     required String employeeId,
@@ -767,16 +772,19 @@ class LocalDatabaseService {
   WorkflowStep getWorkflowStepForEmployee([String? employeeId]) {
     autoResolveExpiredCheckIns();
 
+    if (isEmergencyDutyActiveToday(employeeId)) {
+      return WorkflowStep.emergencyCheckOut;
+    }
+
     final todayUserRecords = getTodayAttendanceRecords(employeeId);
 
     if (todayUserRecords.isEmpty) {
       return WorkflowStep.officeCheckIn;
     }
 
-    final lastRecord = todayUserRecords.last;
-    if (lastRecord.workflowStep == WorkflowStep.officeCheckOut) {
+    if (todayUserRecords.any((r) => r.workflowStep == WorkflowStep.officeCheckOut)) {
       return WorkflowStep.completed;
-    } else if (lastRecord.workflowStep == WorkflowStep.breakStart) {
+    } else if (todayUserRecords.last.workflowStep == WorkflowStep.breakStart) {
       return WorkflowStep.breakEnd;
     } else if (isCurrentlyAtSite(employeeId)) {
       return WorkflowStep.siteCheckOut;
@@ -791,6 +799,30 @@ class LocalDatabaseService {
     final todayRecords = getTodayAttendanceRecords(employeeId);
     if (todayRecords.isEmpty) return false;
     return todayRecords.last.workflowStep == WorkflowStep.breakStart;
+  }
+
+  /// Checks if employee currently has an active Emergency Duty check-in without check-out today
+  bool isEmergencyDutyActiveToday([String? employeeId]) {
+    final todayRecords = getTodayAttendanceRecords(employeeId);
+    if (todayRecords.isEmpty) return false;
+    for (int i = todayRecords.length - 1; i >= 0; i--) {
+      final step = todayRecords[i].workflowStep;
+      if (step == WorkflowStep.emergencyCheckIn) return true;
+      if (step == WorkflowStep.emergencyCheckOut) return false;
+    }
+    return false;
+  }
+
+  /// Gets the active emergency duty check-in record for today (if on emergency duty)
+  AttendanceRecord? getActiveEmergencyDutyRecordToday([String? employeeId]) {
+    final todayRecords = getTodayAttendanceRecords(employeeId);
+    if (todayRecords.isEmpty) return null;
+    for (int i = todayRecords.length - 1; i >= 0; i--) {
+      final step = todayRecords[i].workflowStep;
+      if (step == WorkflowStep.emergencyCheckIn) return todayRecords[i];
+      if (step == WorkflowStep.emergencyCheckOut) return null;
+    }
+    return null;
   }
 
   /// Gets the active break record for today (if on break)

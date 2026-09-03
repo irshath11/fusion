@@ -85,6 +85,8 @@ enum WorkflowStep {
   breakEnd,
   officeCheckOut,
   completed,
+  emergencyCheckIn,
+  emergencyCheckOut,
 }
 
 extension WorkflowStepExtension on WorkflowStep {
@@ -104,6 +106,10 @@ extension WorkflowStepExtension on WorkflowStep {
         return '4. Office Check-Out (Reach Office)';
       case WorkflowStep.completed:
         return 'Shift Completed';
+      case WorkflowStep.emergencyCheckIn:
+        return 'Emergency Duty Check-In';
+      case WorkflowStep.emergencyCheckOut:
+        return 'Emergency Duty Check-Out';
     }
   }
 
@@ -123,6 +129,10 @@ extension WorkflowStepExtension on WorkflowStep {
         return 'OFFICE_CHECK_OUT';
       case WorkflowStep.completed:
         return 'COMPLETED';
+      case WorkflowStep.emergencyCheckIn:
+        return 'EMERGENCY_CHECK_IN';
+      case WorkflowStep.emergencyCheckOut:
+        return 'EMERGENCY_CHECK_OUT';
     }
   }
 
@@ -140,9 +150,25 @@ extension WorkflowStepExtension on WorkflowStep {
         return WorkflowStep.siteCheckIn;
       case WorkflowStep.officeCheckOut:
         return WorkflowStep.completed;
+      case WorkflowStep.emergencyCheckIn:
+        return WorkflowStep.emergencyCheckOut;
+      case WorkflowStep.emergencyCheckOut:
+        return WorkflowStep.completed;
       case WorkflowStep.completed:
         return null;
     }
+  }
+
+  static WorkflowStep fromString(String step) {
+    final cleaned = step.trim().toLowerCase();
+    for (final s in WorkflowStep.values) {
+      if (s.name.toLowerCase() == cleaned ||
+          s.dbValue.toLowerCase() == cleaned ||
+          s.dbValue.replaceAll('_', '').toLowerCase() == cleaned) {
+        return s;
+      }
+    }
+    return WorkflowStep.officeCheckIn;
   }
 }
 
