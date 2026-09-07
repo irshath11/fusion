@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 import '../../../database/local_database_service.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_theme.dart';
@@ -1909,13 +1910,36 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         ),
         const SizedBox(height: 16),
 
-        Text(
-          'Emergency Duty Logs (${emergencySessions.length} Session${emergencySessions.length != 1 ? "s" : ""})',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: isDark ? palette.textPrimaryDark : palette.textPrimaryLight,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                'Emergency Duty Logs (${emergencySessions.length} Session${emergencySessions.length != 1 ? "s" : ""})',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? palette.textPrimaryDark : palette.textPrimaryLight,
+                ),
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => _showAddEmergencyLogDialog(emp),
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text(
+                'Add Emergency Log',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade700,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 8),
 
@@ -1924,17 +1948,29 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             child: Padding(
-              padding: const EdgeInsets.all(32.0),
+              padding: const EdgeInsets.all(28.0),
               child: Center(
                 child: Column(
                   children: [
-                    Icon(Icons.shield_outlined,
+                    Icon(Icons.warning_amber_rounded,
                         size: 48, color: Colors.grey.shade400),
                     const SizedBox(height: 12),
                     Text(
                       'No Emergency Duty records logged for ${emp.name}.',
                       style: const TextStyle(
                           fontWeight: FontWeight.w500, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 14),
+                    ElevatedButton.icon(
+                      onPressed: () => _showAddEmergencyLogDialog(emp),
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('Add First Emergency Log'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade700,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
                     ),
                   ],
                 ),
@@ -1951,193 +1987,1092 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               final AttendanceRecord inRec = session['in'];
               final AttendanceRecord? outRec = session['out'];
               final double durationHrs = session['durationHrs'];
+              final bool isSessionEdited =
+                  inRec.isEdited || (outRec != null && outRec.isEdited);
 
-              final dateStr = DateFormat('EEE, dd MMM yyyy')
+              final formattedInTime = DateFormat('dd MMM yyyy • hh:mm a')
                   .format(inRec.eventTimestamp.toLocal());
-              final checkInTimeStr = DateFormat('hh:mm a')
-                  .format(inRec.eventTimestamp.toLocal());
-              final checkOutTimeStr = outRec != null
+              final formattedOutTime = outRec != null
                   ? DateFormat('hh:mm a')
                       .format(outRec.eventTimestamp.toLocal())
-                  : 'In Progress / Pending';
+                  : 'In Progress';
 
               final siteName = TimesheetCalculator.resolveSiteName(inRec);
               final address = TimesheetCalculator.resolveFullAddress(inRec);
 
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: isDark ? palette.surfaceDark : Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isDark
-                        ? Colors.red.shade900.withValues(alpha: 0.5)
-                        : Colors.red.shade100,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color:
-                          Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: Colors.red.shade100,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(Icons.warning_amber_rounded,
-                                  color: Colors.red.shade800, size: 16),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              dateStr,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 13),
-                            ),
-                          ],
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade700,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            outRec != null
-                                ? '${durationHrs.toStringAsFixed(1)} hrs OT'
-                                : 'Active Duty',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Divider(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+              return Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+                elevation: 1.5,
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
                             children: [
-                              Row(
-                                children: [
-                                  const Icon(Icons.login_rounded,
-                                      size: 14, color: Colors.green),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Check-In: $checkInTimeStr',
-                                    style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                                ],
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withValues(alpha: 0.12),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.warning_amber_rounded,
+                                    color: Colors.red, size: 18),
                               ),
-                              const SizedBox(height: 4),
-                              Row(
+                              const SizedBox(width: 8),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Icon(
-                                    outRec != null
-                                        ? Icons.logout_rounded
-                                        : Icons.access_time_rounded,
-                                    size: 14,
-                                    color:
-                                        outRec != null ? Colors.red : Colors.orange,
+                                  Row(
+                                    children: [
+                                      Text(
+                                        formattedInTime,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13),
+                                      ),
+                                      if (isSessionEdited) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.purple
+                                                .withValues(alpha: 0.15),
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                            border: Border.all(
+                                                color: Colors.purple
+                                                    .withValues(alpha: 0.3)),
+                                          ),
+                                          child: const Text(
+                                            'ADMIN MODIFIED',
+                                            style: TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.purple,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
-                                  const SizedBox(width: 4),
                                   Text(
-                                    'Check-Out: $checkOutTimeStr',
+                                    outRec != null
+                                        ? 'Completed Session ($formattedOutTime)'
+                                        : 'Active Emergency Callout',
                                     style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
+                                      fontSize: 11,
                                       color: outRec != null
-                                          ? null
+                                          ? Colors.green.shade700
                                           : Colors.orange.shade800,
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                 ],
                               ),
                             ],
                           ),
-                        ),
-                        if (inRec.photoBase64.trim().isNotEmpty) ...[
-                          const SizedBox(width: 8),
-                          GestureDetector(
-                            onTap: () => _showFullImageDialog(inRec),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Stack(
-                                children: [
-                                  _buildPhotoWidget(inRec.photoBase64),
-                                  Positioned.fill(
-                                    child: Container(
-                                      color: Colors.black26,
-                                      child: const Icon(Icons.zoom_in_rounded,
-                                          color: Colors.white, size: 18),
-                                    ),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.shade700,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  outRec != null
+                                      ? '${durationHrs.toStringAsFixed(1)}h 100% OT'
+                                      : 'ACTIVE OT',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
                                   ),
-                                ],
+                                ),
                               ),
-                            ),
+                              IconButton(
+                                icon: const Icon(Icons.edit_outlined,
+                                    size: 18, color: Colors.blueAccent),
+                                tooltip: 'Edit Emergency Log',
+                                onPressed: () => _showEditEmergencyLogDialog(
+                                    emp, inRec, outRec),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline,
+                                    size: 18, color: Colors.redAccent),
+                                tooltip: 'Delete Session',
+                                onPressed: () =>
+                                    _deleteEmergencySession(inRec, outRec),
+                              ),
+                            ],
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 10),
+                      if (inRec.photoBase64.trim().isNotEmpty ||
+                          (outRec != null && outRec.photoBase64.trim().isNotEmpty)) ...[
+                        Row(
+                          children: [
+                            if (inRec.photoBase64.trim().isNotEmpty)
+                              GestureDetector(
+                                onTap: () => _showFullImageDialog(inRec),
+                                child: Container(
+                                  height: 60,
+                                  width: 60,
+                                  clipBehavior: Clip.antiAlias,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.red.shade300),
+                                  ),
+                                  child: _buildPhotoWidget(inRec.photoBase64),
+                                ),
+                              ),
+                            if (inRec.photoBase64.trim().isNotEmpty &&
+                                outRec != null &&
+                                outRec.photoBase64.trim().isNotEmpty)
+                              const SizedBox(width: 10),
+                            if (outRec != null && outRec.photoBase64.trim().isNotEmpty)
+                              GestureDetector(
+                                onTap: () => _showFullImageDialog(outRec),
+                                child: Container(
+                                  height: 60,
+                                  width: 60,
+                                  clipBehavior: Clip.antiAlias,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.green.shade300),
+                                  ),
+                                  child: _buildPhotoWidget(outRec.photoBase64),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
                       ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(Icons.location_on_outlined,
-                            size: 13, color: Colors.grey),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            '$siteName • $address',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: isDark
-                                  ? AppColors.textSecondaryDark
-                                  : AppColors.textSecondaryLight,
+                      if (address.isNotEmpty || siteName.isNotEmpty) ...[
+                        Row(
+                          children: [
+                            const Icon(Icons.location_on_rounded,
+                                size: 14, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                siteName.isNotEmpty && siteName != address
+                                    ? '$siteName • $address'
+                                    : (address.isNotEmpty ? address : siteName),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : Colors.grey.shade800,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          ],
                         ),
                       ],
-                    ),
-                    if (inRec.remarks != null &&
-                        inRec.remarks!.trim().isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        'Remarks: ${inRec.remarks}',
-                        style: const TextStyle(
-                            fontSize: 11,
-                            fontStyle: FontStyle.italic,
-                            color: Colors.grey),
-                      ),
+                      if (inRec.remarks != null &&
+                          inRec.remarks!.trim().isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.note_alt_outlined,
+                                size: 14, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                'Note: ${inRec.remarks!}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontStyle: FontStyle.italic,
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               );
             },
           ),
       ],
     );
+  }
+
+  Future<void> _deleteEmergencySession(
+      AttendanceRecord inRec, AttendanceRecord? outRec) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Emergency Log'),
+        content: const Text(
+            'Are you sure you want to delete this emergency duty record?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      _db.deleteAttendanceRecord(inRec.id);
+      if (outRec != null) {
+        _db.deleteAttendanceRecord(outRec.id);
+      }
+      setState(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Emergency log deleted.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showAddEmergencyLogDialog(EmployeeEntity emp) async {
+    DateTime selectedDate = _selectedDate ?? DateTime.now();
+    TimeOfDay checkInTime = const TimeOfDay(hour: 8, minute: 0);
+    TimeOfDay checkOutTime = const TimeOfDay(hour: 10, minute: 0);
+    bool isCompletedSession = true;
+    final TextEditingController locationReasonController =
+        TextEditingController(text: 'Emergency Duty');
+    final TextEditingController remarksController =
+        TextEditingController(text: 'Manual Emergency Duty Logged by Admin');
+
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final bool? saved = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final formattedDate =
+                DateFormat('dd MMM yyyy').format(selectedDate);
+            final formattedInTime = checkInTime.format(ctx);
+            final formattedOutTime = checkOutTime.format(ctx);
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.warning_amber_rounded,
+                        color: Colors.red, size: 22),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Add Emergency Duty Log',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          emp.name,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Date Selector
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            selectedDate = picked;
+                          });
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade400),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Date: $formattedDate',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
+                            const Icon(Icons.calendar_today,
+                                size: 18, color: Colors.red),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Session completion toggle
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Completed Session',
+                          style: TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.bold)),
+                      subtitle: Text(
+                        isCompletedSession
+                            ? 'Log Check-In & Check-Out'
+                            : 'Active Callout (Check-In Only)',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      value: isCompletedSession,
+                      activeThumbColor: Colors.red,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          isCompletedSession = val;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Time Pickers
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () async {
+                              final picked = await showTimePicker(
+                                context: ctx,
+                                initialTime: checkInTime,
+                              );
+                              if (picked != null) {
+                                setDialogState(() {
+                                  checkInTime = picked;
+                                });
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.red.shade300),
+                                borderRadius: BorderRadius.circular(10),
+                                color: Colors.red.withValues(alpha: 0.05),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Check-In Time',
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.red,
+                                          fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 4),
+                                  Text(formattedInTime,
+                                      style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (isCompletedSession) ...[
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () async {
+                                final picked = await showTimePicker(
+                                  context: ctx,
+                                  initialTime: checkOutTime,
+                                );
+                                if (picked != null) {
+                                  setDialogState(() {
+                                    checkOutTime = picked;
+                                  });
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.green.shade300),
+                                  borderRadius: BorderRadius.circular(10),
+                                  color: Colors.green.withValues(alpha: 0.05),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Check-Out Time',
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.green,
+                                            fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 4),
+                                    Text(formattedOutTime,
+                                        style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Callout Reason / Site
+                    TextField(
+                      controller: locationReasonController,
+                      decoration: InputDecoration(
+                        labelText: 'Location / Callout Reason',
+                        hintText: 'e.g. Substation Transformer Repair',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Remarks
+                    TextField(
+                      controller: remarksController,
+                      decoration: InputDecoration(
+                        labelText: 'Admin Remarks',
+                        hintText: 'Reason for manual entry',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        isDense: true,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red.shade700,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () async {
+                    final inDateTime = DateTime(
+                      selectedDate.year,
+                      selectedDate.month,
+                      selectedDate.day,
+                      checkInTime.hour,
+                      checkInTime.minute,
+                    );
+
+                    final outDateTime = isCompletedSession
+                        ? DateTime(
+                            selectedDate.year,
+                            selectedDate.month,
+                            selectedDate.day,
+                            checkOutTime.hour,
+                            checkOutTime.minute,
+                          )
+                        : null;
+
+                    if (outDateTime != null &&
+                        outDateTime.isBefore(inDateTime)) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(
+                            content: Text(
+                                'Check-Out time cannot be before Check-In time.')),
+                      );
+                      return;
+                    }
+
+                    final String siteReason =
+                        locationReasonController.text.trim().isNotEmpty
+                            ? locationReasonController.text.trim()
+                            : 'Emergency Duty';
+                    final String remarks =
+                        remarksController.text.trim().isNotEmpty
+                            ? remarksController.text.trim()
+                            : 'Manual Emergency Duty Logged by Admin';
+
+                    final offices = _db.getOffices();
+                    double empLat = 0.0;
+                    double empLng = 0.0;
+                    if (!emp.useDefaultOffice && emp.assignedOfficeId != null) {
+                      final matches =
+                          offices.where((o) => o.id == emp.assignedOfficeId);
+                      if (matches.isNotEmpty) {
+                        empLat = matches.first.latitude;
+                        empLng = matches.first.longitude;
+                      } else if (offices.isNotEmpty) {
+                        final defOffice = offices.firstWhere((o) => o.isDefault,
+                            orElse: () => offices.first);
+                        empLat = defOffice.latitude;
+                        empLng = defOffice.longitude;
+                      }
+                    } else if (offices.isNotEmpty) {
+                      final defOffice = offices.firstWhere((o) => o.isDefault,
+                          orElse: () => offices.first);
+                      empLat = defOffice.latitude;
+                      empLng = defOffice.longitude;
+                    }
+
+                    final checkInRecord = AttendanceRecord(
+                      id: const Uuid().v4(),
+                      employeeId: emp.id,
+                      employeeName: emp.name,
+                      workflowStep: WorkflowStep.emergencyCheckIn,
+                      eventTimestamp: inDateTime,
+                      latitude: empLat,
+                      longitude: empLng,
+                      gpsAccuracy: 10.0,
+                      address: siteReason,
+                      deviceId: 'ADMIN_MANUAL_LOG',
+                      photoBase64: '',
+                      isGeofenceValid: true,
+                      siteName: siteReason,
+                      syncStatus: SyncStatus.pending,
+                      remarks: remarks,
+                      isEdited: true,
+                      editedBy: 'Admin',
+                    );
+
+                    _db.saveAttendanceRecord(checkInRecord);
+
+                    AttendanceRecord? checkOutRecord;
+                    if (isCompletedSession && outDateTime != null) {
+                      checkOutRecord = AttendanceRecord(
+                        id: const Uuid().v4(),
+                        employeeId: emp.id,
+                        employeeName: emp.name,
+                        workflowStep: WorkflowStep.emergencyCheckOut,
+                        eventTimestamp: outDateTime,
+                        latitude: empLat,
+                        longitude: empLng,
+                        gpsAccuracy: 10.0,
+                        address: siteReason,
+                        deviceId: 'ADMIN_MANUAL_LOG',
+                        photoBase64: '',
+                        isGeofenceValid: true,
+                        siteName: siteReason,
+                        syncStatus: SyncStatus.pending,
+                        remarks: remarks,
+                        isEdited: true,
+                        editedBy: 'Admin',
+                      );
+                      _db.saveAttendanceRecord(checkOutRecord);
+                    }
+
+                    // Push to Supabase Cloud asynchronously
+                    SupabaseService().saveAdminAttendanceOverride(
+                      records: [
+                        checkInRecord,
+                        if (checkOutRecord != null) checkOutRecord,
+                      ],
+                    );
+
+                    Navigator.of(ctx).pop(true);
+                  },
+                  child: const Text('Save Emergency Log'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved == true) {
+      setState(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Emergency Duty log saved for ${emp.name}.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showEditEmergencyLogDialog(
+    EmployeeEntity emp,
+    AttendanceRecord inRec,
+    AttendanceRecord? outRec,
+  ) async {
+    DateTime selectedDate = inRec.eventTimestamp.toLocal();
+    TimeOfDay checkInTime =
+        TimeOfDay.fromDateTime(inRec.eventTimestamp.toLocal());
+    TimeOfDay checkOutTime = outRec != null
+        ? TimeOfDay.fromDateTime(outRec.eventTimestamp.toLocal())
+        : TimeOfDay(
+            hour: (inRec.eventTimestamp.toLocal().hour + 2) % 24,
+            minute: inRec.eventTimestamp.toLocal().minute,
+          );
+    bool isCompletedSession = outRec != null;
+    final TextEditingController locationReasonController =
+        TextEditingController(
+      text: inRec.siteName ?? inRec.address,
+    );
+    final TextEditingController remarksController = TextEditingController(
+      text: inRec.remarks ??
+          (outRec?.remarks ?? 'Manual Emergency Duty Logged by Admin'),
+    );
+
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final dbEmployees = _db.getEmployees();
+    final allEmployees = dbEmployees.isNotEmpty ? dbEmployees : [emp];
+    String selectedEmpId = emp.id;
+    String selectedEmpName = emp.name;
+
+    final bool? updated = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final formattedDate =
+                DateFormat('dd MMM yyyy').format(selectedDate);
+            final formattedInTime = checkInTime.format(ctx);
+            final formattedOutTime = checkOutTime.format(ctx);
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.edit_note_rounded,
+                        color: Colors.blue, size: 22),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Edit Emergency Duty Log',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          selectedEmpName,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Assigned Employee
+                    const Text(
+                      'Assigned Employee',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isDark ? Colors.white24 : Colors.grey.shade400,
+                        ),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: allEmployees.any((e) => e.id == selectedEmpId)
+                              ? selectedEmpId
+                              : (allEmployees.isNotEmpty ? allEmployees.first.id : null),
+                          isExpanded: true,
+                          items: allEmployees.map((e) {
+                            return DropdownMenuItem<String>(
+                              value: e.id,
+                              child: Text(
+                                '${e.name} (${e.employeeCode})',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              final match = allEmployees.firstWhere((e) => e.id == val);
+                              setDialogState(() {
+                                selectedEmpId = match.id;
+                                selectedEmpName = match.name;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Date Selector
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            selectedDate = picked;
+                          });
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade400),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Date: $formattedDate',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
+                            const Icon(Icons.calendar_today,
+                                size: 18, color: Colors.blue),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Session completion toggle
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Completed Session',
+                          style: TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.bold)),
+                      subtitle: Text(
+                        isCompletedSession
+                            ? 'Log Check-In & Check-Out'
+                            : 'Active Callout (Check-In Only)',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      value: isCompletedSession,
+                      activeThumbColor: Colors.blue,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          isCompletedSession = val;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Time Pickers
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () async {
+                              final picked = await showTimePicker(
+                                context: ctx,
+                                initialTime: checkInTime,
+                              );
+                              if (picked != null) {
+                                setDialogState(() {
+                                  checkInTime = picked;
+                                });
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.blue.shade300),
+                                borderRadius: BorderRadius.circular(10),
+                                color: Colors.blue.withValues(alpha: 0.05),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Check-In Time',
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.blue,
+                                          fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 4),
+                                  Text(formattedInTime,
+                                      style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (isCompletedSession) ...[
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () async {
+                                final picked = await showTimePicker(
+                                  context: ctx,
+                                  initialTime: checkOutTime,
+                                );
+                                if (picked != null) {
+                                  setDialogState(() {
+                                    checkOutTime = picked;
+                                  });
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                      color: Colors.green.shade300),
+                                  borderRadius: BorderRadius.circular(10),
+                                  color: Colors.green.withValues(alpha: 0.05),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Check-Out Time',
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.green,
+                                            fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 4),
+                                    Text(formattedOutTime,
+                                        style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Callout Reason / Site
+                    TextField(
+                      controller: locationReasonController,
+                      decoration: InputDecoration(
+                        labelText: 'Location / Callout Reason',
+                        hintText: 'e.g. Substation Transformer Repair',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Remarks
+                    TextField(
+                      controller: remarksController,
+                      decoration: InputDecoration(
+                        labelText: 'Admin Remarks',
+                        hintText: 'Reason for manual entry / modification',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        isDense: true,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade700,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () async {
+                    final inDateTime = DateTime(
+                      selectedDate.year,
+                      selectedDate.month,
+                      selectedDate.day,
+                      checkInTime.hour,
+                      checkInTime.minute,
+                    );
+
+                    final outDateTime = isCompletedSession
+                        ? DateTime(
+                            selectedDate.year,
+                            selectedDate.month,
+                            selectedDate.day,
+                            checkOutTime.hour,
+                            checkOutTime.minute,
+                          )
+                        : null;
+
+                    if (outDateTime != null &&
+                        outDateTime.isBefore(inDateTime)) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(
+                            content: Text(
+                                'Check-Out time cannot be before Check-In time.')),
+                      );
+                      return;
+                    }
+
+                    final String siteReason =
+                        locationReasonController.text.trim().isNotEmpty
+                            ? locationReasonController.text.trim()
+                            : (inRec.siteName ??
+                                (inRec.address.isNotEmpty
+                                    ? inRec.address
+                                    : 'Emergency Duty'));
+                    final String remarks =
+                        remarksController.text.trim().isNotEmpty
+                            ? remarksController.text.trim()
+                            : (inRec.remarks ??
+                                'Manual Emergency Duty Logged by Admin');
+
+                    final updatedCheckIn = inRec.copyWith(
+                      employeeId: selectedEmpId,
+                      employeeName: selectedEmpName,
+                      eventTimestamp: inDateTime,
+                      siteName: siteReason,
+                      address: siteReason,
+                      remarks: remarks,
+                      isEdited: true,
+                      editedBy: 'Admin',
+                      syncStatus: SyncStatus.pending,
+                    );
+
+                    _db.updateAttendanceRecord(updatedCheckIn);
+
+                    AttendanceRecord? finalOutRecord;
+                    if (isCompletedSession && outDateTime != null) {
+                      if (outRec != null) {
+                        finalOutRecord = outRec.copyWith(
+                          employeeId: selectedEmpId,
+                          employeeName: selectedEmpName,
+                          eventTimestamp: outDateTime,
+                          siteName: siteReason,
+                          address: siteReason,
+                          remarks: remarks,
+                          isEdited: true,
+                          editedBy: 'Admin',
+                          syncStatus: SyncStatus.pending,
+                        );
+                        _db.updateAttendanceRecord(finalOutRecord);
+                      } else {
+                        finalOutRecord = AttendanceRecord(
+                          id: const Uuid().v4(),
+                          employeeId: selectedEmpId,
+                          employeeName: selectedEmpName,
+                          workflowStep: WorkflowStep.emergencyCheckOut,
+                          eventTimestamp: outDateTime,
+                          latitude: inRec.latitude,
+                          longitude: inRec.longitude,
+                          gpsAccuracy: inRec.gpsAccuracy,
+                          address: siteReason,
+                          deviceId: inRec.deviceId,
+                          photoBase64: inRec.photoBase64,
+                          isGeofenceValid: true,
+                          siteName: siteReason,
+                          syncStatus: SyncStatus.pending,
+                          remarks: remarks,
+                          isEdited: true,
+                          editedBy: 'Admin',
+                        );
+                        _db.saveAttendanceRecord(finalOutRecord);
+                      }
+                    } else if (!isCompletedSession && outRec != null) {
+                      // Converted from completed to active callout: remove outRec
+                      _db.deleteAttendanceRecord(outRec.id);
+                    }
+
+                    // Push to Supabase Cloud asynchronously
+                    SupabaseService().saveAdminAttendanceOverride(
+                      records: [
+                        updatedCheckIn,
+                        if (finalOutRecord != null) finalOutRecord,
+                      ],
+                    );
+
+                    Navigator.of(ctx).pop(true);
+                  },
+                  child: const Text('Save Changes'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (updated == true) {
+      setState(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Emergency Duty log updated for $selectedEmpName.'),
+            backgroundColor: Colors.blue.shade700,
+          ),
+        );
+      }
+    }
   }
 
   // ==========================================

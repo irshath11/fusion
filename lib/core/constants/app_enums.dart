@@ -153,10 +153,22 @@ extension WorkflowStepExtension on WorkflowStep {
       case WorkflowStep.emergencyCheckIn:
         return WorkflowStep.emergencyCheckOut;
       case WorkflowStep.emergencyCheckOut:
-        return null;
+        return WorkflowStep.completed;
       case WorkflowStep.completed:
         return null;
     }
+  }
+
+  static WorkflowStep fromString(String step) {
+    final cleaned = step.trim().toLowerCase();
+    for (final s in WorkflowStep.values) {
+      if (s.name.toLowerCase() == cleaned ||
+          s.dbValue.toLowerCase() == cleaned ||
+          s.dbValue.replaceAll('_', '').toLowerCase() == cleaned) {
+        return s;
+      }
+    }
+    return WorkflowStep.officeCheckIn;
   }
 }
 

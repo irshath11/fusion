@@ -48,6 +48,8 @@ class AttendanceRecord {
   });
 
   AttendanceRecord copyWith({
+    String? employeeId,
+    String? employeeName,
     String? address,
     SyncStatus? syncStatus,
     DateTime? syncTimestamp,
@@ -62,8 +64,8 @@ class AttendanceRecord {
   }) {
     return AttendanceRecord(
       id: id,
-      employeeId: employeeId,
-      employeeName: employeeName,
+      employeeId: employeeId ?? this.employeeId,
+      employeeName: employeeName ?? this.employeeName,
       workflowStep: workflowStep,
       eventTimestamp: eventTimestamp ?? this.eventTimestamp,
       syncTimestamp: syncTimestamp ?? this.syncTimestamp,

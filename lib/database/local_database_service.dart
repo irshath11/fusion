@@ -77,8 +77,10 @@ class LocalDatabaseService {
                 e.id == emp.id ||
                 (e.email.isNotEmpty &&
                     emp.email.isNotEmpty &&
-                    e.email.trim().toLowerCase() == emp.email.trim().toLowerCase()) ||
-                (e.name.trim().toLowerCase() == emp.name.trim().toLowerCase() && emp.name.trim().isNotEmpty));
+                    e.email.trim().toLowerCase() ==
+                        emp.email.trim().toLowerCase()) ||
+                (e.name.trim().toLowerCase() == emp.name.trim().toLowerCase() &&
+                    emp.name.trim().isNotEmpty));
             if (index >= 0) {
               _employees[index] = emp;
             } else {
@@ -136,8 +138,10 @@ class LocalDatabaseService {
     // Purge any previously seeded sample data
     _employees.removeWhere((e) => e.id == 'emp-001' || e.id == 'emp-002');
     _workSites.removeWhere((w) => w.id == 'site-musaffah-001');
-    _offices.removeWhere((o) => o.id == 'office-musaffah-m12-001' || o.id == 'office-main-001');
-    _attendanceRecords.removeWhere((r) => r.id.startsWith('rec-001-') || r.id.startsWith('rec-002-'));
+    _offices.removeWhere(
+        (o) => o.id == 'office-musaffah-m12-001' || o.id == 'office-main-001');
+    _attendanceRecords.removeWhere(
+        (r) => r.id.startsWith('rec-001-') || r.id.startsWith('rec-002-'));
 
     // Automatically resolve any dangling check-ins older than 24 hours
     autoResolveExpiredCheckIns();
@@ -210,7 +214,9 @@ class LocalDatabaseService {
     for (final u in _users) {
       final key = u.email.trim().isNotEmpty
           ? u.email.trim().toLowerCase()
-          : (u.fullName.trim().isNotEmpty ? u.fullName.trim().toLowerCase() : u.id);
+          : (u.fullName.trim().isNotEmpty
+              ? u.fullName.trim().toLowerCase()
+              : u.id);
       uniqueMap[key] = u;
     }
     for (final e in _employees) {
@@ -225,7 +231,8 @@ class LocalDatabaseService {
           fullName: e.name,
           phoneNumber: e.mobileNumber,
           role: UserRole.employee,
-          organizationId: _organization?.id ?? '00000000-0000-0000-0000-000000000001',
+          organizationId:
+              _organization?.id ?? '00000000-0000-0000-0000-000000000001',
           isActive: e.isActive,
           useDefaultOffice: e.useDefaultOffice,
           assignedOfficeId: e.assignedOfficeId,
@@ -236,13 +243,20 @@ class LocalDatabaseService {
     if (_currentUser != null) {
       final key = _currentUser!.email.trim().isNotEmpty
           ? _currentUser!.email.trim().toLowerCase()
-          : (_currentUser!.fullName.trim().isNotEmpty ? _currentUser!.fullName.trim().toLowerCase() : _currentUser!.id);
-      if (!uniqueMap.containsKey(key) || _currentUser!.role == UserRole.superAdmin || _currentUser!.role == UserRole.admin) {
+          : (_currentUser!.fullName.trim().isNotEmpty
+              ? _currentUser!.fullName.trim().toLowerCase()
+              : _currentUser!.id);
+      if (!uniqueMap.containsKey(key) ||
+          _currentUser!.role == UserRole.superAdmin ||
+          _currentUser!.role == UserRole.admin) {
         uniqueMap[key] = _currentUser!;
       }
     }
     final result = uniqueMap.values.toList();
-    result.sort((a, b) => a.fullName.trim().toLowerCase().compareTo(b.fullName.trim().toLowerCase()));
+    result.sort((a, b) => a.fullName
+        .trim()
+        .toLowerCase()
+        .compareTo(b.fullName.trim().toLowerCase()));
     return List.unmodifiable(result);
   }
 
@@ -339,23 +353,32 @@ class LocalDatabaseService {
         final existing = uniqueMap[key]!;
         uniqueMap[key] = EmployeeEntity(
           id: existing.id.length > e.id.length ? existing.id : e.id,
-          employeeCode: existing.employeeCode.startsWith('EMP-') && existing.employeeCode != 'EMP-000'
+          employeeCode: existing.employeeCode.startsWith('EMP-') &&
+                  existing.employeeCode != 'EMP-000'
               ? existing.employeeCode
               : e.employeeCode,
           name: existing.name.isNotEmpty ? existing.name : e.name,
-          mobileNumber: existing.mobileNumber.isNotEmpty ? existing.mobileNumber : e.mobileNumber,
+          mobileNumber: existing.mobileNumber.isNotEmpty
+              ? existing.mobileNumber
+              : e.mobileNumber,
           email: existing.email.isNotEmpty ? existing.email : e.email,
-          designation: existing.designation != 'Team Member' ? existing.designation : e.designation,
-          department: existing.department != 'Operations' ? existing.department : e.department,
+          designation: existing.designation != 'Team Member'
+              ? existing.designation
+              : e.designation,
+          department: existing.department != 'Operations'
+              ? existing.department
+              : e.department,
           useDefaultOffice: existing.useDefaultOffice,
           assignedOfficeId: existing.assignedOfficeId ?? e.assignedOfficeId,
-          assignedOfficeName: existing.assignedOfficeName ?? e.assignedOfficeName,
+          assignedOfficeName:
+              existing.assignedOfficeName ?? e.assignedOfficeName,
           isActive: existing.isActive && e.isActive,
         );
       }
     }
     final result = uniqueMap.values.toList();
-    result.sort((a, b) => a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
+    result.sort((a, b) =>
+        a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
     return List.unmodifiable(result);
   }
 
@@ -370,8 +393,10 @@ class LocalDatabaseService {
         e.id == employee.id ||
         (e.email.isNotEmpty &&
             employee.email.isNotEmpty &&
-            e.email.trim().toLowerCase() == employee.email.trim().toLowerCase()) ||
-        (e.name.trim().toLowerCase() == employee.name.trim().toLowerCase() && e.name.trim().isNotEmpty));
+            e.email.trim().toLowerCase() ==
+                employee.email.trim().toLowerCase()) ||
+        (e.name.trim().toLowerCase() == employee.name.trim().toLowerCase() &&
+            e.name.trim().isNotEmpty));
     if (index >= 0) {
       _employees[index] = employee;
     } else {
@@ -460,19 +485,25 @@ class LocalDatabaseService {
                 r.employeeName.trim().toLowerCase() ==
                     record.employeeName.trim().toLowerCase());
         final stepMatch = r.workflowStep == record.workflowStep;
-        final timeMatch = r.eventTimestamp.isAtSameMomentAs(record.eventTimestamp) ||
-            r.eventTimestamp.difference(record.eventTimestamp).inSeconds.abs() < 5;
+        final timeMatch = r.eventTimestamp
+                .isAtSameMomentAs(record.eventTimestamp) ||
+            r.eventTimestamp.difference(record.eventTimestamp).inSeconds.abs() <
+                5;
         return empMatch && stepMatch && timeMatch;
       });
     }
 
     if (index >= 0) {
       final existing = _attendanceRecords[index];
-      if (existing.isEdited && record.manualOvertimeHours == null && existing.manualOvertimeHours != null) {
+      if (existing.isEdited &&
+          record.manualOvertimeHours == null &&
+          existing.manualOvertimeHours != null) {
         _attendanceRecords[index] = record.copyWith(
           manualOvertimeHours: existing.manualOvertimeHours,
           overrideManualOvertimeHours: true,
-          remarks: (existing.remarks != null && existing.remarks!.isNotEmpty) ? existing.remarks : record.remarks,
+          remarks: (existing.remarks != null && existing.remarks!.isNotEmpty)
+              ? existing.remarks
+              : record.remarks,
           isEdited: true,
           editedBy: existing.editedBy,
         );
@@ -487,6 +518,11 @@ class LocalDatabaseService {
 
   void updateAttendanceRecord(AttendanceRecord updatedRecord) {
     saveAttendanceRecord(updatedRecord);
+  }
+
+  void deleteAttendanceRecord(String id) {
+    _attendanceRecords.removeWhere((r) => r.id == id);
+    _persistAttendanceRecords();
   }
 
   /// Admin method to update or insert Check-In, Check-Out, and Overtime (OT) with Remarks for an employee on a given date.
@@ -636,7 +672,8 @@ class LocalDatabaseService {
 
     // Trigger Cloud DB sync
     try {
-      final cloudOk = await SupabaseService().saveAdminAttendanceOverride(records: updatedOrCreated);
+      final cloudOk = await SupabaseService()
+          .saveAdminAttendanceOverride(records: updatedOrCreated);
       if (cloudOk) {
         for (final rec in updatedOrCreated) {
           updateAttendanceRecord(rec.copyWith(syncStatus: SyncStatus.synced));
@@ -692,7 +729,8 @@ class LocalDatabaseService {
 
             if (!hasMatchingCheckOut) {
               // Auto-generate officeCheckOut after 8 hours from check-in time
-              final autoCheckOutTime = checkInTime.add(const Duration(hours: 8));
+              final autoCheckOutTime =
+                  checkInTime.add(const Duration(hours: 8));
 
               // Avoid duplicate if already exists with same timestamp
               final duplicateExists = records.any((r) =>
@@ -709,8 +747,11 @@ class LocalDatabaseService {
                   latitude: rec.latitude,
                   longitude: rec.longitude,
                   gpsAccuracy: rec.gpsAccuracy,
-                  address: 'Auto Check-Out (24h Exceeded - 8h Regular Shift Capped)',
-                  deviceId: rec.deviceId.isNotEmpty ? rec.deviceId : 'device-auto-system',
+                  address:
+                      'Auto Check-Out (24h Exceeded - 8h Regular Shift Capped)',
+                  deviceId: rec.deviceId.isNotEmpty
+                      ? rec.deviceId
+                      : 'device-auto-system',
                   photoBase64: '',
                   isGeofenceValid: true,
                   officeId: rec.officeId,
@@ -739,7 +780,8 @@ class LocalDatabaseService {
   List<AttendanceRecord> getTodayAttendanceRecords([String? employeeId]) {
     autoResolveExpiredCheckIns();
 
-    final targetId = employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
+    final targetId =
+        employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
     if (targetId == null || targetId.isEmpty) return [];
 
     final now = DateTime.now().toLocal();
@@ -749,8 +791,9 @@ class LocalDatabaseService {
       final matchesUser = (r.employeeId == targetId ||
           (_currentUser != null &&
               (r.employeeId == _currentUser!.id ||
-               r.employeeId == _currentUser!.firebaseUid ||
-               r.employeeName.trim().toLowerCase() == _currentUser!.fullName.trim().toLowerCase())));
+                  r.employeeId == _currentUser!.firebaseUid ||
+                  r.employeeName.trim().toLowerCase() ==
+                      _currentUser!.fullName.trim().toLowerCase())));
       final localEv = r.eventTimestamp.toLocal();
       final rDate = DateTime(localEv.year, localEv.month, localEv.day);
       return matchesUser && rDate.isAtSameMomentAs(today);
@@ -764,7 +807,8 @@ class LocalDatabaseService {
     for (int i = todayRecords.length - 1; i >= 0; i--) {
       final step = todayRecords[i].workflowStep;
       if (step == WorkflowStep.siteCheckIn) return true;
-      if (step == WorkflowStep.siteCheckOut || step == WorkflowStep.officeCheckOut) return false;
+      if (step == WorkflowStep.siteCheckOut ||
+          step == WorkflowStep.officeCheckOut) return false;
     }
     return false;
   }
@@ -814,7 +858,8 @@ class LocalDatabaseService {
   /// Gets the active break record for today (if on break)
   AttendanceRecord? getActiveBreakToday([String? employeeId]) {
     final todayRecords = getTodayAttendanceRecords(employeeId);
-    if (todayRecords.isNotEmpty && todayRecords.last.workflowStep == WorkflowStep.breakStart) {
+    if (todayRecords.isNotEmpty &&
+        todayRecords.last.workflowStep == WorkflowStep.breakStart) {
       return todayRecords.last;
     }
     return null;
@@ -860,7 +905,8 @@ class LocalDatabaseService {
       if (step == WorkflowStep.siteCheckIn) {
         return todayRecords[i].siteName ?? 'Current Site';
       }
-      if (step == WorkflowStep.siteCheckOut || step == WorkflowStep.officeCheckOut) {
+      if (step == WorkflowStep.siteCheckOut ||
+          step == WorkflowStep.officeCheckOut) {
         return null;
       }
     }
@@ -872,15 +918,17 @@ class LocalDatabaseService {
   List<AttendanceRecord> getPendingSyncRecords([String? employeeId]) {
     autoResolveExpiredCheckIns();
 
-    final targetId = employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
+    final targetId =
+        employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
     return _attendanceRecords.where((r) {
       if (r.syncStatus != SyncStatus.pending) return false;
       if (targetId == null || targetId.isEmpty) return true;
       return r.employeeId == targetId ||
           (_currentUser != null &&
               (r.employeeId == _currentUser!.id ||
-               r.employeeId == _currentUser!.firebaseUid ||
-               r.employeeName.trim().toLowerCase() == _currentUser!.fullName.trim().toLowerCase()));
+                  r.employeeId == _currentUser!.firebaseUid ||
+                  r.employeeName.trim().toLowerCase() ==
+                      _currentUser!.fullName.trim().toLowerCase()));
     }).toList();
   }
 
@@ -909,7 +957,6 @@ class LocalDatabaseService {
     _attendanceRecords.clear();
     _persistAttendanceRecords();
   }
-
 
   void _persistAttendanceRecords() {
     try {
@@ -987,7 +1034,8 @@ class LocalDatabaseService {
     final reports = getAllSavedServiceReports(forceRefresh: true);
     final prefixPattern = 'SR-$prefix-';
     for (final item in reports) {
-      final ref = (item['reportRefNumber'] ?? item['ref_number'] ?? '').toString();
+      final ref =
+          (item['reportRefNumber'] ?? item['ref_number'] ?? '').toString();
       if (ref.startsWith(prefixPattern)) {
         final numPart = ref.substring(prefixPattern.length);
         final parsed = int.tryParse(numPart);
@@ -1045,7 +1093,8 @@ class LocalDatabaseService {
       await _settingsBox?.put(
           'pending_service_reports_json', jsonEncode(decoded));
       _cachedServiceReports = null; // Invalidate memory cache
-      debugPrint('Service report $refNumber saved locally to offline storage queue.');
+      debugPrint(
+          'Service report $refNumber saved locally to offline storage queue.');
     } catch (e) {
       debugPrint('Error saving service report locally: $e');
     }
@@ -1084,7 +1133,8 @@ class LocalDatabaseService {
   }
 
   /// Retrieve all locally saved service reports (both synced and pending) with in-memory caching
-  List<Map<String, dynamic>> getAllSavedServiceReports({bool forceRefresh = false}) {
+  List<Map<String, dynamic>> getAllSavedServiceReports(
+      {bool forceRefresh = false}) {
     if (!forceRefresh && _cachedServiceReports != null) {
       return List<Map<String, dynamic>>.from(_cachedServiceReports!);
     }
@@ -1093,7 +1143,8 @@ class LocalDatabaseService {
       final String jsonStr =
           _settingsBox?.get('pending_service_reports_json', defaultValue: '[]');
       final List decoded = jsonDecode(jsonStr);
-      _cachedServiceReports = decoded.map((item) => Map<String, dynamic>.from(item)).toList();
+      _cachedServiceReports =
+          decoded.map((item) => Map<String, dynamic>.from(item)).toList();
       return List<Map<String, dynamic>>.from(_cachedServiceReports!);
     } catch (e) {
       return [];
@@ -1112,22 +1163,26 @@ class LocalDatabaseService {
   }
 
   /// Merge cloud-synced service reports from Supabase into local storage
-  Future<void> mergeCloudServiceReports(List<Map<String, dynamic>> cloudReports) async {
+  Future<void> mergeCloudServiceReports(
+      List<Map<String, dynamic>> cloudReports) async {
     try {
       final String jsonStr =
           _settingsBox?.get('pending_service_reports_json', defaultValue: '[]');
       final List decoded = jsonDecode(jsonStr);
 
       final Set<String> cloudRefNumbers = cloudReports
-          .map((c) => (c['reportRefNumber'] ?? c['ref_number'] ?? '').toString())
+          .map(
+              (c) => (c['reportRefNumber'] ?? c['ref_number'] ?? '').toString())
           .where((ref) => ref.isNotEmpty)
           .toSet();
 
       for (final cloud in cloudReports) {
-        final String refNumber = (cloud['reportRefNumber'] ?? cloud['ref_number'] ?? '').toString();
+        final String refNumber =
+            (cloud['reportRefNumber'] ?? cloud['ref_number'] ?? '').toString();
         if (refNumber.isEmpty) continue;
 
-        final idx = decoded.indexWhere((item) => item['reportRefNumber'] == refNumber);
+        final idx =
+            decoded.indexWhere((item) => item['reportRefNumber'] == refNumber);
         if (idx >= 0) {
           final localSync = decoded[idx]['syncStatus'];
           if (localSync != 'pending') {
@@ -1142,7 +1197,9 @@ class LocalDatabaseService {
       decoded.removeWhere((item) {
         final String ref = (item['reportRefNumber'] ?? '').toString();
         final String status = (item['syncStatus'] ?? '').toString();
-        if (status == 'synced' && ref.isNotEmpty && !cloudRefNumbers.contains(ref)) {
+        if (status == 'synced' &&
+            ref.isNotEmpty &&
+            !cloudRefNumbers.contains(ref)) {
           return true;
         }
         return false;
@@ -1157,10 +1214,11 @@ class LocalDatabaseService {
   }
 
   /// Save generated attendance/analytics report metadata to local offline storage
-  Future<void> saveGeneratedReportLocally(Map<String, dynamic> reportMeta) async {
+  Future<void> saveGeneratedReportLocally(
+      Map<String, dynamic> reportMeta) async {
     try {
-      final String jsonStr =
-          _settingsBox?.get('generated_reports_history_json', defaultValue: '[]');
+      final String jsonStr = _settingsBox?.get('generated_reports_history_json',
+          defaultValue: '[]');
       final List decoded = jsonDecode(jsonStr);
 
       final payload = {
@@ -1186,7 +1244,8 @@ class LocalDatabaseService {
   List<Map<String, dynamic>>? _cachedWorkPhotoSubmissions;
 
   /// Save work site photos submission to local offline Hive storage
-  Future<void> saveWorkPhotoSubmissionLocally(Map<String, dynamic> submissionData) async {
+  Future<void> saveWorkPhotoSubmissionLocally(
+      Map<String, dynamic> submissionData) async {
     try {
       final String jsonStr =
           _settingsBox?.get('work_photo_submissions_json', defaultValue: '[]');
@@ -1194,7 +1253,8 @@ class LocalDatabaseService {
 
       final payload = {
         'id': submissionData['id'] ?? _uuid.v4(),
-        'reportDate': submissionData['reportDate'] ?? DateTime.now().toIso8601String(),
+        'reportDate':
+            submissionData['reportDate'] ?? DateTime.now().toIso8601String(),
         'workTitle': submissionData['workTitle'] ?? '',
         'location': submissionData['location'] ?? '',
         'employeeName': submissionData['employeeName'] ?? '',
@@ -1205,16 +1265,19 @@ class LocalDatabaseService {
       };
 
       decoded.insert(0, payload);
-      await _settingsBox?.put('work_photo_submissions_json', jsonEncode(decoded));
+      await _settingsBox?.put(
+          'work_photo_submissions_json', jsonEncode(decoded));
       _cachedWorkPhotoSubmissions = null; // Invalidate cache
-      debugPrint('Work photo submission saved locally with ${(payload['photos'] as List).length} image(s).');
+      debugPrint(
+          'Work photo submission saved locally with ${(payload['photos'] as List).length} image(s).');
     } catch (e) {
       debugPrint('Error saving work photo submission locally: $e');
     }
   }
 
   /// Get all saved work photo submissions (with in-memory caching for peak UI performance)
-  List<Map<String, dynamic>> getSavedWorkPhotoSubmissions({bool forceRefresh = false}) {
+  List<Map<String, dynamic>> getSavedWorkPhotoSubmissions(
+      {bool forceRefresh = false}) {
     if (!forceRefresh && _cachedWorkPhotoSubmissions != null) {
       return List<Map<String, dynamic>>.from(_cachedWorkPhotoSubmissions!);
     }
@@ -1223,7 +1286,8 @@ class LocalDatabaseService {
       final String jsonStr =
           _settingsBox?.get('work_photo_submissions_json', defaultValue: '[]');
       final List decoded = jsonDecode(jsonStr);
-      _cachedWorkPhotoSubmissions = decoded.map((item) => Map<String, dynamic>.from(item)).toList();
+      _cachedWorkPhotoSubmissions =
+          decoded.map((item) => Map<String, dynamic>.from(item)).toList();
       return List<Map<String, dynamic>>.from(_cachedWorkPhotoSubmissions!);
     } catch (e) {
       return [];
@@ -1234,14 +1298,17 @@ class LocalDatabaseService {
   List<Map<String, dynamic>> getPendingWorkPhotoSubmissions() {
     try {
       final all = getSavedWorkPhotoSubmissions();
-      return all.where((item) => (item['syncStatus'] ?? 'pending') == 'pending').toList();
+      return all
+          .where((item) => (item['syncStatus'] ?? 'pending') == 'pending')
+          .toList();
     } catch (e) {
       return [];
     }
   }
 
   /// Mark a work photo submission as synced to the cloud database
-  Future<void> markWorkPhotoSubmissionSynced(String id, {List<String>? updatedPhotos}) async {
+  Future<void> markWorkPhotoSubmissionSynced(String id,
+      {List<String>? updatedPhotos}) async {
     try {
       final String jsonStr =
           _settingsBox?.get('work_photo_submissions_json', defaultValue: '[]');
@@ -1263,7 +1330,8 @@ class LocalDatabaseService {
       }
 
       if (updated) {
-        await _settingsBox?.put('work_photo_submissions_json', jsonEncode(decoded));
+        await _settingsBox?.put(
+            'work_photo_submissions_json', jsonEncode(decoded));
         _cachedWorkPhotoSubmissions = null; // Invalidate cache
         debugPrint('Work photo submission #$id marked as synced.');
       }
@@ -1280,7 +1348,8 @@ class LocalDatabaseService {
       final List decoded = jsonDecode(jsonStr);
 
       decoded.removeWhere((item) => item['id']?.toString() == id);
-      await _settingsBox?.put('work_photo_submissions_json', jsonEncode(decoded));
+      await _settingsBox?.put(
+          'work_photo_submissions_json', jsonEncode(decoded));
       _cachedWorkPhotoSubmissions = null; // Invalidate cache
       debugPrint('Deleted work photo submission #$id.');
     } catch (e) {
