@@ -2235,8 +2235,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     );
     if (confirm == true) {
       _db.deleteAttendanceRecord(inRec.id);
+      SupabaseService().deleteAttendanceRecordFromSupabase(inRec.id);
       if (outRec != null) {
         _db.deleteAttendanceRecord(outRec.id);
+        SupabaseService().deleteAttendanceRecordFromSupabase(outRec.id);
       }
       setState(() {});
       if (mounted) {
@@ -3041,6 +3043,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     } else if (!isCompletedSession && outRec != null) {
                       // Converted from completed to active callout: remove outRec
                       _db.deleteAttendanceRecord(outRec.id);
+                      SupabaseService().deleteAttendanceRecordFromSupabase(outRec.id);
                     }
 
                     // Push to Supabase Cloud asynchronously

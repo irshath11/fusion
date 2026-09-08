@@ -1743,6 +1743,18 @@ class SupabaseService {
     }
   }
 
+  /// Delete an attendance record from Supabase cloud database
+  Future<bool> deleteAttendanceRecordFromSupabase(String recordId) async {
+    if (!_isInitialized || client == null || recordId.isEmpty) return false;
+    try {
+      await client!.from('attendance_records').delete().eq('id', recordId);
+      return true;
+    } catch (e) {
+      debugPrint('Supabase delete attendance record note: $e');
+      return false;
+    }
+  }
+
   /// Fetch the next sequential Service Report reference number from Supabase.
   /// Starts at 2001 if no reports exist.
   Future<int> fetchNextServiceReportRefNumber() async {

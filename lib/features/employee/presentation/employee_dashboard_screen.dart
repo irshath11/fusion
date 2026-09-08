@@ -1734,7 +1734,11 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
         .where((r) =>
             (r.employeeId == empId ||
                 r.employeeId == user?.id ||
-                r.employeeId == user?.firebaseUid) &&
+                r.employeeId == user?.firebaseUid ||
+                (user?.fullName != null &&
+                    user!.fullName.trim().isNotEmpty &&
+                    r.employeeName.trim().toLowerCase() ==
+                        user.fullName.trim().toLowerCase())) &&
             (r.workflowStep == WorkflowStep.emergencyCheckIn ||
                 r.workflowStep == WorkflowStep.emergencyCheckOut))
         .toList()

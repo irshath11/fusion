@@ -211,5 +211,137 @@ void main() {
       expect(timesheets.first.isEdited, true);
       expect(timesheets.first.totalHours, 3.5);
     });
+
+    test('Admin to Employee Datewise Parity: Employee timesheet reflects admin manual OT and remarks', () {
+      final workDate = DateTime(2026, 8, 16, 8, 0);
+
+      // Records created by employee
+      final inRecord = AttendanceRecord(
+        id: 'rec-10',
+        employeeId: 'EMP-001',
+        employeeName: 'Sarah Connor',
+        workflowStep: WorkflowStep.officeCheckIn,
+        eventTimestamp: workDate,
+        latitude: 25.2048,
+        longitude: 55.2708,
+        gpsAccuracy: 5.0,
+        address: 'HQ Office',
+        deviceId: 'MOBILE-APP',
+        photoBase64: '',
+        isGeofenceValid: true,
+      );
+
+      final outRecord = AttendanceRecord(
+        id: 'rec-11',
+        employeeId: 'EMP-001',
+        employeeName: 'Sarah Connor',
+        workflowStep: WorkflowStep.officeCheckOut,
+        eventTimestamp: workDate.add(const Duration(hours: 9)), // 5:00 PM
+        latitude: 25.2048,
+        longitude: 55.2708,
+        gpsAccuracy: 5.0,
+        address: 'HQ Office',
+        deviceId: 'MOBILE-APP',
+        photoBase64: '',
+        isGeofenceValid: true,
+      );
+
+      // 1. Employee initial calculation
+      final employeeInitial = TimesheetCalculator.calculateDailyTimesheets(
+        [inRecord, outRecord],
+        targetEmployeeId: 'EMP-001',
+      );
+      expect(employeeInitial.first.regularHours, 8.0);
+      expect(employeeInitial.first.overtimeHours, 0.0);
+      expect(employeeInitial.first.isEdited, false);
+
+      // 2. Admin modifies attendance in Admin Dashboard (adds 3.0h manual OT & remarks)
+      final adminModifiedOut = outRecord.copyWith(
+        manualOvertimeHours: 3.0,
+        overrideManualOvertimeHours: true,
+        remarks: 'Approved 3.0 hours urgent maintenance overtime by Admin',
+        isEdited: true,
+        editedBy: 'Admin',
+      );
+
+      // Admin side calculation (in Admin Reports Level 3 view)
+      final adminViewTimesheets = TimesheetCalculator.calculateDailyTimesheets([inRecord, adminModifiedOut]);
+      expect(adminViewTimesheets.first.regularHours, 8.0);
+      expect(adminViewTimesheets.first.overtimeHours, 3.0);
+      expect(adminViewTimesheets.first.totalHours, 11.0);
+      expect(adminViewTimesheets.first.isEdited, true);
+      expect(adminViewTimesheets.first.remarks, 'Approved 3.0 hours urgent maintenance overtime by Admin');
+
+      // 3. Employee side calculation (in EmployeeTimesheetScreen)
+      final employeeViewTimesheets = TimesheetCalculator.calculateDailyTimesheets(
+        [inRecord, adminModifiedOut],
+        targetEmployeeId: 'EMP-001',
+        targetEmployeeName: 'Sarah Connor',
+      );
+
+      // Verify 100% exact parity between Admin Report and Employee Timesheet
+      expect(employeeViewTimesheets.first.regularHours, adminViewTimesheets.first.regularHours);
+      expect(employeeViewTimesheets.first.overtimeHours, adminViewTimesheets.first.overtimeHours);
+      expect(employeeViewTimesheets.first.totalHours, adminViewTimesheets.first.totalHours);
+      expect(employeeViewTimesheets.first.isEdited, adminViewTimesheets.first.isEdited);
+      expect(employeeViewTimesheets.first.remarks, adminViewTimesheets.first.remarks);
+      expect(employeeViewTimesheets.first.editedBy, 'Admin');
+    });
+
+    test('Admin to Employee Datewise Parity: Identity matching by ID, Firebase UID, or Full Name', () {
+      final baseDate = DateTime(2026, 8, 17, 19, 0); // 7:00 PM
+
+      // Admin creates emergency log with employee DB ID
+      final emgIn = AttendanceRecord(
+        id: 'emg-admin-1',
+        employeeId: 'EMP-005', // Database employee entity ID
+        employeeName: 'John Matrix',
+        workflowStep: WorkflowStep.emergencyCheckIn,
+        eventTimestamp: baseDate,
+        siteName: 'Substation Alpha',
+        latitude: 25.2048,
+        longitude: 55.2708,
+        gpsAccuracy: 5.0,
+        address: 'Substation Alpha',
+        deviceId: 'ADMIN_MANUAL_LOG',
+        photoBase64: '',
+        isGeofenceValid: true,
+        isEdited: true,
+        editedBy: 'Admin',
+      );
+
+      final emgOut = AttendanceRecord(
+        id: 'emg-admin-2',
+        employeeId: 'EMP-005',
+        employeeName: 'John Matrix',
+        workflowStep: WorkflowStep.emergencyCheckOut,
+        eventTimestamp: baseDate.add(const Duration(hours: 4)), // 11:00 PM (4 hours)
+        siteName: 'Substation Alpha',
+        latitude: 25.2048,
+        longitude: 55.2708,
+        gpsAccuracy: 5.0,
+        address: 'Substation Alpha',
+        deviceId: 'ADMIN_MANUAL_LOG',
+        photoBase64: '',
+        isGeofenceValid: true,
+        isEdited: true,
+        editedBy: 'Admin',
+      );
+
+      // Employee logs in with auth UID 'firebase-uid-999' but same full name 'John Matrix'
+      final employeeTimesheets = TimesheetCalculator.calculateDailyTimesheets(
+        [emgIn, emgOut],
+        targetEmployeeId: 'firebase-uid-999',
+        targetFirebaseUid: 'firebase-uid-999',
+        targetEmployeeName: 'John Matrix',
+      );
+
+      expect(employeeTimesheets.length, 1);
+      expect(employeeTimesheets.first.emergencyDutyHours, 4.0);
+      expect(employeeTimesheets.first.overtimeHours, 4.0);
+      expect(employeeTimesheets.first.totalHours, 4.0);
+      expect(employeeTimesheets.first.isEdited, true);
+    });
   });
 }
+
