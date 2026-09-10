@@ -357,7 +357,11 @@
               <div class="table-title-group">
                 <h3 class="table-title">Attendance Log & Timesheet Export</h3>
               </div>
-              <div class="table-actions">
+              <div class="table-actions" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <label for="reports-cycle-select" style="font-size: 12px; font-weight: 500; color: var(--text-secondary);">Salary Cycle (25th-24th):</label>
+                <select id="reports-cycle-select" class="form-control" style="width: auto; padding: 6px 12px; font-size: 13px;">
+                  <!-- Dynamically populated with 25th-24th salary cycles -->
+                </select>
                 <button id="btn-export-csv" class="btn btn-secondary">
                   📄 Export CSV
                 </button>

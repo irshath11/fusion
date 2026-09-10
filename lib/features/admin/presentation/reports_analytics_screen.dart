@@ -11,6 +11,7 @@ import '../../../core/constants/app_enums.dart';
 import '../../../core/services/pdf_export_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/utils/timesheet_calculator.dart';
+import '../../../core/utils/salary_cycle_helper.dart';
 import '../../../core/widgets/app_animated_tab_switcher.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../attendance/domain/attendance_record.dart';
@@ -37,10 +38,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       0; // 0 = With Records, 1 = No Records
   int _empDetailSubTab =
       0; // 0 = Attendance & Timesheet Logs, 1 = Emergency Duty Details
-  String _siteDateFilter = 'all'; // 'all', 'month', 'week', 'today'
+  String _siteDateFilter = 'cycle'; // 'cycle', 'today', 'week', 'month', 'all'
   bool _siteGroupByClient =
       false; // true = Group by Client, false = Specific Site
   final Set<String> _expandedSiteKeys = {};
+
+  SalaryCycle? _selectedSalaryCycle = SalaryCycle.current();
+  SalaryCycle? _cumulativeSalaryCycle = SalaryCycle.current();
+  late final List<SalaryCycle> _availableSalaryCycles =
+      SalaryCycle.getRecentCycles(count: 12);
 
   @override
   void initState() {
@@ -1260,10 +1266,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   Widget _buildLevel2DateListView() {
     final emp = _resolveEmployee(_selectedEmployeeId);
 
-    final empRecords = _db
+    final allEmpRecords = _db
         .getAttendanceRecords()
         .where((r) => _recordMatchesEmployee(r, emp))
         .toList();
+
+    // Filter to selected Salary Cycle (25th to 24th)
+    final empRecords = _selectedSalaryCycle != null
+        ? _selectedSalaryCycle!.filterRecords(allEmpRecords)
+        : allEmpRecords;
 
     // Group records by date (yyyy-MM-dd)
     final Map<String, List<AttendanceRecord>> groupedByDate = {};
@@ -1386,6 +1397,127 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
           // Misattributed logs detection banner
           _buildMisattributedLogsBanner(emp, empRecords),
+
+          // Salary Cycle Filter Selector for Employee Timesheet (25th - 24th)
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: isDark ? palette.surfaceDark : Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isDark
+                    ? palette.cardBorderDark
+                    : activePrimary.withValues(alpha: 0.25),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: activePrimary.withValues(alpha: isDark ? 0.08 : 0.04),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: activePrimary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.date_range_rounded,
+                      color: activePrimary, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Salary Cycle Filter',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: isDark
+                                  ? palette.textSecondaryDark
+                                  : palette.textSecondaryLight,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: palette.success.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '25th - 24th Cutoff',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: palette.success,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedSalaryCycle?.id ?? 'all',
+                          isDense: true,
+                          isExpanded: true,
+                          icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                              size: 20),
+                          items: [
+                            ..._availableSalaryCycles.map((c) {
+                              final isCur =
+                                  c.id == SalaryCycle.current().id;
+                              return DropdownMenuItem<String>(
+                                value: c.id,
+                                child: Text(
+                                  '${c.salaryMonthName} (${c.shortPeriodLabel})${isCur ? " • Current Cycle" : ""}',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: isCur
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                              );
+                            }),
+                            const DropdownMenuItem<String>(
+                              value: 'all',
+                              child: Text(
+                                'All Recorded Logs (Full History)',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                            ),
+                          ],
+                          onChanged: (val) {
+                            setState(() {
+                              if (val == null || val == 'all') {
+                                _selectedSalaryCycle = null;
+                              } else {
+                                _selectedSalaryCycle =
+                                    _availableSalaryCycles.firstWhere(
+                                  (c) => c.id == val,
+                                  orElse: () => SalaryCycle.current(),
+                                );
+                              }
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
 
           // Executive Timesheet Summary Cards
           Row(
@@ -4653,6 +4785,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         organizationName: _db.organization?.name ?? 'Fusion Enterprise',
         employee: emp,
         records: records,
+        salaryCyclePeriod: _selectedSalaryCycle?.shortPeriodLabel,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -4678,10 +4811,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   Future<void> _exportCumulativePdf(
       List<EmployeeEntity> employees, List<AttendanceRecord> records) async {
     try {
+      final recordsToExport = _cumulativeSalaryCycle != null
+          ? _cumulativeSalaryCycle!.filterRecords(records)
+          : records;
+
       await PdfExportService.downloadCumulativePdfFile(
         organizationName: _db.organization?.name ?? 'Fusion Enterprise',
         employees: employees,
-        records: records,
+        records: recordsToExport,
+        salaryCyclePeriod: _cumulativeSalaryCycle?.shortPeriodLabel,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -4713,8 +4851,12 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     double grandReg = 0.0;
     double grandOt = 0.0;
 
+    final recordsToUse = _cumulativeSalaryCycle != null
+        ? _cumulativeSalaryCycle!.filterRecords(allRecords)
+        : allRecords;
+
     for (final emp in employees) {
-      final empRecords = allRecords
+      final empRecords = recordsToUse
           .where((r) => _recordMatchesEmployee(r, emp))
           .toList();
 
@@ -4756,6 +4898,127 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Cumulative Salary Cycle Filter (25th - 24th Cutoff)
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: isDark ? palette.surfaceDark : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark
+                  ? palette.cardBorderDark
+                  : activePrimary.withValues(alpha: 0.25),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: activePrimary.withValues(alpha: isDark ? 0.08 : 0.04),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: activePrimary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.date_range_rounded,
+                    color: activePrimary, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Workforce Salary Cycle Filter',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: isDark
+                                ? palette.textSecondaryDark
+                                : palette.textSecondaryLight,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: palette.success.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '25th - 24th Cutoff',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: palette.success,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _cumulativeSalaryCycle?.id ?? 'all',
+                        isDense: true,
+                        isExpanded: true,
+                        icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                            size: 20),
+                        items: [
+                          ..._availableSalaryCycles.map((c) {
+                            final isCur =
+                                c.id == SalaryCycle.current().id;
+                            return DropdownMenuItem<String>(
+                              value: c.id,
+                              child: Text(
+                                '${c.salaryMonthName} (${c.shortPeriodLabel})${isCur ? " • Current Cycle" : ""}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isCur
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            );
+                          }),
+                          const DropdownMenuItem<String>(
+                            value: 'all',
+                            child: Text(
+                              'All Recorded History',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          setState(() {
+                            if (val == null || val == 'all') {
+                              _cumulativeSalaryCycle = null;
+                            } else {
+                              _cumulativeSalaryCycle =
+                                  _availableSalaryCycles.firstWhere(
+                                (c) => c.id == val,
+                                orElse: () => SalaryCycle.current(),
+                              );
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
         // Executive Grand Total Summary Cards
         Container(
           padding: const EdgeInsets.all(14),
@@ -5316,15 +5579,20 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     DateTime? endDate;
     final now = DateTime.now();
 
-    if (_siteDateFilter == 'today') {
+    if (_siteDateFilter == 'cycle') {
+      final currentCycle = SalaryCycle.current();
+      startDate = currentCycle.startDate;
+      endDate = currentCycle.endDate;
+    } else if (_siteDateFilter == 'today') {
       startDate = DateTime(now.year, now.month, now.day);
       endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
     } else if (_siteDateFilter == 'week') {
       startDate = now.subtract(const Duration(days: 7));
       endDate = now;
     } else if (_siteDateFilter == 'month') {
-      startDate = DateTime(now.year, now.month, 1);
-      endDate = now;
+      final currentCycle = SalaryCycle.current();
+      startDate = currentCycle.startDate;
+      endDate = currentCycle.endDate;
     }
 
     final siteSummaries = TimesheetCalculator.calculateSiteManHours(
@@ -5518,13 +5786,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: [
-                          _buildDateFilterChip('All Time', 'all', isDark),
-                          const SizedBox(width: 6),
-                          _buildDateFilterChip('This Month', 'month', isDark),
+                          _buildDateFilterChip('Salary Cycle (25-24)', 'cycle', isDark),
                           const SizedBox(width: 6),
                           _buildDateFilterChip('This Week', 'week', isDark),
                           const SizedBox(width: 6),
                           _buildDateFilterChip('Today', 'today', isDark),
+                          const SizedBox(width: 6),
+                          _buildDateFilterChip('All Time', 'all', isDark),
                         ],
                       ),
                     ),

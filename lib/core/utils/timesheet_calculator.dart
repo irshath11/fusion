@@ -3,6 +3,7 @@ import '../../features/admin/domain/employee_entity.dart';
 import '../../features/attendance/domain/attendance_record.dart';
 import '../../features/timesheet/domain/timesheet_entry.dart';
 import '../constants/app_enums.dart';
+import 'salary_cycle_helper.dart';
 
 class TimesheetCalculator {
   /// Standard max regular work hours per day before overtime applies
@@ -85,14 +86,37 @@ class TimesheetCalculator {
     return 'N/A';
   }
 
+  /// Calculates aggregated salary cycle metrics for an employee or the whole workforce
+  static SalaryCycleMetrics calculateSalaryCycleSummary(
+    List<AttendanceRecord> records,
+    SalaryCycle cycle, {
+    String? targetEmployeeId,
+    String? targetFirebaseUid,
+    String? targetEmployeeName,
+  }) {
+    final dailyEntries = calculateDailyTimesheets(
+      records,
+      targetEmployeeId: targetEmployeeId,
+      targetFirebaseUid: targetFirebaseUid,
+      targetEmployeeName: targetEmployeeName,
+      startDate: cycle.startDate,
+      endDate: cycle.endDate,
+    );
+    return SalaryCycleMetrics.fromEntries(cycle, dailyEntries);
+  }
+
   /// Calculates daily timesheet entries from raw attendance records for an employee or all employees
   static List<DailyTimesheetEntry> calculateDailyTimesheets(
     List<AttendanceRecord> records, {
     String? targetEmployeeId,
     String? targetFirebaseUid,
     String? targetEmployeeName,
+    DateTime? startDate,
+    DateTime? endDate,
   }) {
     final filteredRecords = records.where((r) {
+      if (startDate != null && r.eventTimestamp.isBefore(startDate)) return false;
+      if (endDate != null && r.eventTimestamp.isAfter(endDate)) return false;
       if (targetEmployeeId == null || targetEmployeeId.isEmpty) return true;
       final idMatch = r.employeeId == targetEmployeeId ||
           (targetFirebaseUid != null &&
