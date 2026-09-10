@@ -3,6 +3,7 @@ import '../../features/admin/domain/employee_entity.dart';
 import '../../features/attendance/domain/attendance_record.dart';
 import '../../features/timesheet/domain/timesheet_entry.dart';
 import '../constants/app_enums.dart';
+import 'salary_cycle_helper.dart';
 
 class TimesheetCalculator {
   /// Standard max regular work hours per day before overtime applies
@@ -85,14 +86,37 @@ class TimesheetCalculator {
     return 'N/A';
   }
 
+  /// Calculates aggregated salary cycle metrics for an employee or the whole workforce
+  static SalaryCycleMetrics calculateSalaryCycleSummary(
+    List<AttendanceRecord> records,
+    SalaryCycle cycle, {
+    String? targetEmployeeId,
+    String? targetFirebaseUid,
+    String? targetEmployeeName,
+  }) {
+    final dailyEntries = calculateDailyTimesheets(
+      records,
+      targetEmployeeId: targetEmployeeId,
+      targetFirebaseUid: targetFirebaseUid,
+      targetEmployeeName: targetEmployeeName,
+      startDate: cycle.startDate,
+      endDate: cycle.endDate,
+    );
+    return SalaryCycleMetrics.fromEntries(cycle, dailyEntries);
+  }
+
   /// Calculates daily timesheet entries from raw attendance records for an employee or all employees
   static List<DailyTimesheetEntry> calculateDailyTimesheets(
     List<AttendanceRecord> records, {
     String? targetEmployeeId,
     String? targetFirebaseUid,
     String? targetEmployeeName,
+    DateTime? startDate,
+    DateTime? endDate,
   }) {
     final filteredRecords = records.where((r) {
+      if (startDate != null && r.eventTimestamp.isBefore(startDate)) return false;
+      if (endDate != null && r.eventTimestamp.isAfter(endDate)) return false;
       if (targetEmployeeId == null || targetEmployeeId.isEmpty) return true;
       final idMatch = r.employeeId == targetEmployeeId ||
           (targetFirebaseUid != null &&
@@ -105,14 +129,23 @@ class TimesheetCalculator {
       return idMatch || nameMatch;
     }).toList();
 
-    // Map key: "yyyy-MM-dd"
+    final bool isSingleEmployee = (targetEmployeeId != null && targetEmployeeId.isNotEmpty) ||
+        (targetEmployeeName != null && targetEmployeeName.isNotEmpty);
+
+    // Map key: "yyyy-MM-dd" for single employee, or "empKey__yyyy-MM-dd" for workforce
     final Map<String, List<AttendanceRecord>> groupedMap = {};
 
     for (final record in filteredRecords) {
       final localEv = record.eventTimestamp.toLocal();
       final dateStr =
           "${localEv.year}-${localEv.month.toString().padLeft(2, '0')}-${localEv.day.toString().padLeft(2, '0')}";
-      groupedMap.putIfAbsent(dateStr, () => []).add(record);
+      final empKey = record.employeeId.isNotEmpty
+          ? record.employeeId
+          : (record.employeeName.trim().isNotEmpty
+              ? record.employeeName.trim().toLowerCase()
+              : 'unknown');
+      final groupKey = isSingleEmployee ? dateStr : "${empKey}__$dateStr";
+      groupedMap.putIfAbsent(groupKey, () => []).add(record);
     }
 
     final List<DailyTimesheetEntry> entries = [];
@@ -409,6 +442,19 @@ class TimesheetCalculator {
         // Recalculate net worked duration so total hours equals regularHours + overtimeHours
         final double effectiveTotalHours = regularHours + overtimeHours;
         netWorkedDuration = Duration(minutes: (effectiveTotalHours * 60).round());
+      }
+
+      // If Sunday, convert all worked time to Overtime (0.0 regular hours)
+      if (date.weekday == DateTime.sunday) {
+        if (dayManualOt != null) {
+          overtimeHours = dayManualOt;
+          regularHours = 0.0;
+          netWorkedDuration = Duration(minutes: (overtimeHours * 60).round());
+        } else {
+          final double workedHrs = netWorkedDuration.inMinutes / 60.0;
+          overtimeHours = workedHrs;
+          regularHours = 0.0;
+        }
       }
 
       entries.add(

@@ -5,6 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_theme.dart';
 import '../../../core/services/pdf_export_service.dart';
 import '../../../core/utils/timesheet_calculator.dart';
+import '../../../core/utils/salary_cycle_helper.dart';
 import '../../../database/local_database_service.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../admin/presentation/admin_edit_attendance_dialog.dart';
@@ -28,6 +29,8 @@ class EmployeeTimesheetScreen extends StatefulWidget {
 
 class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
   String _activeFilter = 'all'; // 'all', 'regular', 'overtime'
+  SalaryCycle? _selectedSalaryCycle = SalaryCycle.current();
+  late final List<SalaryCycle> _availableCycles = SalaryCycle.getRecentCycles();
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +87,20 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                   final palette = AppTheme.currentColors;
                   final activePrimary = palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
 
-                  final filteredEntries = state.entries.where((e) {
+                  final cycleEntries = _selectedSalaryCycle != null
+                      ? _selectedSalaryCycle!.filterTimesheets(state.entries)
+                      : state.entries;
+
+                  double cycleRegHours = 0.0;
+                  double cycleOtHours = 0.0;
+                  for (final e in cycleEntries) {
+                    cycleRegHours += e.regularHours;
+                    cycleOtHours += e.overtimeHours;
+                  }
+                  final double cycleCombinedHours = cycleRegHours + cycleOtHours;
+                  final int cycleDaysWorked = cycleEntries.length;
+
+                  final filteredEntries = cycleEntries.where((e) {
                     if (_activeFilter == 'overtime') return e.overtimeHours > 0;
                     if (_activeFilter == 'regular') return e.regularHours > 0;
                     return true;
@@ -102,6 +118,135 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Salary Cycle Selector Card (25th - 24th Cutoff)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 14),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: isDark ? palette.surfaceDark : Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: isDark
+                                      ? palette.cardBorderDark
+                                      : activePrimary.withValues(alpha: 0.25),
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: activePrimary.withValues(
+                                        alpha: isDark ? 0.08 : 0.04),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: activePrimary.withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(Icons.date_range_rounded,
+                                        color: activePrimary, size: 20),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Text(
+                                              'Salary Cycle',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color: isDark
+                                                    ? palette.textSecondaryDark
+                                                    : palette.textSecondaryLight,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 5, vertical: 1),
+                                              decoration: BoxDecoration(
+                                                color: palette.success
+                                                    .withValues(alpha: 0.15),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                '25th - 24th Cutoff',
+                                                style: TextStyle(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: palette.success,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        DropdownButtonHideUnderline(
+                                          child: DropdownButton<String>(
+                                            value: _selectedSalaryCycle?.id ?? 'all',
+                                            isDense: true,
+                                            isExpanded: true,
+                                            icon: const Icon(
+                                                Icons.keyboard_arrow_down_rounded,
+                                                size: 20),
+                                            items: [
+                                              ..._availableCycles.map((c) {
+                                                final isCur = c.id ==
+                                                    SalaryCycle.current().id;
+                                                return DropdownMenuItem<String>(
+                                                  value: c.id,
+                                                  child: Text(
+                                                    '${c.salaryMonthName} (${c.shortPeriodLabel})${isCur ? " • Current" : ""}',
+                                                    style: TextStyle(
+                                                      fontSize: 13,
+                                                      fontWeight: isCur
+                                                          ? FontWeight.bold
+                                                          : FontWeight.normal,
+                                                    ),
+                                                  ),
+                                                );
+                                              }),
+                                              const DropdownMenuItem<String>(
+                                                value: 'all',
+                                                child: Text(
+                                                  'All Recorded Cycles (Full History)',
+                                                  style: TextStyle(fontSize: 13),
+                                                ),
+                                              ),
+                                            ],
+                                            onChanged: (val) {
+                                              setState(() {
+                                                if (val == null || val == 'all') {
+                                                  _selectedSalaryCycle = null;
+                                                } else {
+                                                  _selectedSalaryCycle =
+                                                      _availableCycles.firstWhere(
+                                                    (c) => c.id == val,
+                                                    orElse: () =>
+                                                        SalaryCycle.current(),
+                                                  );
+                                                }
+                                              });
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
                             // Interactive Executive Timesheet KPI Cards
                             Row(
                               children: [
@@ -109,7 +254,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                   child: _buildSummaryCard(
                                     title: 'Regular Hrs',
                                     value:
-                                        '${state.totalRegularHours.toStringAsFixed(1)} hrs',
+                                        '${cycleRegHours.toStringAsFixed(1)} hrs',
                                     subtitle: 'Max 8h/day (Tap)',
                                     icon: Icons.access_time_rounded,
                                     color: AppColors.activePrimary,
@@ -129,7 +274,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                   child: _buildSummaryCard(
                                     title: 'Overtime (OT)',
                                     value:
-                                        '${state.totalOvertimeHours.toStringAsFixed(1)} hrs',
+                                        '${cycleOtHours.toStringAsFixed(1)} hrs',
                                     subtitle: 'Beyond 10.0h (Tap)',
                                     icon: Icons.more_time_rounded,
                                     color: Colors.orange.shade800,
@@ -153,7 +298,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                   child: _buildSummaryCard(
                                     title: 'Total Hours',
                                     value:
-                                        '${state.totalCombinedHours.toStringAsFixed(1)} hrs',
+                                        '${cycleCombinedHours.toStringAsFixed(1)} hrs',
                                     subtitle: 'Reg + OT Combined',
                                     icon: Icons.timer_rounded,
                                     color: palette.success,
@@ -169,7 +314,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                 Expanded(
                                   child: _buildSummaryCard(
                                     title: 'Days Worked',
-                                    value: '${state.totalDaysWorked} Days',
+                                    value: '$cycleDaysWorked Days',
                                     subtitle: 'Logged Shifts',
                                     icon: Icons.calendar_month_rounded,
                                     color: AppColors.activeSecondary,
@@ -191,7 +336,10 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                               final targetId = widget.employeeId ?? LocalDatabaseService().currentUser?.id;
                               if (targetId == null) return const SizedBox.shrink();
 
-                              final siteBreakdown = TimesheetCalculator.calculateEmployeeSiteHours(targetId, allRecords);
+                              final cycleRecords = _selectedSalaryCycle != null
+                                  ? _selectedSalaryCycle!.filterRecords(allRecords)
+                                  : allRecords;
+                              final siteBreakdown = TimesheetCalculator.calculateEmployeeSiteHours(targetId, cycleRecords);
                               if (siteBreakdown.isEmpty) return const SizedBox.shrink();
 
                               final totalSiteHrs = siteBreakdown.values.fold(0.0, (a, b) => a + b);
@@ -405,8 +553,13 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
         );
 
     final records = db.getAttendanceRecords().where((r) {
-      return r.employeeId == emp.id ||
+      final isEmp = r.employeeId == emp.id ||
           r.employeeName.toLowerCase() == emp.name.toLowerCase();
+      if (!isEmp) return false;
+      if (_selectedSalaryCycle != null) {
+        return _selectedSalaryCycle!.contains(r.eventTimestamp);
+      }
+      return true;
     }).toList();
 
     try {
@@ -414,6 +567,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
         organizationName: db.organization?.name ?? 'Fusion Enterprise',
         employee: emp,
         records: records,
+        salaryCyclePeriod: _selectedSalaryCycle?.shortPeriodLabel,
       );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

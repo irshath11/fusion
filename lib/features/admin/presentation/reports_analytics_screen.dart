@@ -11,6 +11,7 @@ import '../../../core/constants/app_enums.dart';
 import '../../../core/services/pdf_export_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/utils/timesheet_calculator.dart';
+import '../../../core/utils/salary_cycle_helper.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'admin_cubit.dart';
 import '../../../core/widgets/app_animated_tab_switcher.dart';
@@ -55,12 +56,19 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   bool _isSyncing = false;
   int _activeTab =
       0; // 0 = Directory, 1 = Cumulative Summary, 2 = Site / Client Man-Hours
+  int _employeeRecordFilterTab =
+      0; // 0 = With Records, 1 = No Records
   int _empDetailSubTab =
       0; // 0 = Attendance & Timesheet Logs, 1 = Emergency Duty Details
-  String _siteDateFilter = 'all'; // 'all', 'month', 'week', 'today'
+  String _siteDateFilter = 'cycle'; // 'cycle', 'today', 'week', 'month', 'all'
   bool _siteGroupByClient =
       false; // true = Group by Client, false = Specific Site
   final Set<String> _expandedSiteKeys = {};
+
+  SalaryCycle? _selectedSalaryCycle = SalaryCycle.current();
+  SalaryCycle? _cumulativeSalaryCycle = SalaryCycle.current();
+  late final List<SalaryCycle> _availableSalaryCycles =
+      SalaryCycle.getRecentCycles();
 
   @override
   void initState() {
@@ -421,6 +429,26 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           e.department.toLowerCase().contains(q);
     }).toList();
 
+    final employeesWithRecords = <MapEntry<EmployeeEntity, int>>[];
+    final employeesWithoutRecords = <EmployeeEntity>[];
+
+    for (final emp in filteredEmployees) {
+      final empRecords = allRecords
+          .where((r) => _recordMatchesEmployee(r, emp))
+          .toList();
+      final datesCount = empRecords
+          .map((r) =>
+              DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()))
+          .toSet()
+          .length;
+
+      if (datesCount > 0) {
+        employeesWithRecords.add(MapEntry(emp, datesCount));
+      } else {
+        employeesWithoutRecords.add(emp);
+      }
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -561,106 +589,429 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           const SizedBox(height: 16),
 
           if (_activeTab == 0) ...[
-            if (filteredEmployees.isEmpty)
-              const Card(
-                child: Padding(
-                  padding: EdgeInsets.all(30.0),
-                  child: Center(
-                    child: Text('No employees found.'),
-                  ),
+            // 2 Segregation Tabs: With Records vs No Records
+            AppAnimatedTabSwitcher(
+              selectedIndex: _employeeRecordFilterTab,
+              tabs: [
+                TabItemData(
+                  label: 'With Records (${employeesWithRecords.length})',
+                  icon: Icons.assignment_turned_in_rounded,
                 ),
-              )
-            else
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: filteredEmployees.length,
-                itemBuilder: (context, index) {
-                  final isDark =
-                      Theme.of(context).brightness == Brightness.dark;
-                  final palette = AppTheme.currentColors;
-                  final activePrimary = palette
-                      .primaryFor(isDark ? Brightness.dark : Brightness.light);
-                  final emp = filteredEmployees[index];
-                  final empRecords = allRecords
-                      .where((r) => _recordMatchesEmployee(r, emp))
-                      .toList();
+                TabItemData(
+                  label: 'No Records (${employeesWithoutRecords.length})',
+                  icon: Icons.history_toggle_off_rounded,
+                ),
+              ],
+              onTabChanged: (index) =>
+                  setState(() => _employeeRecordFilterTab = index),
+            ),
+            const SizedBox(height: 16),
 
-                  // Distinct dates count
-                  final datesCount = empRecords
-                      .map((r) =>
-                          DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()))
-                      .toSet()
-                      .length;
+            if (_employeeRecordFilterTab == 0) ...[
+              if (employeesWithRecords.isEmpty)
+                Builder(
+                  builder: (context) {
+                    final isDark =
+                        Theme.of(context).brightness == Brightness.dark;
+                    final palette = AppTheme.currentColors;
 
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                    elevation: 1.5,
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      leading: CircleAvatar(
-                        radius: 24,
-                        backgroundColor: activePrimary,
-                        child: Text(
-                          emp.name.isNotEmpty
-                              ? emp.name.substring(0, 1).toUpperCase()
-                              : 'E',
-                          style: const TextStyle(
-                              color: Colors.white, fontWeight: FontWeight.bold),
+                    return Card(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(
+                          color: isDark
+                              ? palette.cardBorderDark
+                              : Colors.grey.shade300,
                         ),
                       ),
-                      title: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              emp.name,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 16),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: activePrimary.withValues(
-                                  alpha: isDark ? 0.2 : 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              emp.employeeCode,
-                              style: TextStyle(
-                                  fontSize: 10,
+                      elevation: 0,
+                      color: isDark ? palette.surfaceDark : Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 36),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.assignment_late_outlined,
+                                size: 48,
+                                color: isDark
+                                    ? palette.textSecondaryDark
+                                    : Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'No Employees with Attendance Records',
+                                style: TextStyle(
+                                  fontSize: 15,
                                   fontWeight: FontWeight.bold,
-                                  color: activePrimary),
-                            ),
+                                  color: isDark
+                                      ? palette.textPrimaryDark
+                                      : palette.textPrimaryLight,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _searchQuery.isNotEmpty
+                                    ? 'No matching active employee records found for "$_searchQuery".'
+                                    : 'There are currently no attendance entries recorded for any employee.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? palette.textSecondaryDark
+                                      : Colors.grey.shade600,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      subtitle: Padding(
-                        padding: const EdgeInsets.only(top: 4.0),
-                        child: Text(
-                          'Department: ${emp.department.isNotEmpty ? emp.department : 'General'}\n'
-                          '${datesCount > 0 ? "$datesCount Attendance Date(s) Logged" : "No records recorded yet"}',
-                          style: const TextStyle(fontSize: 12),
                         ),
                       ),
-                      trailing: const Icon(Icons.arrow_forward_ios_rounded,
-                          size: 16, color: AppColors.textSecondaryLight),
-                      onTap: () {
-                        setState(() {
-                          _selectedEmployeeId = emp.id;
-                          _selectedDate = null;
-                        });
-                      },
-                    ),
-                  );
-                },
-              ),
+                    );
+                  },
+                )
+              else
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: employeesWithRecords.length,
+                  itemBuilder: (context, index) {
+                    final isDark =
+                        Theme.of(context).brightness == Brightness.dark;
+                    final palette = AppTheme.currentColors;
+                    final activePrimary = palette
+                        .primaryFor(isDark ? Brightness.dark : Brightness.light);
+                    final entry = employeesWithRecords[index];
+                    final emp = entry.key;
+                    final datesCount = entry.value;
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(
+                          color: isDark
+                              ? palette.cardBorderDark
+                              : Colors.grey.shade200,
+                          width: 1,
+                        ),
+                      ),
+                      elevation: 1,
+                      color: isDark ? palette.surfaceDark : Colors.white,
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        leading: CircleAvatar(
+                          radius: 24,
+                          backgroundColor: activePrimary,
+                          child: Text(
+                            emp.name.isNotEmpty
+                                ? emp.name.substring(0, 1).toUpperCase()
+                                : 'E',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                emp.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 16),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: activePrimary.withValues(
+                                    alpha: isDark ? 0.2 : 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                emp.employeeCode,
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: activePrimary),
+                              ),
+                            ),
+                          ],
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 6.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Department: ${emp.department.isNotEmpty ? emp.department : 'General'}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? palette.textSecondaryDark
+                                      : Colors.grey.shade600,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withValues(
+                                      alpha: isDark ? 0.22 : 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.check_circle_outline_rounded,
+                                      size: 13,
+                                      color: Colors.green,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '$datesCount Attendance Date(s) Logged',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.green,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        trailing: const Icon(Icons.arrow_forward_ios_rounded,
+                            size: 16, color: AppColors.textSecondaryLight),
+                        onTap: () {
+                          setState(() {
+                            _selectedEmployeeId = emp.id;
+                            _selectedDate = null;
+                          });
+                        },
+                      ),
+                    );
+                  },
+                ),
+            ] else ...[
+              if (employeesWithoutRecords.isEmpty)
+                Builder(
+                  builder: (context) {
+                    final isDark =
+                        Theme.of(context).brightness == Brightness.dark;
+                    final palette = AppTheme.currentColors;
+
+                    return Card(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(
+                          color: isDark
+                              ? palette.cardBorderDark
+                              : Colors.grey.shade300,
+                        ),
+                      ),
+                      elevation: 0,
+                      color: isDark ? palette.surfaceDark : Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 36),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.check_circle_outline_rounded,
+                                size: 48,
+                                color: Colors.green.shade600,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'All Employees Have Attendance Records',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark
+                                      ? palette.textPrimaryDark
+                                      : palette.textPrimaryLight,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _searchQuery.isNotEmpty
+                                    ? 'No pending employees found for "$_searchQuery".'
+                                    : 'Every registered employee currently has attendance logs recorded.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? palette.textSecondaryDark
+                                      : Colors.grey.shade600,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                )
+              else
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: employeesWithoutRecords.length,
+                  itemBuilder: (context, index) {
+                    final isDark =
+                        Theme.of(context).brightness == Brightness.dark;
+                    final palette = AppTheme.currentColors;
+                    final activePrimary = palette
+                        .primaryFor(isDark ? Brightness.dark : Brightness.light);
+                    final emp = employeesWithoutRecords[index];
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(
+                          color: isDark
+                              ? palette.cardBorderDark
+                              : Colors.grey.shade200,
+                          width: 1,
+                        ),
+                      ),
+                      elevation: 1,
+                      color: isDark ? palette.surfaceDark : Colors.white,
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        leading: CircleAvatar(
+                          radius: 24,
+                          backgroundColor: Colors.grey.shade400,
+                          child: Text(
+                            emp.name.isNotEmpty
+                                ? emp.name.substring(0, 1).toUpperCase()
+                                : 'E',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                emp.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 16),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.grey.shade800
+                                    : Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                emp.employeeCode,
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? Colors.grey.shade300
+                                        : Colors.grey.shade700),
+                              ),
+                            ),
+                          ],
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 6.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Department: ${emp.department.isNotEmpty ? emp.department : 'General'}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? palette.textSecondaryDark
+                                      : Colors.grey.shade600,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withValues(
+                                      alpha: isDark ? 0.22 : 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.history_toggle_off_rounded,
+                                      size: 13,
+                                      color: Colors.orange,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'No Attendance Recorded',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.orange,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextButton.icon(
+                              onPressed: () =>
+                                  _addNewDateEntryLogForEmployee(emp),
+                              icon: const Icon(Icons.add_rounded, size: 16),
+                              label: const Text('Add Log',
+                                  style: TextStyle(fontSize: 12)),
+                              style: TextButton.styleFrom(
+                                foregroundColor: activePrimary,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                              ),
+                            ),
+                            const Icon(Icons.arrow_forward_ios_rounded,
+                                size: 16, color: AppColors.textSecondaryLight),
+                          ],
+                        ),
+                        onTap: () {
+                          setState(() {
+                            _selectedEmployeeId = emp.id;
+                            _selectedDate = null;
+                          });
+                        },
+                      ),
+                    );
+                  },
+                ),
+            ],
           ] else if (_activeTab == 1) ...[
             _buildCumulativeSummaryView(filteredEmployees, allRecords),
           ] else ...[
@@ -674,12 +1025,54 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   // ==========================================
   // LEVEL 2: DATE LIST VIEW FOR SELECTED EMPLOYEE
   // ==========================================
+  Future<void> _addNewDateEntryLogForEmployee(EmployeeEntity emp) async {
+    final now = DateTime.now();
+    final selectedDate = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: DateTime(2020),
+      lastDate: now.add(const Duration(days: 365)),
+      helpText: 'Select Date for New Entry Log (${emp.name})',
+    );
+
+    if (selectedDate == null || !mounted) return;
+
+    final ok = await AdminEditAttendanceDialog.show(
+      context,
+      employeeId: emp.id,
+      employeeName: emp.name,
+      date: selectedDate,
+      initialCheckIn: DateTime(
+          selectedDate.year, selectedDate.month, selectedDate.day, 8, 0),
+      initialCheckOut: DateTime(
+          selectedDate.year, selectedDate.month, selectedDate.day, 17, 0),
+      initialOtHours: 0.0,
+      initialRemarks: 'New date entry log created by admin',
+    );
+
+    if (ok == true && mounted) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'New date entry log created for ${emp.name} on ${DateFormat('dd MMM yyyy').format(selectedDate)}!',
+          ),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    }
+  }
   Widget _buildLevel2DateListView() {
     final emp = _resolveEmployee(_selectedEmployeeId);
 
-    final empRecords = _db.getAttendanceRecords().where((r) {
+    final allEmpRecords = _db.getAttendanceRecords().where((r) {
       return _recordMatchesEmployee(r, emp);
     }).toList();
+
+    // Filter to selected Salary Cycle (25th to 24th)
+    final empRecords = _selectedSalaryCycle != null
+        ? _selectedSalaryCycle!.filterRecords(allEmpRecords)
+        : allEmpRecords;
 
     // Group records by date (yyyy-MM-dd)
     final Map<String, List<AttendanceRecord>> groupedByDate = {};
@@ -854,6 +1247,128 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             ),
           ),
           const SizedBox(height: 12),
+
+          // Salary Cycle Filter Selector for Employee Timesheet (25th - 24th)
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: isDark ? palette.surfaceDark : Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isDark
+                    ? palette.cardBorderDark
+                    : activePrimary.withValues(alpha: 0.25),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: activePrimary.withValues(alpha: isDark ? 0.08 : 0.04),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: activePrimary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.date_range_rounded,
+                      color: activePrimary, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Salary Cycle Filter',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: isDark
+                                  ? palette.textSecondaryDark
+                                  : palette.textSecondaryLight,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: palette.success.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '25th - 24th Cutoff',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: palette.success,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedSalaryCycle?.id ?? 'all',
+                          isDense: true,
+                          isExpanded: true,
+                          icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                              size: 20),
+                          items: [
+                            ..._availableSalaryCycles.map((c) {
+                              final isCur =
+                                  c.id == SalaryCycle.current().id;
+                              return DropdownMenuItem<String>(
+                                value: c.id,
+                                child: Text(
+                                  '${c.salaryMonthName} (${c.shortPeriodLabel})${isCur ? " • Current Cycle" : ""}',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: isCur
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                              );
+                            }),
+                            const DropdownMenuItem<String>(
+                              value: 'all',
+                              child: Text(
+                                'All Recorded History (Full)',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                            ),
+                          ],
+                          onChanged: (val) {
+                            setState(() {
+                              if (val == null || val == 'all') {
+                                _selectedSalaryCycle = null;
+                              } else {
+                                _selectedSalaryCycle =
+                                    _availableSalaryCycles.firstWhere(
+                                  (c) => c.id == val,
+                                  orElse: () => SalaryCycle.current(),
+                                );
+                              }
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           // Sub-Tab Navigation Bar: Attendance & Timesheet Logs vs Emergency Duty Details
           AppAnimatedTabSwitcher(
             selectedIndex: _empDetailSubTab,
@@ -4306,6 +4821,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         organizationName: _db.organization?.name ?? 'Fusion Enterprise',
         employee: emp,
         records: records,
+        salaryCyclePeriod: _selectedSalaryCycle?.shortPeriodLabel,
       );
       await _db.saveGeneratedReportLocally({
         'title': '${emp.name} Attendance Report',
@@ -4341,6 +4857,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         organizationName: _db.organization?.name ?? 'Fusion Enterprise',
         employees: employees,
         records: records,
+        salaryCyclePeriod: _cumulativeSalaryCycle?.shortPeriodLabel,
       );
       await _db.saveGeneratedReportLocally({
         'title': 'Cumulative Attendance Report',
@@ -4393,8 +4910,12 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     double grandReg = 0.0;
     double grandOt = 0.0;
 
+    final recordsToUse = _cumulativeSalaryCycle != null
+        ? _cumulativeSalaryCycle!.filterRecords(allRecords)
+        : allRecords;
+
     for (final emp in employees) {
-      final empRecords = allRecords
+      final empRecords = recordsToUse
           .where((r) => _recordMatchesEmployee(r, emp))
           .toList();
 
@@ -4441,6 +4962,127 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Cumulative Salary Cycle Filter (25th - 24th Cutoff)
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: isDark ? palette.surfaceDark : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark
+                  ? palette.cardBorderDark
+                  : activePrimary.withValues(alpha: 0.25),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: activePrimary.withValues(alpha: isDark ? 0.08 : 0.04),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: activePrimary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.date_range_rounded,
+                    color: activePrimary, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Workforce Salary Cycle Filter',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: isDark
+                                ? palette.textSecondaryDark
+                                : palette.textSecondaryLight,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: palette.success.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '25th - 24th Cutoff',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: palette.success,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _cumulativeSalaryCycle?.id ?? 'all',
+                        isDense: true,
+                        isExpanded: true,
+                        icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                            size: 20),
+                        items: [
+                          ..._availableSalaryCycles.map((c) {
+                            final isCur =
+                                c.id == SalaryCycle.current().id;
+                            return DropdownMenuItem<String>(
+                              value: c.id,
+                              child: Text(
+                                '${c.salaryMonthName} (${c.shortPeriodLabel})${isCur ? " • Current Cycle" : ""}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isCur
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            );
+                          }),
+                          const DropdownMenuItem<String>(
+                            value: 'all',
+                            child: Text(
+                              'All Recorded History',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          setState(() {
+                            if (val == null || val == 'all') {
+                              _cumulativeSalaryCycle = null;
+                            } else {
+                              _cumulativeSalaryCycle =
+                                  _availableSalaryCycles.firstWhere(
+                                (c) => c.id == val,
+                                orElse: () => SalaryCycle.current(),
+                              );
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
         // Executive Grand Total Summary Cards
         Container(
           padding: const EdgeInsets.all(14),
@@ -5000,15 +5642,20 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     DateTime? endDate;
     final now = DateTime.now();
 
-    if (_siteDateFilter == 'today') {
+    if (_siteDateFilter == 'cycle') {
+      final currentCycle = SalaryCycle.current();
+      startDate = currentCycle.startDate;
+      endDate = currentCycle.endDate;
+    } else if (_siteDateFilter == 'today') {
       startDate = DateTime(now.year, now.month, now.day);
       endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
     } else if (_siteDateFilter == 'week') {
       startDate = now.subtract(const Duration(days: 7));
       endDate = now;
     } else if (_siteDateFilter == 'month') {
-      startDate = DateTime(now.year, now.month, 1);
-      endDate = now;
+      final currentCycle = SalaryCycle.current();
+      startDate = currentCycle.startDate;
+      endDate = currentCycle.endDate;
     }
 
     final siteSummaries = TimesheetCalculator.calculateSiteManHours(
@@ -5204,13 +5851,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: [
-                          _buildDateFilterChip('All Time', 'all', isDark),
-                          const SizedBox(width: 6),
-                          _buildDateFilterChip('This Month', 'month', isDark),
+                          _buildDateFilterChip('Salary Cycle (25-24)', 'cycle', isDark),
                           const SizedBox(width: 6),
                           _buildDateFilterChip('This Week', 'week', isDark),
                           const SizedBox(width: 6),
                           _buildDateFilterChip('Today', 'today', isDark),
+                          const SizedBox(width: 6),
+                          _buildDateFilterChip('All Time', 'all', isDark),
                         ],
                       ),
                     ),

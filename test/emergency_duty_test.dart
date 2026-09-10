@@ -213,7 +213,7 @@ void main() {
     });
 
     test('Admin to Employee Datewise Parity: Employee timesheet reflects admin manual OT and remarks', () {
-      final workDate = DateTime(2026, 8, 16, 8, 0);
+      final workDate = DateTime(2026, 8, 17, 8, 0); // Monday standard workday
 
       // Records created by employee
       final inRecord = AttendanceRecord(

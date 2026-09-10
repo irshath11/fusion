@@ -21,6 +21,9 @@ import '../../../core/widgets/app_bounceable.dart';
 import '../../../core/widgets/app_glass_card.dart';
 import '../../../core/widgets/app_shell.dart';
 import '../../../core/widgets/staggered_animated_item.dart';
+import '../../../core/widgets/status_badge.dart';
+import '../../../core/utils/salary_cycle_helper.dart';
+import '../../../core/utils/timesheet_calculator.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -320,9 +323,21 @@ class AdminOverviewTab extends StatelessWidget {
                     );
                   },
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 StaggeredAnimatedItem(
                   index: 6,
+                  child: _buildSalaryCycleOverviewCard(
+                    context,
+                    allRecords,
+                    employees,
+                    isDark,
+                    palette,
+                    primary,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                StaggeredAnimatedItem(
+                  index: 7,
                   child: AppGlassCard(
                     padding: const EdgeInsets.all(20.0),
                     child: Column(
@@ -680,6 +695,257 @@ class AdminOverviewTab extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSalaryCycleOverviewCard(
+    BuildContext context,
+    List<AttendanceRecord> allRecords,
+    List<EmployeeEntity> employees,
+    bool isDark,
+    AppThemePalette palette,
+    Color primary,
+  ) {
+    final currentCycle = SalaryCycle.current();
+    final cycleRecords = currentCycle.filterRecords(allRecords);
+
+    double totalRegHours = 0.0;
+    double totalOtHours = 0.0;
+    int activeStaffCount = 0;
+
+    for (final emp in employees) {
+      final empRecords = cycleRecords.where((r) =>
+          r.employeeId == emp.id ||
+          (r.employeeId.isNotEmpty &&
+              emp.employeeCode.isNotEmpty &&
+              r.employeeId.toLowerCase() == emp.employeeCode.toLowerCase()) ||
+          (r.employeeName.trim().isNotEmpty &&
+              emp.name.trim().isNotEmpty &&
+              r.employeeName.trim().toLowerCase() ==
+                  emp.name.trim().toLowerCase())).toList();
+
+      if (empRecords.isNotEmpty) {
+        activeStaffCount++;
+        final timesheets = TimesheetCalculator.calculateDailyTimesheets(empRecords);
+        for (final entry in timesheets) {
+          totalRegHours += entry.regularHours;
+          totalOtHours += entry.overtimeHours;
+        }
+      }
+    }
+
+    // Fallback if employee list is not yet loaded but records exist
+    if (employees.isEmpty && cycleRecords.isNotEmpty) {
+      final cycleMetrics = TimesheetCalculator.calculateSalaryCycleSummary(
+        allRecords,
+        currentCycle,
+      );
+      totalRegHours = cycleMetrics.regularHours;
+      totalOtHours = cycleMetrics.overtimeHours;
+      activeStaffCount = cycleRecords.map((r) => r.employeeId).toSet().length;
+    }
+
+    final totalCombinedHours = totalRegHours + totalOtHours;
+
+    return AppGlassCard(
+      padding: const EdgeInsets.all(20.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(Icons.account_balance_wallet_rounded,
+                          color: primary, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Text(
+                                'Active Salary Cycle',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: palette.success.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '25th - 24th Cutoff',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: palette.success,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            currentCycle.shortPeriodLabel,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark
+                                  ? palette.textSecondaryDark
+                                  : palette.textSecondaryLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              StatusBadge(
+                label: currentCycle.salaryMonthName,
+                color: primary,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: currentCycle.progressFraction,
+              backgroundColor:
+                  isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+              valueColor: AlwaysStoppedAnimation<Color>(primary),
+              minHeight: 6,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${currentCycle.daysElapsed} of ${currentCycle.totalDays} cycle days elapsed',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark
+                      ? palette.textSecondaryDark
+                      : palette.textSecondaryLight,
+                ),
+              ),
+              Text(
+                currentCycle.daysRemaining > 0
+                    ? '${currentCycle.daysRemaining} days until payroll cutoff'
+                    : 'Payroll cycle closed',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: currentCycle.daysRemaining <= 3
+                      ? palette.warning
+                      : primary,
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildCycleMetric(
+                'Total Hours',
+                '${totalCombinedHours.toStringAsFixed(1)} h',
+                palette.success,
+                isDark,
+                palette,
+              ),
+              _buildCycleMetric(
+                'Regular Hours',
+                '${totalRegHours.toStringAsFixed(1)} h',
+                primary,
+                isDark,
+                palette,
+              ),
+              _buildCycleMetric(
+                'Overtime (OT)',
+                '${totalOtHours.toStringAsFixed(1)} h',
+                Colors.orange.shade800,
+                isDark,
+                palette,
+              ),
+              _buildCycleMetric(
+                'Active Staff',
+                '$activeStaffCount / ${employees.length}',
+                palette.info,
+                isDark,
+                palette,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                onNavigateTab?.call(5); // Navigate to Reports & Analytics tab
+              },
+              icon: const Icon(Icons.analytics_rounded, size: 16),
+              label: const Text(
+                'View Salary Cycle Reports & Timesheets',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(
+                  color: primary.withValues(alpha: 0.35),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCycleMetric(
+    String title,
+    String value,
+    Color valueColor,
+    bool isDark,
+    AppThemePalette palette,
+  ) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: valueColor,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 11,
+            color:
+                isDark ? palette.textSecondaryDark : palette.textSecondaryLight,
+          ),
+        ),
+      ],
     );
   }
 

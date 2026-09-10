@@ -26,7 +26,9 @@ import 'employee_report_generator_screen.dart';
 import 'work_photos_report_screen.dart';
 import '../../timesheet/domain/timesheet_entry.dart';
 import '../../../core/utils/timesheet_calculator.dart';
+import '../../../core/utils/salary_cycle_helper.dart';
 import '../../../core/constants/app_theme.dart';
+import '../../../core/theme/app_theme_preset.dart';
 import '../../../core/widgets/app_shell.dart';
 import 'package:intl/intl.dart';
 
@@ -1340,6 +1342,18 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                           ),
                         ),
 
+                        const SizedBox(height: 18),
+                        // Salary Cycle Attendance Card (25th - 24th)
+                        _buildSalaryCycleCard(
+                          context,
+                          empId,
+                          user,
+                          allRecords,
+                          isDark,
+                          palette,
+                          activePrimary,
+                        ),
+
                         const SizedBox(height: 24),
                         // Dynamic Workday Stepper Timeline Log
                         Text(
@@ -1560,6 +1574,217 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
         ),
       ],
       body: bodyWidget,
+    );
+  }
+
+  Widget _buildSalaryCycleCard(
+    BuildContext context,
+    String? empId,
+    dynamic user,
+    List<AttendanceRecord> allRecords,
+    bool isDark,
+    AppThemePalette palette,
+    Color activePrimary,
+  ) {
+    final currentCycle = SalaryCycle.current();
+    final cycleSummary = TimesheetCalculator.calculateSalaryCycleSummary(
+      allRecords,
+      currentCycle,
+      targetEmployeeId: empId,
+      targetFirebaseUid: user?.firebaseUid,
+      targetEmployeeName: user?.fullName,
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: isDark ? palette.surfaceDark : palette.surfaceLight,
+        borderRadius: BorderRadius.circular(palette.cardRadius),
+        border: Border.all(
+          color: isDark ? palette.cardBorderDark : palette.cardBorderLight,
+          width: isDark ? 1.2 : 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: activePrimary.withValues(alpha: isDark ? 0.08 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: activePrimary.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(Icons.date_range_rounded,
+                            color: activePrimary, size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Text(
+                                  'Salary Cycle',
+                                  style: TextStyle(
+                                      fontSize: 14, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        palette.success.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    '25th - 24th',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: palette.success,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              currentCycle.shortPeriodLabel,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark
+                                    ? palette.textSecondaryDark
+                                    : palette.textSecondaryLight,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                StatusBadge(
+                  label: currentCycle.salaryMonthName,
+                  color: activePrimary,
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            // Progress Bar for salary cycle
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: currentCycle.progressFraction,
+                backgroundColor:
+                    isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                valueColor: AlwaysStoppedAnimation<Color>(activePrimary),
+                minHeight: 5,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '${currentCycle.daysElapsed} of ${currentCycle.totalDays} days in cycle',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark
+                        ? palette.textSecondaryDark
+                        : palette.textSecondaryLight,
+                  ),
+                ),
+                Text(
+                  currentCycle.daysRemaining > 0
+                      ? '${currentCycle.daysRemaining} days left'
+                      : 'Cycle complete',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: currentCycle.daysRemaining <= 3
+                        ? palette.warning
+                        : activePrimary,
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildInfoMetric(
+                  context,
+                  'Regular Hrs',
+                  '${cycleSummary.regularHours.toStringAsFixed(1)}h',
+                  color: activePrimary,
+                ),
+                _buildInfoMetric(
+                  context,
+                  'Overtime (OT)',
+                  '${cycleSummary.overtimeHours.toStringAsFixed(1)}h',
+                  color: Colors.orange.shade800,
+                ),
+                _buildInfoMetric(
+                  context,
+                  'Total Worked',
+                  '${cycleSummary.combinedHours.toStringAsFixed(1)}h',
+                  color: palette.success,
+                ),
+                _buildInfoMetric(
+                  context,
+                  'Days Logged',
+                  '${cycleSummary.daysWorked}',
+                  color: isDark
+                      ? palette.textPrimaryDark
+                      : palette.textPrimaryLight,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _selectedNavIndex = 2; // Switch to Timesheet tab
+                  });
+                },
+                icon: const Icon(Icons.receipt_long_rounded, size: 16),
+                label: const Text(
+                  'View Full Salary Cycle Timesheet',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(
+                    color: activePrimary.withValues(alpha: 0.4),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

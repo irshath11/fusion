@@ -12,6 +12,7 @@ class PdfExportService {
     required String organizationName,
     required List<dynamic> employees,
     required List<AttendanceRecord> records,
+    String? salaryCyclePeriod,
   }) async {
     final pdf = pw.Document();
 
@@ -83,6 +84,25 @@ class PdfExportService {
                         color: PdfColors.grey700,
                       ),
                     ),
+                    if (salaryCyclePeriod != null) ...[
+                      pw.SizedBox(height: 2),
+                      pw.Container(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: pw.BoxDecoration(
+                          color: PdfColors.indigo50,
+                          borderRadius: pw.BorderRadius.circular(4),
+                          border: pw.Border.all(color: PdfColors.indigo300, width: 0.5),
+                        ),
+                        child: pw.Text(
+                          'SALARY CYCLE: $salaryCyclePeriod (25th - 24th Cutoff)',
+                          style: pw.TextStyle(
+                            fontSize: 9,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.indigo900,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 pw.Text(
@@ -369,11 +389,13 @@ class PdfExportService {
     required String organizationName,
     required List<dynamic> employees,
     required List<AttendanceRecord> records,
+    String? salaryCyclePeriod,
   }) async {
     final pdfBytes = await buildCumulativePdfBytes(
       organizationName: organizationName,
       employees: employees,
       records: records,
+      salaryCyclePeriod: salaryCyclePeriod,
     );
 
     await Printing.sharePdf(
@@ -387,6 +409,7 @@ class PdfExportService {
     required String organizationName,
     required dynamic employee,
     required List<AttendanceRecord> records,
+    String? salaryCyclePeriod,
   }) async {
     final pdf = pw.Document();
     final timesheets = TimesheetCalculator.calculateDailyTimesheets(records);
@@ -437,6 +460,25 @@ class PdfExportService {
                         color: PdfColors.grey700,
                       ),
                     ),
+                    if (salaryCyclePeriod != null) ...[
+                      pw.SizedBox(height: 2),
+                      pw.Container(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: pw.BoxDecoration(
+                          color: PdfColors.indigo50,
+                          borderRadius: pw.BorderRadius.circular(4),
+                          border: pw.Border.all(color: PdfColors.indigo300, width: 0.5),
+                        ),
+                        child: pw.Text(
+                          'SALARY CYCLE: $salaryCyclePeriod (25th - 24th Cutoff)',
+                          style: pw.TextStyle(
+                            fontSize: 9,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.indigo900,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 pw.Text(
@@ -573,11 +615,13 @@ class PdfExportService {
     required String organizationName,
     required dynamic employee,
     required List<AttendanceRecord> records,
+    String? salaryCyclePeriod,
   }) async {
     final pdfBytes = await buildEmployeeAttendancePdfBytes(
       organizationName: organizationName,
       employee: employee,
       records: records,
+      salaryCyclePeriod: salaryCyclePeriod,
     );
 
     final String rawName = (employee.name ?? 'Employee');

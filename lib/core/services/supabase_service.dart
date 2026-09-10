@@ -749,6 +749,10 @@ class SupabaseService {
       if (remoteSites.isNotEmpty) {
         LocalDatabaseService().setWorkSites(remoteSites);
       }
+      final cloudRecords = await fetchAttendanceRecordsFromSupabase();
+      if (cloudRecords.isNotEmpty) {
+        LocalDatabaseService().saveAttendanceRecordsBatch(cloudRecords);
+      }
     } catch (e) {
       debugPrint('Error syncing cloud data to local cache: $e');
     }
@@ -1716,26 +1720,46 @@ class SupabaseService {
     return allSuccess;
   }
 
-  /// Fetch all attendance records from Supabase cloud database
-  Future<List<AttendanceRecord>> fetchAttendanceRecordsFromSupabase() async {
+  /// Fetch all attendance records from Supabase cloud database with automatic pagination
+  Future<List<AttendanceRecord>> fetchAttendanceRecordsFromSupabase({
+    int maxRecords = 20000,
+  }) async {
     if (!_isInitialized || client == null) return [];
     try {
-      final List<dynamic> response = await client!
-          .from('attendance_records')
-          .select()
-          .order('event_timestamp', ascending: false)
-          .timeout(const Duration(seconds: 4));
-
       final List<AttendanceRecord> records = [];
-      for (final json in response) {
-        try {
-          final map = Map<String, dynamic>.from(json);
-          final rec = AttendanceRecord.fromJson(map);
-          records.add(rec.copyWith(syncStatus: SyncStatus.synced));
-        } catch (e) {
-          debugPrint('Supabase parse attendance record error: $e');
+      const int pageSize = 1000;
+      int from = 0;
+      bool hasMore = true;
+
+      while (hasMore && records.length < maxRecords) {
+        final List<dynamic> response = await client!
+            .from('attendance_records')
+            .select()
+            .order('event_timestamp', ascending: false)
+            .range(from, from + pageSize - 1);
+
+        if (response.isEmpty) {
+          hasMore = false;
+          break;
+        }
+
+        for (final json in response) {
+          try {
+            final map = Map<String, dynamic>.from(json);
+            final rec = AttendanceRecord.fromJson(map);
+            records.add(rec.copyWith(syncStatus: SyncStatus.synced));
+          } catch (e) {
+            debugPrint('Supabase parse attendance record error: $e');
+          }
+        }
+
+        if (response.length < pageSize) {
+          hasMore = false;
+        } else {
+          from += pageSize;
         }
       }
+
       return records;
     } catch (e) {
       debugPrint('Supabase fetchAttendanceRecordsFromSupabase note: $e');

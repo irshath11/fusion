@@ -35,6 +35,7 @@
   const officeTableBody = document.getElementById('office-table-body');
   const siteTableBody = document.getElementById('site-table-body');
   const reportsTableBody = document.getElementById('reports-table-body');
+  const reportsCycleSelect = document.getElementById('reports-cycle-select');
 
   const drawerBackdrop = document.getElementById('employee-drawer-backdrop');
   const drawer = document.getElementById('employee-drawer');
@@ -166,7 +167,10 @@
     // Save Employee Form Submission
     document.getElementById('drawer-save-btn').addEventListener('click', saveEmployee);
 
-    // Export Buttons
+    // Export Buttons & Salary Cycle Filter
+    if (reportsCycleSelect) {
+      reportsCycleSelect.addEventListener('change', () => renderReportsTable());
+    }
     document.getElementById('btn-export-csv').addEventListener('click', exportReportsCSV);
     document.getElementById('btn-export-excel').addEventListener('click', exportReportsExcel);
 
@@ -234,19 +238,30 @@
       const { data: sites } = await supabaseClient.from('work_sites').select('*').eq('is_deleted', false);
       sitesData = sites || [];
 
-      // 4. Fetch Attendance Logs
-      const { data: attendance } = await supabaseClient
-        .from('attendance_records')
-        .select('*')
-        .order('event_timestamp', { ascending: false })
-        .limit(200);
-      attendanceData = attendance || [];
+      // 4. Fetch Attendance Logs (with pagination)
+      let allAttendance = [];
+      let page = 0;
+      const pageSize = 1000;
+      while (page < 10) {
+        const { data: chunk, error } = await supabaseClient
+          .from('attendance_records')
+          .select('*')
+          .order('event_timestamp', { ascending: false })
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+
+        if (error || !chunk || chunk.length === 0) break;
+        allAttendance = allAttendance.concat(chunk);
+        if (chunk.length < pageSize) break;
+        page++;
+      }
+      attendanceData = allAttendance;
 
       // Update Views
       updateOverviewMetrics();
       renderEmployeeTable();
       renderOfficeTable();
       renderSiteTable();
+      populateSalaryCycleDropdown();
       renderReportsTable();
       if (leafletMap) renderMapMarkers();
 
@@ -431,15 +446,110 @@
     return photo;
   }
 
+  // Salary Cycle Utilities (25th of month to 24th of next month)
+  // App implemented from Aug – Sep 2026 (25 Aug - 24 Sep). Previous months have no data.
+  function getSalaryCycles() {
+    const cycles = [];
+    const now = new Date();
+    let ref = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const earliestStart = new Date(2026, 7, 25, 0, 0, 0, 0); // 25 Aug 2026
+
+    while (true) {
+      let y = ref.getFullYear();
+      let m = ref.getMonth();
+      let d = ref.getDate();
+      let start, end;
+      if (d >= 25) {
+        start = new Date(y, m, 25, 0, 0, 0, 0);
+        end = new Date(y, m + 1, 24, 23, 59, 59, 999);
+      } else {
+        start = new Date(y, m - 1, 25, 0, 0, 0, 0);
+        end = new Date(y, m, 24, 23, 59, 59, 999);
+      }
+
+      if (start.getTime() < earliestStart.getTime()) {
+        break;
+      }
+
+      const startStr = `${start.getDate()} ${monthNames[start.getMonth()]}`;
+      const endStr = `${end.getDate()} ${monthNames[end.getMonth()]} ${end.getFullYear()}`;
+      const cycleTitle = `${monthNames[start.getMonth()]} – ${monthNames[end.getMonth()]} ${end.getFullYear()} Cycle`;
+      const label = `${cycleTitle} (${startStr} – ${endStr})`;
+      cycles.push({
+        id: `cycle_${start.getTime()}`,
+        title: cycleTitle,
+        label,
+        start,
+        end
+      });
+      ref = new Date(start.getTime() - 24 * 60 * 60 * 1000);
+    }
+
+    if (cycles.length === 0) {
+      const start = new Date(2026, 7, 25, 0, 0, 0, 0);
+      const end = new Date(2026, 8, 24, 23, 59, 59, 999);
+      cycles.push({
+        id: `cycle_${start.getTime()}`,
+        title: 'Aug – Sep 2026 Cycle',
+        label: 'Aug – Sep 2026 Cycle (25 Aug – 24 Sep 2026)',
+        start,
+        end
+      });
+    }
+
+    return cycles;
+  }
+
+  function populateSalaryCycleDropdown() {
+    if (!reportsCycleSelect) return;
+    const currentVal = reportsCycleSelect.value;
+    const cycles = getSalaryCycles();
+    let options = cycles.map((c, i) => `<option value="${i}">${c.label}${i === 0 ? ' (Active Cycle)' : ''}</option>`).join('');
+    options += `<option value="all">All Recorded History (Unfiltered)</option>`;
+    reportsCycleSelect.innerHTML = options;
+    if (currentVal && (currentVal === 'all' || parseInt(currentVal, 10) < cycles.length)) {
+      reportsCycleSelect.value = currentVal;
+    }
+  }
+
+  function getFilteredAttendance() {
+    if (!reportsCycleSelect || reportsCycleSelect.value === 'all') {
+      return attendanceData;
+    }
+    const cycles = getSalaryCycles();
+    const idx = parseInt(reportsCycleSelect.value || '0', 10);
+    const cycle = cycles[idx];
+    if (!cycle) return attendanceData;
+
+    return attendanceData.filter(r => {
+      if (!r.event_timestamp) return false;
+      const t = new Date(r.event_timestamp).getTime();
+      return t >= cycle.start.getTime() && t <= cycle.end.getTime();
+    });
+  }
+
+  function getSelectedCycleFilenamePart() {
+    if (!reportsCycleSelect || reportsCycleSelect.value === 'all') {
+      return 'All_Records';
+    }
+    const cycles = getSalaryCycles();
+    const idx = parseInt(reportsCycleSelect.value || '0', 10);
+    const cycle = cycles[idx];
+    return cycle ? cycle.title.replace(/\s+/g, '_') : 'Salary_Cycle';
+  }
+
   function renderReportsTable() {
     if (!reportsTableBody) return;
 
-    if (attendanceData.length === 0) {
-      reportsTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-tertiary); padding: 24px;">No attendance check-in records available.</td></tr>`;
+    const records = getFilteredAttendance();
+
+    if (records.length === 0) {
+      reportsTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-tertiary); padding: 24px;">No attendance check-in records found for this period.</td></tr>`;
       return;
     }
 
-    reportsTableBody.innerHTML = attendanceData.map((r, index) => {
+    reportsTableBody.innerHTML = records.map((r, index) => {
       const dateStr = new Date(r.event_timestamp).toLocaleString();
       const photoSrc = getPhotoSrc(r);
       const locationText = getLocationName(r);
@@ -613,9 +723,13 @@
 
   // Export CSV
   function exportReportsCSV() {
-    if (attendanceData.length === 0) return;
+    const records = getFilteredAttendance();
+    if (records.length === 0) {
+      alert('No attendance records found for the selected salary cycle.');
+      return;
+    }
     const headers = ['Timestamp', 'Employee Name', 'Event Type', 'Latitude', 'Longitude', 'Address', 'Geofence Valid'];
-    const rows = attendanceData.map(r => [
+    const rows = records.map(r => [
       r.event_timestamp,
       `"${r.employee_name || ''}"`,
       r.workflow_step,
@@ -629,7 +743,8 @@
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Attendance_Report_${new Date().toISOString().split('T')[0]}.csv`);
+    const cycleTag = getSelectedCycleFilenamePart();
+    link.setAttribute('download', `Attendance_${cycleTag}_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -637,11 +752,16 @@
 
   // Export Excel
   function exportReportsExcel() {
-    if (!window.XLSX || attendanceData.length === 0) return;
-    const ws = XLSX.utils.json_to_sheet(attendanceData);
+    const records = getFilteredAttendance();
+    if (!window.XLSX || records.length === 0) {
+      if (records.length === 0) alert('No attendance records found for the selected salary cycle.');
+      return;
+    }
+    const ws = XLSX.utils.json_to_sheet(records);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Attendance Logs");
-    XLSX.writeFile(wb, `Attendance_Timesheets_${new Date().toISOString().split('T')[0]}.xlsx`);
+    const cycleTag = getSelectedCycleFilenamePart();
+    XLSX.writeFile(wb, `Attendance_Timesheets_${cycleTag}_${new Date().toISOString().split('T')[0]}.xlsx`);
   }
 
   // Ownership Transfer Modal Handlers
