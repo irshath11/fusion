@@ -101,6 +101,8 @@ class AppAnimatedTabSwitcher extends StatelessWidget {
                             Flexible(
                               child: Text(
                                 tab.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
@@ -110,7 +112,6 @@ class AppAnimatedTabSwitcher extends StatelessWidget {
                                           ? palette.textSecondaryDark
                                           : Colors.grey.shade700),
                                 ),
-                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],

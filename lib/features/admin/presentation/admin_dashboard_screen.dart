@@ -85,7 +85,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             children: [
               Icon(Icons.cleaning_services_rounded, color: Colors.orangeAccent),
               SizedBox(width: 10),
-              Text('Reset Attendance Cache'),
+              Expanded(
+                child: Text(
+                  'Reset Attendance Cache',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+              ),
             ],
           ),
           content: const Text(
@@ -772,14 +777,16 @@ class AdminOverviewTab extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
+                          Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 8,
+                            runSpacing: 4,
                             children: [
                               const Text(
                                 'Active Salary Cycle',
                                 style: TextStyle(
                                     fontWeight: FontWeight.bold, fontSize: 16),
                               ),
-                              const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
@@ -831,8 +838,11 @@ class AdminOverviewTab extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               Text(
                 '${currentCycle.daysElapsed} of ${currentCycle.totalDays} cycle days elapsed',

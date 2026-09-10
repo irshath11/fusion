@@ -643,6 +643,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               const SizedBox(height: 12),
                               Text(
                                 'No Employees with Attendance Records',
+                                textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
@@ -766,15 +767,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                       alpha: isDark ? 0.22 : 0.12),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
+                                child: Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 4,
                                   children: [
                                     const Icon(
                                       Icons.check_circle_outline_rounded,
                                       size: 13,
                                       color: Colors.green,
                                     ),
-                                    const SizedBox(width: 4),
                                     Text(
                                       '$datesCount Attendance Date(s) Logged',
                                       style: const TextStyle(
@@ -835,6 +836,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               const SizedBox(height: 12),
                               Text(
                                 'All Employees Have Attendance Records',
+                                textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
@@ -949,6 +951,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                       ? palette.textSecondaryDark
                                       : Colors.grey.shade600,
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                               const SizedBox(height: 5),
                               Container(
@@ -959,15 +963,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                       alpha: isDark ? 0.22 : 0.12),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
+                                child: const Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 4,
                                   children: [
                                     Icon(
                                       Icons.history_toggle_off_rounded,
                                       size: 13,
                                       color: Colors.orange,
                                     ),
-                                    SizedBox(width: 4),
                                     Text(
                                       'No Attendance Recorded',
                                       style: TextStyle(
@@ -994,11 +998,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               style: TextButton.styleFrom(
                                 foregroundColor: activePrimary,
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
+                                    horizontal: 6, vertical: 2),
+                                visualDensity: VisualDensity.compact,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                             ),
                             const Icon(Icons.arrow_forward_ios_rounded,
-                                size: 16, color: AppColors.textSecondaryLight),
+                                size: 14, color: AppColors.textSecondaryLight),
                           ],
                         ),
                         onTap: () {
@@ -1284,7 +1290,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 6,
+                        runSpacing: 2,
                         children: [
                           Text(
                             'Salary Cycle Filter',
@@ -1296,7 +1305,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                   : palette.textSecondaryLight,
                             ),
                           ),
-                          const SizedBox(width: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 5, vertical: 1),
@@ -4998,7 +5006,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 6,
+                      runSpacing: 2,
                       children: [
                         Text(
                           'Workforce Salary Cycle Filter',
@@ -5010,7 +5021,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 : palette.textSecondaryLight,
                           ),
                         ),
-                        const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 5, vertical: 1),

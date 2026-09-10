@@ -157,7 +157,11 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        Row(
+                                        Wrap(
+                                          crossAxisAlignment:
+                                              WrapCrossAlignment.center,
+                                          spacing: 6,
+                                          runSpacing: 2,
                                           children: [
                                             Text(
                                               'Salary Cycle',
@@ -169,7 +173,6 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                                     : palette.textSecondaryLight,
                                               ),
                                             ),
-                                            const SizedBox(width: 6),
                                             Container(
                                               padding:
                                                   const EdgeInsets.symmetric(

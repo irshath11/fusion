@@ -180,7 +180,12 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
             children: [
               Icon(Icons.cleaning_services_rounded, color: Colors.orangeAccent),
               SizedBox(width: 10),
-              Text('Reset Attendance Cache'),
+              Expanded(
+                child: Text(
+                  'Reset Attendance Cache',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+              ),
             ],
           ),
           content: const Text(
@@ -321,7 +326,12 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                     color: AppTheme.currentColors
                         .primaryFor(Theme.of(context).brightness)),
                 const SizedBox(width: 10),
-                const Text('Change Password'),
+                const Expanded(
+                  child: Text(
+                    'Change Password',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                  ),
+                ),
               ],
             ),
             content: SingleChildScrollView(
@@ -642,7 +652,12 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                               Icon(Icons.gpp_bad_rounded,
                                   color: AppColors.error),
                               SizedBox(width: 10),
-                              Text('Geofence Violation'),
+                              Expanded(
+                                child: Text(
+                                  'Geofence Violation',
+                                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                                ),
+                              ),
                             ],
                           ),
                           content: Column(
@@ -1845,7 +1860,12 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
               Icon(Icons.gpp_bad_rounded,
                   color: AppColors.error),
               SizedBox(width: 10),
-              Text('Geofence Violation'),
+              Expanded(
+                child: Text(
+                  'Geofence Violation',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+              ),
             ],
           ),
           content: Column(

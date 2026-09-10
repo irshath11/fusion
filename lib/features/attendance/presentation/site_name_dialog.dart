@@ -72,12 +72,14 @@ class _SiteNameDialogState extends State<SiteNameDialog> {
             color: isDark ? AppColors.primaryLight : AppColors.primary,
           ),
           const SizedBox(width: 10),
-          Text(
-            'Select Site Name',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: textColor,
+          Expanded(
+            child: Text(
+              'Select Site Name',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: textColor,
+              ),
             ),
           ),
         ],

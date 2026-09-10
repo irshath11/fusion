@@ -93,7 +93,12 @@ class _OwnershipTransferDialogState extends State<OwnershipTransferDialog> {
               children: [
                 Icon(Icons.workspace_premium_rounded, color: AppColors.warning),
                 const SizedBox(width: 8),
-                const Text('Transfer Ownership'),
+                const Expanded(
+                  child: Text(
+                    'Transfer Ownership',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
               ],
             ),
             content: SingleChildScrollView(
