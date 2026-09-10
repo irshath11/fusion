@@ -118,9 +118,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       final cloudRecords =
           await SupabaseService().fetchAttendanceRecordsFromSupabase();
       if (cloudRecords.isNotEmpty) {
-        for (final record in cloudRecords) {
-          _db.saveAttendanceRecord(record);
-        }
+        _db.saveAttendanceRecordsBatch(cloudRecords);
       }
 
       // Also ensure latest employee records and codes from Supabase are synced
