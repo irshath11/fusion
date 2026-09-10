@@ -990,9 +990,7 @@ class SupabaseService {
 
       final cloudRecords = await fetchAttendanceRecordsFromSupabase();
       if (cloudRecords.isNotEmpty) {
-        for (final record in cloudRecords) {
-          LocalDatabaseService().saveAttendanceRecord(record);
-        }
+        LocalDatabaseService().saveAttendanceRecordsBatch(cloudRecords);
       }
     } catch (e) {
       debugPrint('Supabase syncCloudDataToLocal note: $e');

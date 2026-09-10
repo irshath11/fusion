@@ -445,7 +445,7 @@ class LocalDatabaseService {
     _settingsBox?.delete('attendance_records_json');
   }
 
-  void saveAttendanceRecord(AttendanceRecord record) {
+  void saveAttendanceRecord(AttendanceRecord record, {bool persist = true}) {
     int index = _attendanceRecords.indexWhere((r) => r.id == record.id);
 
     // Fallback matching by employeeId/name + workflowStep + eventTimestamp if IDs differ
@@ -478,6 +478,17 @@ class LocalDatabaseService {
       }
     } else {
       _attendanceRecords.add(record);
+    }
+    if (persist) {
+      _persistAttendanceRecords();
+    }
+  }
+
+  /// Batch saves or updates multiple attendance records, persisting to Hive only once.
+  void saveAttendanceRecordsBatch(List<AttendanceRecord> records) {
+    if (records.isEmpty) return;
+    for (final record in records) {
+      saveAttendanceRecord(record, persist: false);
     }
     _persistAttendanceRecords();
   }
