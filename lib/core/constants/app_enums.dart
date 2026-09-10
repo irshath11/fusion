@@ -93,17 +93,17 @@ extension WorkflowStepExtension on WorkflowStep {
   String get displayName {
     switch (this) {
       case WorkflowStep.officeCheckIn:
-        return '1. Office Check-In';
+        return 'Office Check-In';
       case WorkflowStep.siteCheckIn:
-        return '2. Site Check-In';
+        return 'Site Check-In';
       case WorkflowStep.siteCheckOut:
-        return '3. Site Check-Out (Leaving Site)';
+        return 'Site Check-Out (Leaving Site)';
       case WorkflowStep.breakStart:
         return 'Break Started';
       case WorkflowStep.breakEnd:
         return 'Break Ended';
       case WorkflowStep.officeCheckOut:
-        return '4. Office Check-Out (Reach Office)';
+        return 'Office Check-Out (Reach Office)';
       case WorkflowStep.completed:
         return 'Shift Completed';
       case WorkflowStep.emergencyCheckIn:

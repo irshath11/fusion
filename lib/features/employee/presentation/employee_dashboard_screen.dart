@@ -289,7 +289,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
       barrierDismissible: false,
       builder: (ctx) => CameraCaptureModal(
         stepName: step == WorkflowStep.siteCheckIn && siteName != null
-            ? 'First Site Check-In ($siteName)'
+            ? 'Site Check-In ($siteName)'
             : step.displayName,
         onPhotoCaptured: (cameraResult) {
           context.read<AttendanceCubit>().executeAttendanceStep(
@@ -1423,23 +1423,27 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                       ? Icons.play_arrow_rounded
                                       : Icons.check);
 
+                              final stepNumber = index + 1;
                               String stepTitle;
                               if (isBreakStart) {
                                 final sName = record.siteName?.trim();
                                 if (sName != null &&
                                     sName.isNotEmpty &&
                                     sName != 'Break') {
-                                  stepTitle = '☕ Break Started ($sName)';
+                                  stepTitle =
+                                      '$stepNumber. ☕ Break Started ($sName)';
                                 } else {
-                                  stepTitle = '☕ Break Started';
+                                  stepTitle = '$stepNumber. ☕ Break Started';
                                 }
                               } else if (isBreakEnd) {
-                                stepTitle = '🟢 Break Ended (Resumed Work)';
+                                stepTitle =
+                                    '$stepNumber. 🟢 Break Ended (Resumed Work)';
                               } else if (hasSite) {
                                 stepTitle =
-                                    '${record.workflowStep.displayName} (${record.siteName!.trim()})';
+                                    '$stepNumber. ${record.workflowStep.displayName} (${record.siteName!.trim()})';
                               } else {
-                                stepTitle = record.workflowStep.displayName;
+                                stepTitle =
+                                    '$stepNumber. ${record.workflowStep.displayName}';
                               }
 
                               return Container(
