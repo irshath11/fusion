@@ -63,7 +63,10 @@ void main() {
     });
 
     test('Recent cycles generator returns correct chronological sequence', () {
-      final cycles = SalaryCycle.getRecentCycles(count: 6);
+      final cycles = SalaryCycle.getRecentCycles(
+        count: 6,
+        referenceDate: DateTime(2027, 2, 1),
+      );
       expect(cycles.length, equals(6));
 
       // Each cycle should start immediately after the previous one ends
@@ -77,6 +80,17 @@ void main() {
         expect(previous.endDate.day, equals(24));
         expect(previous.startDate.day, equals(25));
       }
+    });
+
+    test('Recent cycles generator respects earliest implemented cycle cutoff (Aug-Sep 2026)', () {
+      final cycles = SalaryCycle.getRecentCycles(referenceDate: DateTime(2026, 9, 10));
+      expect(cycles.length, equals(1));
+      expect(cycles.first.salaryYear, equals(2026));
+      expect(cycles.first.salaryMonth, equals(9));
+      expect(cycles.first.startDate.day, equals(25));
+      expect(cycles.first.startDate.month, equals(8));
+      expect(cycles.first.endDate.day, equals(24));
+      expect(cycles.first.endDate.month, equals(9));
     });
 
     test('filterRecords filters attendance records according to cycle bounds', () {

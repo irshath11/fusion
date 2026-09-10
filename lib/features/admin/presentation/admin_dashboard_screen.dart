@@ -696,13 +696,45 @@ class AdminOverviewTab extends StatelessWidget {
     Color primary,
   ) {
     final currentCycle = SalaryCycle.current();
-    final cycleMetrics = TimesheetCalculator.calculateSalaryCycleSummary(
-      allRecords,
-      currentCycle,
-    );
-
     final cycleRecords = currentCycle.filterRecords(allRecords);
-    final activeEmpIdsInCycle = cycleRecords.map((r) => r.employeeId).toSet();
+
+    double totalRegHours = 0.0;
+    double totalOtHours = 0.0;
+    int activeStaffCount = 0;
+
+    for (final emp in employees) {
+      final empRecords = cycleRecords.where((r) =>
+          r.employeeId == emp.id ||
+          (r.employeeId.isNotEmpty &&
+              emp.employeeCode.isNotEmpty &&
+              r.employeeId.toLowerCase() == emp.employeeCode.toLowerCase()) ||
+          (r.employeeName.trim().isNotEmpty &&
+              emp.name.trim().isNotEmpty &&
+              r.employeeName.trim().toLowerCase() ==
+                  emp.name.trim().toLowerCase())).toList();
+
+      if (empRecords.isNotEmpty) {
+        activeStaffCount++;
+        final timesheets = TimesheetCalculator.calculateDailyTimesheets(empRecords);
+        for (final entry in timesheets) {
+          totalRegHours += entry.regularHours;
+          totalOtHours += entry.overtimeHours;
+        }
+      }
+    }
+
+    // Fallback if employee list is not yet loaded but records exist
+    if (employees.isEmpty && cycleRecords.isNotEmpty) {
+      final cycleMetrics = TimesheetCalculator.calculateSalaryCycleSummary(
+        allRecords,
+        currentCycle,
+      );
+      totalRegHours = cycleMetrics.regularHours;
+      totalOtHours = cycleMetrics.overtimeHours;
+      activeStaffCount = cycleRecords.map((r) => r.employeeId).toSet().length;
+    }
+
+    final totalCombinedHours = totalRegHours + totalOtHours;
 
     return AppGlassCard(
       padding: const EdgeInsets.all(20.0),
@@ -820,28 +852,28 @@ class AdminOverviewTab extends StatelessWidget {
             children: [
               _buildCycleMetric(
                 'Total Hours',
-                '${cycleMetrics.combinedHours.toStringAsFixed(1)} h',
+                '${totalCombinedHours.toStringAsFixed(1)} h',
                 palette.success,
                 isDark,
                 palette,
               ),
               _buildCycleMetric(
                 'Regular Hours',
-                '${cycleMetrics.regularHours.toStringAsFixed(1)} h',
+                '${totalRegHours.toStringAsFixed(1)} h',
                 primary,
                 isDark,
                 palette,
               ),
               _buildCycleMetric(
                 'Overtime (OT)',
-                '${cycleMetrics.overtimeHours.toStringAsFixed(1)} h',
+                '${totalOtHours.toStringAsFixed(1)} h',
                 Colors.orange.shade800,
                 isDark,
                 palette,
               ),
               _buildCycleMetric(
                 'Active Staff',
-                '${activeEmpIdsInCycle.length} / ${employees.length}',
+                '$activeStaffCount / ${employees.length}',
                 palette.info,
                 isDark,
                 palette,

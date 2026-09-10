@@ -31,7 +31,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
   String _activeFilter = 'all'; // 'all', 'regular', 'overtime'
   SalaryCycle? _selectedSalaryCycle = SalaryCycle.current();
   late final List<SalaryCycle> _availableCycles =
-      SalaryCycle.getRecentCycles(count: 12);
+      SalaryCycle.getRecentCycles();
 
   @override
   Widget build(BuildContext context) {

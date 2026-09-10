@@ -129,14 +129,23 @@ class TimesheetCalculator {
       return idMatch || nameMatch;
     }).toList();
 
-    // Map key: "yyyy-MM-dd"
+    final bool isSingleEmployee = (targetEmployeeId != null && targetEmployeeId.isNotEmpty) ||
+        (targetEmployeeName != null && targetEmployeeName.isNotEmpty);
+
+    // Map key: "yyyy-MM-dd" for single employee, or "empKey__yyyy-MM-dd" for workforce
     final Map<String, List<AttendanceRecord>> groupedMap = {};
 
     for (final record in filteredRecords) {
       final localEv = record.eventTimestamp.toLocal();
       final dateStr =
           "${localEv.year}-${localEv.month.toString().padLeft(2, '0')}-${localEv.day.toString().padLeft(2, '0')}";
-      groupedMap.putIfAbsent(dateStr, () => []).add(record);
+      final empKey = record.employeeId.isNotEmpty
+          ? record.employeeId
+          : (record.employeeName.trim().isNotEmpty
+              ? record.employeeName.trim().toLowerCase()
+              : 'unknown');
+      final groupKey = isSingleEmployee ? dateStr : "${empKey}__$dateStr";
+      groupedMap.putIfAbsent(groupKey, () => []).add(record);
     }
 
     final List<DailyTimesheetEntry> entries = [];

@@ -447,12 +447,15 @@
   }
 
   // Salary Cycle Utilities (25th of month to 24th of next month)
-  function getSalaryCycles(count = 12) {
+  // App implemented from Aug – Sep 2026 (25 Aug - 24 Sep). Previous months have no data.
+  function getSalaryCycles() {
     const cycles = [];
     const now = new Date();
     let ref = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    for (let i = 0; i < count; i++) {
+    const earliestStart = new Date(2026, 7, 25, 0, 0, 0, 0); // 25 Aug 2026
+
+    while (true) {
       let y = ref.getFullYear();
       let m = ref.getMonth();
       let d = ref.getDate();
@@ -464,9 +467,14 @@
         start = new Date(y, m - 1, 25, 0, 0, 0, 0);
         end = new Date(y, m, 24, 23, 59, 59, 999);
       }
-      const startStr = `${start.getDate()} ${monthNames[start.getMonth()]} ${start.getFullYear()}`;
+
+      if (start.getTime() < earliestStart.getTime()) {
+        break;
+      }
+
+      const startStr = `${start.getDate()} ${monthNames[start.getMonth()]}`;
       const endStr = `${end.getDate()} ${monthNames[end.getMonth()]} ${end.getFullYear()}`;
-      const cycleTitle = `${monthNames[end.getMonth()]} ${end.getFullYear()} Cycle`;
+      const cycleTitle = `${monthNames[start.getMonth()]} – ${monthNames[end.getMonth()]} ${end.getFullYear()} Cycle`;
       const label = `${cycleTitle} (${startStr} – ${endStr})`;
       cycles.push({
         id: `cycle_${start.getTime()}`,
@@ -477,13 +485,26 @@
       });
       ref = new Date(start.getTime() - 24 * 60 * 60 * 1000);
     }
+
+    if (cycles.length === 0) {
+      const start = new Date(2026, 7, 25, 0, 0, 0, 0);
+      const end = new Date(2026, 8, 24, 23, 59, 59, 999);
+      cycles.push({
+        id: `cycle_${start.getTime()}`,
+        title: 'Aug – Sep 2026 Cycle',
+        label: 'Aug – Sep 2026 Cycle (25 Aug – 24 Sep 2026)',
+        start,
+        end
+      });
+    }
+
     return cycles;
   }
 
   function populateSalaryCycleDropdown() {
     if (!reportsCycleSelect) return;
     const currentVal = reportsCycleSelect.value;
-    const cycles = getSalaryCycles(12);
+    const cycles = getSalaryCycles();
     let options = cycles.map((c, i) => `<option value="${i}">${c.label}${i === 0 ? ' (Active Cycle)' : ''}</option>`).join('');
     options += `<option value="all">All Recorded History (Unfiltered)</option>`;
     reportsCycleSelect.innerHTML = options;
@@ -496,7 +517,7 @@
     if (!reportsCycleSelect || reportsCycleSelect.value === 'all') {
       return attendanceData;
     }
-    const cycles = getSalaryCycles(12);
+    const cycles = getSalaryCycles();
     const idx = parseInt(reportsCycleSelect.value || '0', 10);
     const cycle = cycles[idx];
     if (!cycle) return attendanceData;
@@ -512,10 +533,10 @@
     if (!reportsCycleSelect || reportsCycleSelect.value === 'all') {
       return 'All_Records';
     }
-    const cycles = getSalaryCycles(12);
+    const cycles = getSalaryCycles();
     const idx = parseInt(reportsCycleSelect.value || '0', 10);
     const cycle = cycles[idx];
-    return cycle ? cycle.title.replace(/\\s+/g, '_') : 'Salary_Cycle';
+    return cycle ? cycle.title.replace(/\s+/g, '_') : 'Salary_Cycle';
   }
 
   function renderReportsTable() {

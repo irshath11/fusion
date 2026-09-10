@@ -46,7 +46,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   SalaryCycle? _selectedSalaryCycle = SalaryCycle.current();
   SalaryCycle? _cumulativeSalaryCycle = SalaryCycle.current();
   late final List<SalaryCycle> _availableSalaryCycles =
-      SalaryCycle.getRecentCycles(count: 12);
+      SalaryCycle.getRecentCycles();
 
   @override
   void initState() {

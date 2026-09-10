@@ -50,6 +50,13 @@ class AdminCubit extends Cubit<AdminState> {
       cloudOffices = await _supabase.fetchOfficesFromSupabase();
     } catch (_) {}
 
+    try {
+      final cloudRecords = await _supabase.fetchAttendanceRecordsFromSupabase();
+      if (cloudRecords.isNotEmpty) {
+        _db.saveAttendanceRecordsBatch(cloudRecords);
+      }
+    } catch (_) {}
+
     final officeMap = <String, OfficeEntity>{};
     for (final off in cloudOffices) {
       officeMap[off.id] = off;

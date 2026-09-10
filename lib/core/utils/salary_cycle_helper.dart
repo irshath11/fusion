@@ -78,21 +78,32 @@ class SalaryCycle {
     );
   }
 
-  /// Generates a list of recent cycles (default: 12 cycles in reverse chronological order)
-  static List<SalaryCycle> getRecentCycles({int count = 12, DateTime? referenceDate}) {
+  /// Earliest implemented salary cycle in the system (25 Aug 2026 - 24 Sep 2026).
+  /// Previous past months had no app implementation and are removed from filters.
+  static const int earliestSalaryYear = 2026;
+  static const int earliestSalaryMonth = 9; // Sep cycle (25 Aug - 24 Sep)
+
+  /// Generates a list of recent cycles down to the earliest implemented cycle (Aug–Sep 2026).
+  static List<SalaryCycle> getRecentCycles({int? count, DateTime? referenceDate}) {
     final currentCycle = SalaryCycle.current(referenceDate);
     final List<SalaryCycle> cycles = [];
 
     int curYear = currentCycle.salaryYear;
     int curMonth = currentCycle.salaryMonth;
 
-    for (int i = 0; i < count; i++) {
+    while (curYear > earliestSalaryYear ||
+        (curYear == earliestSalaryYear && curMonth >= earliestSalaryMonth)) {
       cycles.add(SalaryCycle.forMonth(curYear, curMonth));
+      if (count != null && cycles.length >= count) break;
       curMonth--;
       if (curMonth < 1) {
         curMonth = 12;
         curYear--;
       }
+    }
+
+    if (cycles.isEmpty) {
+      cycles.add(SalaryCycle.forMonth(earliestSalaryYear, earliestSalaryMonth));
     }
     return cycles;
   }
@@ -106,10 +117,11 @@ class SalaryCycle {
   /// Unique identifier key for dropdowns or caches (e.g. '2026-09')
   String get id => '$salaryYear-${salaryMonth.toString().padLeft(2, '0')}';
 
-  /// Title for display: e.g. "Sep 2026 Cycle (25 Aug – 24 Sep)"
+  /// Title for display: e.g. "Aug – Sep 2026 Cycle (25 Aug – 24 Sep)"
   String get title {
-    final monthName = DateFormat('MMM yyyy').format(DateTime(salaryYear, salaryMonth, 1));
-    return '$monthName Cycle (${DateFormat('dd MMM').format(startDate)} – ${DateFormat('dd MMM').format(endDate)})';
+    final startM = DateFormat('MMM').format(startDate);
+    final endM = DateFormat('MMM yyyy').format(endDate);
+    return '$startM – $endM Cycle (${DateFormat('dd MMM').format(startDate)} – ${DateFormat('dd MMM').format(endDate)})';
   }
 
   /// Short label: e.g. "25 Aug – 24 Sep 2026"
@@ -117,9 +129,11 @@ class SalaryCycle {
     return '${DateFormat('dd MMM').format(startDate)} – ${DateFormat('dd MMM yyyy').format(endDate)}';
   }
 
-  /// Single month cycle name: e.g. "September 2026"
+  /// Dual-month cycle name: e.g. "Aug – Sep 2026"
   String get salaryMonthName {
-    return DateFormat('MMMM yyyy').format(DateTime(salaryYear, salaryMonth, 1));
+    final startM = DateFormat('MMM').format(startDate);
+    final endM = DateFormat('MMM yyyy').format(endDate);
+    return '$startM – $endM';
   }
 
   /// Full period range string: e.g. "25 Aug 2026 – 24 Sep 2026"
