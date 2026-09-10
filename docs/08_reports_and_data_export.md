@@ -12,27 +12,29 @@ The **Reports & Multi-Format Data Export** feature (`ReportsAnalyticsScreen`) pr
 1. **Tab 0: Employee Directory & Duty Log Drilldown (3-Level View)**:
    - **Level 1 (Employee Directory List)**:
      - Real-time search bar filtering staff by Name, Employee Code (`EMP-XXXX`), or Department (`Operations`).
+     - **Active Salary Cycle Filter (`SalaryCycleHelper`)**: Filter logs by 25th-to-24th corporate payroll cutoffs (e.g. `25 Aug 2026 – 24 Sep 2026 (Sep 2026)`), with dropdown to cycle through past payroll periods.
      - **Executive KPI Ticker Ribbon (`AppGlassCard`)**: Displays real-time metrics for *Total Staff*, *Active Duty*, *Attendance Rate (%)*, and *Geofence Audit Compliance (%)*.
      - **Cloud Log Refresh Button**: Trigger on-demand sync from Supabase with loading status indicator animation (`_isLoadingCloud`).
    - **Level 2 (Employee Date-Wise Duty Logs)**:
      - Lists all calendar dates where the selected employee recorded attendance events.
-     - Displays check-in/out timestamps, total daily work shift hours, and site visit count badges.
+     - Displays check-in/out timestamps, total daily work shift hours, emergency hours, and site visit count badges.
+     - **Admin Add / Edit Emergency Duty Action**: Dialog enabling administrators to insert missing emergency call-out logs or adjust on-call shifts.
    - **Level 3 (Date Detailed Inspection & Selfie Verification)**:
      - High-resolution camera selfie photo verification modal view.
      - Exact GPS coordinates (latitude, longitude, accuracy) and physical address text.
      - Geofence compliance badges (`VALID` / `VIOLATION`).
-     - Timeline step breakdown (`1. Office Check-In`, `2. Site Check-In`, `3. Site Check-Out`, `4. Office Check-Out`).
+     - Multi-site sequential timeline breakdown with dynamic sequential numbering (`1.`, `2.`, `3.`, `4.`, ...).
 
 2. **Tab 1: Cumulative Summary View**:
    - Cross-employee aggregate attendance statistics across the entire organization.
-   - **Present / Absent Staff Count Ticker**: Instant count of active versus absent personnel for selected date ranges.
-   - **Work Hour Aggregation**: Calculates net regular hours (capped at 8.0h/day) and overtime hours (>8.0h/day).
+   - **Present / Absent Staff Count Ticker**: Instant count of active versus absent personnel for selected date ranges or salary cycles.
+   - **Work Hour Aggregation**: Calculates net regular hours (capped at 8.0h/day), overtime hours (>8.0h/day), and emergency duty hours.
    - **Cumulative Site Visits**: Total site visits logged across all field client locations.
    - **Master Export Action Toolbar**: Direct trigger buttons to generate and download master attendance reports in PDF, Excel (.xlsx), or CSV.
 
 3. **Tab 2: Site / Client Man-Hours Analytics View**:
    - Aggregates billable workforce man-hours by construction project site or client organization.
-   - **Date Range Filters**: Filter analytics by `All Time`, `This Month`, `This Week`, or `Today`.
+   - **Date & Cycle Range Filters**: Filter analytics by `Active Salary Cycle`, `All Time`, `This Month`, `This Week`, or `Today`.
    - **Dynamic Grouping Toggle**: Switch between **Group by Client** (aggregates multiple project sites under a single client banner) and **Specific Site** view.
    - **Expandable Site / Client Cards**: Interactive cards (`_expandedSiteKeys`) revealing total workers deployed, total man-hours spent, total site visits, client name, and a nested worker table listing individual personnel and their specific hours on site.
 

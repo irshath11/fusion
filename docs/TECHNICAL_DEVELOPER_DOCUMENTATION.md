@@ -33,28 +33,39 @@ The **Fusion Field Workforce Tracking & Timesheet Management Platform** is an en
                           [Role-Based Router (`main.dart`)]
                   │
                   ├─► Role = 'SUPER_ADMIN' / 'ADMIN' ──► Admin Web/Mobile Suite (`AdminDashboardScreen`)
+                  │                                        ├─► Active Salary Cycle Header Card (`SalaryCycleHelper`)
                   │                                        ├─► Executive KPI Ticker Ribbon & Attendance Feeds
-                  │                                        ├─► Employee & User Management (3-Tier RBAC)
+                  │                                        ├─► AI Voice Report Assistant Trigger (`AiVoiceReportBottomSheet`)
+                  │                                        ├─► Employee & User Management (3-Tier RBAC & Reassignment)
                   │                                        ├─► Office & Work Site Registry
                   │                                        ├─► Live GPS Tracking Map (`LiveTrackingMapScreen`)
                   │                                        ├─► 3-Tab Reports & Analytics (`ReportsAnalyticsScreen`)
                   │                                        │    ├─► Directory 3-Level Drilldown & Selfie Verification
+                  │                                        │    ├─► Active Salary Cycle Filter (25th to 24th)
+                  │                                        │    ├─► Admin Add/Edit Emergency Duty Logs
                   │                                        │    ├─► Cumulative Attendance Summary & Overtime Aggregation
                   │                                        │    └─► Site / Client Man-Hours Analytics & Client Grouping
                   │                                        ├─► Cloud Attendance Log Sync & Auto-Merge Engine
                   │                                        └─► Organization Ownership Transfer Dialog
                   │
                   └─► Role = 'EMPLOYEE' ───────────────► Employee Duty Portal (`EmployeeDashboardScreen`)
-                                                          ├─► 4-Step Attendance Stepper & Duty Pause Engine:
+                                                          ├─► Sequential Multi-Site Stepper & Duty Pause Engine:
                                                           │    1. Office Check-In (`OFFICE_CHECK_IN`)
                                                           │    2. Site Check-In (`SITE_CHECK_IN` + `SiteNameDialog`)
-                                                          │    3. Duty Pause / Break (`BreakTypeDialog`)
+                                                          │    3. Duty Pause / Break (`BREAK_START` / `BREAK_END`)
                                                           │    4. Site Check-Out (`SITE_CHECK_OUT`)
-                                                          │    5. Office Check-Out (`OFFICE_CHECK_OUT`)
-                                                          │    6. Shift Completed (`COMPLETED`)
+                                                          │    5. Next Site Check-In (`SITE_CHECK_IN` - dynamically numbered)
+                                                          │    6. Office Check-Out (`OFFICE_CHECK_OUT`)
+                                                          │    7. Shift Completed (`COMPLETED`)
+                                                          ├─► Emergency Duty Workflow (`EMERGENCY_CHECK_IN` / `OUT`)
+                                                          ├─► Service Report Generator (`EmployeeReportGeneratorScreen`)
+                                                          │    ├─► AI Voice Dictation & Gemini Auto-Fill (`AiReportService`)
+                                                          │    ├─► Spare Parts / Materials Replaced
+                                                          │    ├─► Touch-Drawn Digital E-Signatures (`ESignaturePad`)
+                                                          │    └─► Branded Service Report PDF (`ServiceReportPdfService`)
                                                           ├─► Live Camera Capture & 480px JPEG Compression Engine
                                                           ├─► Haversine Distance Geofence Validation
-                                                          ├─► Personal Daily Work Timesheet & PDF Export
+                                                          ├─► Salary Cycle Timesheet Portal & PDF Export (`SalaryCycleHelper`)
                                                           └─► Background Offline Sync Queue Indicator (`OfflineBanner`)
 ```
 
@@ -68,7 +79,11 @@ The **Fusion Field Workforce Tracking & Timesheet Management Platform** is an en
 | **Office Station & Work Site Management** | ✅ Full Access | ✅ Full Access | ❌ Restricted |
 | **Executive Dashboard & Live Tracking Map** | ✅ Full Access | ✅ Full Access | ❌ Restricted |
 | **Company Reports & Export (PDF, Excel, CSV)** | ✅ Full Access | ✅ Full Access | ❌ Restricted |
-| **Execute 4-Step Attendance Stepper** | ❌ Restricted | ❌ Restricted | ✅ Full Access |
+| **Emergency Duty Logging & Management** | ✅ Add / Edit Logs | ✅ Add / Edit Logs | ✅ Execute Check-In/Out |
+| **AI Voice Assistant & Gemini Extraction** | ✅ Full Access | ✅ Full Access | ✅ Full Access |
+| **Field Service Report Generator & E-Signatures** | ✅ View / Audit / PDF | ✅ View / Audit / PDF | ✅ Create / Edit / Sign |
+| **Attendance Records Reassignment** | ✅ Full Access | ❌ Restricted | ❌ Restricted |
+| **Execute Multi-Site Attendance Stepper** | ❌ Restricted | ❌ Restricted | ✅ Full Access |
 | **Personal Timesheet Summary & PDF Export** | ❌ Restricted | ❌ Restricted | ✅ Full Access |
 | **Self-Service Password Update** | ✅ Full Access | ✅ Full Access | ✅ Full Access |
 
@@ -410,4 +425,60 @@ npx serve -s . -l 3000
 - **Android App Bundle (.aab)**: Produced via `flutter build appbundle --release` at `build/app/outputs/bundle/release/app-release.aab`.
 - **Google Play Compliance**: Pre-configured Data Safety declarations (Location, Name, Email collection), IARC Content Rating certificate (`PEGI 3` / `Everyone 3+`), App Access demo credentials, and public Account Deletion link ([`PRIVACY_POLICY.md`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/PRIVACY_POLICY.md)).
 - **Store Listing Visual Assets**: Includes 512x512 vector launcher icon (`app_icon_512.jpg`) and 1024x500 Figma-style Feature Graphic banner (`feature_graphic.jpg`).
+
+---
+
+## 15. AI Voice Reporting & Generative Intelligence Architecture
+
+### Service: `AiReportService` (`lib/core/services/ai_report_service.dart`)
+- **Gemini Model**: Integrates `gemini-3.6-flash` via the `google_generative_ai` package.
+- **Phonetic & Acronym Cleansing (`cleanSpeechText`)**: Intercepts noisy speech-to-text dictation and automatically cleans field engineering misrecognitions (e.g., `"cap acid or"` ➔ `capacitor`, `"fifty u f"` ➔ `50uF`, `"d b box"` ➔ `DB Box`, `"con tak ter"` ➔ `contactor`).
+- **Structured Field Extraction (`extractReportFields`)**: Analyzes unstructured technician voice dictation and returns schema-conformant `AiExtractedReportData` objects isolating:
+  - `defectsFound`: Initial fault observations prior to servicing.
+  - `detailsOfWorkDone`: Sequential technical actions performed.
+  - `callType`: Categorized as `Complaint`, `Breakdown`, or `Preventive`.
+  - `priority`: `Urgent` or `Normal`.
+  - `suggestedServices`: List of matching disciplines (`A/C`, `Electrical`, `Fire Fighting`, etc.).
+  - `materials`: Parsed list of spare parts (`material`, `qty`).
+- **Offline Heuristic Parser (`_parseHeuristically`)**: Deterministic regex and dictionary-based fallback engine providing 100% extraction offline without an API key.
+
+### Interactive UI: `AiVoiceReportBottomSheet` (`lib/core/widgets/ai_voice_report_bottom_sheet.dart`)
+- Modern modal bottom sheet with animated audio waveforms, real-time speech-to-text listening, vocal feedback synthesis (`flutter_tts`), chip previews, and one-tap form auto-population.
+
+---
+
+## 16. Field Service Reports & Digital E-Signatures Architecture
+
+### Screen & Controller: `EmployeeReportGeneratorScreen` & `EmployeeReportsListScreen`
+- **Location**: `lib/features/employee/presentation/`
+- **Multi-Section Data Structure**:
+  - Header: Reference Number (`FES-SR-YYYY-XXXX`), Job No, Property Info, Client Contact, Times.
+  - Call Classification: `callType`, `priority`, 15 engineering disciplines checklist.
+  - Technical Data: Defects found, work done, materials/parts replaced table.
+  - Verification: Customer performance rating, housekeeping confirmation, sign-off names.
+
+### Digital Signature Canvas: `ESignaturePad` (`lib/core/widgets/e_signature_pad.dart`)
+- Vector touch-drawn canvas capturing on-screen finger or stylus signatures.
+- Exports lossless PNG byte streams (`Uint8List`) for technician and customer approval blocks.
+
+### PDF Report Compilation: `ServiceReportPdfService` (`lib/core/services/service_report_pdf_service.dart`)
+- Generates branded ISO-style field service report documents with embedded signatures, company header, and structured tables ready for sharing and printing.
+
+### Cloud Storage: Supabase `service_reports` Table
+- Schema defined in `supabase_service_reports_schema.sql` with JSONB payload storage, unique reference number indexing, and RLS policies for tenant-isolated access.
+
+---
+
+## 17. Enterprise Salary Cycle Engine Architecture
+
+### Utility: `SalaryCycleHelper` (`lib/core/utils/salary_cycle_helper.dart`)
+- **Corporate Pay Period Boundary**: Runs from the **25th of the prior month (00:00:00)** to the **24th of the current month (23:59:59)** (e.g., 25 Aug – 24 Sep = September Salary Cycle).
+- **Core Methods**:
+  - `SalaryCycle.fromDate(DateTime date)`: Automatically resolves which salary cycle a given timestamp belongs to.
+  - `SalaryCycle.current()`: Resolves the active cycle based on current system time.
+  - `SalaryCycle.forMonth(int year, int month)`: Explicitly generates cycle bounds for any target month/year.
+  - `SalaryCycle.getRecentCycles()`: Generates list of navigable historical cycles clamped to `earliestSalaryYear = 2026` and `earliestSalaryMonth = 9`.
+  - `filterAttendanceRecords()` & `filterTimesheetEntries()`: In-memory filtering of records strictly within cycle millisecond bounds.
+- **Cross-Screen Integration**: Integrated into **Admin Dashboard** (active cycle overview), **Reports & Analytics** (dynamic cycle selector), and **Employee Timesheets** (cycle-accurate payroll auditing).
+
 

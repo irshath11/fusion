@@ -18,11 +18,12 @@ Enterprise-grade, offline-first mobile and web application built using **Flutter
 - **Primary Firebase Auth + Local Hive Database Fallback**: Authenticates via Firebase Authentication; seamlessly falls back to local database profiles (`app_settings` Hive box) and demo admin credentials if Firebase is unreachable or throws credential exceptions (`invalid-credential`, `user-not-found`).
 - **Universal Password Visibility Toggles**: All password input fields across the application (Login, Setup Wizard, Employee Password Update, User Creation Form, Ownership Transfer) feature interactive show/hide eye icon toggle buttons (`Icons.visibility_outlined` / `Icons.visibility_off_outlined`).
 
-### 4. Strict 4-Step Sequential Attendance Workflow & Duty Pause Engine
-`1. Office Check-In` ➔ `2. Site Check-In` ➔ `3. Site Check-Out (Leaving Site)` ➔ `4. Office Check-Out (Reach Office)` ➔ `Shift Completed`
-- State locks prevent skipping steps or altering step execution order.
-- `SiteNameDialog` dropdown prompts selection from pre-configured work sites (`RELAAM (AMC)`, `RELAAM (WO)`, `CARRIER`, `MOPA`, `MPM`, `ELV`, `OTHERS (AMC)`, `OTHERS (WO)`) or custom location inputs.
-- **Duty Pause & Break Tracking (`BreakTypeDialog`)**: Allows field personnel to pause duty for rest/errands with optional notes, excluding break duration from net billable duty hours without breaking the 4-step shift workflow.
+### 4. Sequential Multi-Site Attendance Workflow & Duty Pause Engine
+`1. Office Check-In` ➔ `2. Site Check-In` ➔ `3. Site Check-Out (Leaving Site)` ➔ `4. Site Check-In (Next Site)` ... ➔ `Office Check-Out (Reach Office)` ➔ `Shift Completed`
+- **Dynamic Chronological Numbering**: Every event in the timeline is numbered dynamically based on occurrence (`1.`, `2.`, `3.`, `4.`, `5.`, ...), seamlessly accommodating multiple field client visits per day.
+- **Site Selection Dropdown (`SiteNameDialog`)**: Pre-configured work sites (`RELAAM (AMC)`, `RELAAM (WO)`, `CARRIER`, `MOPA`, `MPM`, `ELV`, `OTHERS (AMC)`, `OTHERS (WO)`) or custom location inputs.
+- **Duty Pause & Break Tracking (`BreakTypeDialog`)**: Allows field personnel to pause duty for rest/errands with optional notes, excluding break duration from net billable duty hours without breaking the shift workflow.
+- **Emergency Duty Workflow**: Dedicated on-call check-in (`emergencyCheckIn`) and check-out (`emergencyCheckOut`) for out-of-hours emergencies, system breakdowns, and urgent client call-outs, with admin add/edit capabilities.
 
 ### 5. Employee Work Timesheet Engine
 - **Automatic Hour Calculation**: Calculates total daily work duration between `1. Office Check-In` and `4. Office Check-Out`, factoring out logged duty breaks.
@@ -84,6 +85,27 @@ Enterprise-grade, offline-first mobile and web application built using **Flutter
 - **Play Console Compliance Declarations**: Configured Data Safety (Location, Name, Email collection), IARC Content Rating (PEGI 3 / Everyone 3+), App Access credentials, and Public Account Deletion Link.
 - **Store Listing Visual Assets**: Includes customized 512x512 PNG App Icon (`app_icon_512.jpg`) and 1024x500 Figma-style Feature Graphic banner (`feature_graphic.jpg`).
 
+### 18. AI Voice Reporting & Google Gemini AI Integration
+- **Speech-to-Text Engineering Cleansing**: Corrects acoustic dictation errors and technical engineering acronyms (`"cap acid or"` ➔ `capacitor`, `"fifty u f"` ➔ `50uF`, `"d b box"` ➔ `DB Box`, `"m c b"` ➔ `MCB`) using Google Gemini AI (`gemini-3.6-flash`).
+- **Automated Field Service Extraction**: Generates structured JSON reports separating *Defects Found*, *Details of Work Done*, *Call Type* (`Complaint`, `Breakdown`, `Preventive`), *Priority* (`Urgent`, `Normal`), *Suggested Services*, and *Materials Replaced*.
+- **Interactive Voice Assistant Modal (`AiVoiceReportBottomSheet`)**: Real-time microphone listening, pulsing waveforms, speech-to-text integration, and text-to-speech (`flutter_tts`) voice synthesis.
+- **Offline Heuristic Engine**: Fallback deterministic regex parser ensuring 100% extraction functionality with zero network connectivity.
+
+### 19. Field Service Report Generator & Digital E-Signatures
+- **Multi-Section Service Sheet (`EmployeeReportGeneratorScreen`, `EmployeeReportsListScreen`)**: Captures property info, job numbers, contact details, 15 engineering disciplines, spare parts tables, customer ratings, and housekeeping status.
+- **Touch-Drawn Digital E-Signatures (`ESignaturePad`)**: High-fidelity vector signature pad for on-screen customer and technician approvals.
+- **ISO-Standard PDF Generation (`ServiceReportPdfService`)**: Generates printable branded service report documents with embedded signatures, logo, and metadata tables.
+- **Supabase Cloud Sync**: Synchronizes reports to remote `service_reports` PostgreSQL table with offline Hive caching.
+
+### 20. Enterprise Salary Cycle Engine (25th-to-24th Cutoffs)
+- **Corporate Payroll Boundaries (`SalaryCycleHelper`)**: Aligns attendance and timesheets with corporate 25th-to-24th salary cycles (e.g., September 2026 cycle runs from 25 Aug 2026 to 24 Sep 2026).
+- **Active Cycle Headers & Selectors**: Real-time display of the active cycle and dynamic historical cycle selectors in the Admin Dashboard, Reports & Analytics, and Employee Timesheet screens.
+- **Earliest Implemented Boundary**: Clamps historical navigation to active implementation periods (Aug-Sep 2026 onwards).
+
+### 21. Attendance Records Reassignment Engine
+- **Profile & Record Reassignment**: Allows administrators to reassign historical attendance logs between employee profiles during user credential updates, staff transitions, or account merges.
+- **Atomic Local & Cloud Synchronization**: Preserves original audit timestamps, GPS logs, and facial verification photos across Hive and Supabase.
+
 ---
 
 ## 💻 Running the Admin Web Application
@@ -143,7 +165,7 @@ attendance_app/
 │   ├── styles.css                  # Enterprise Design System & CSS Variables
 │   ├── app.js                      # JavaScript Controller, Supabase JS SDK & Leaflet Integration
 │   └── package.json                # Local web server script
-├── docs/                           # Comprehensive System & Feature Documentation (Modules 00–11)
+├── docs/                           # Comprehensive System & Feature Documentation (Modules 00–14)
 │   ├── 00_system_architecture.md
 │   ├── 01_auth_and_password_management.md
 │   ├── 02_organization_setup.md
@@ -156,24 +178,28 @@ attendance_app/
 │   ├── 09_timesheet_and_work_site_management.md
 │   ├── 10_security_device_binding_and_ownership_transfer.md
 │   ├── 11_google_play_store_deployment_and_publishing.md
+│   ├── 12_ai_voice_reporting_and_gemini_insights.md
+│   ├── 13_service_report_generator_and_e_signatures.md
+│   ├── 14_emergency_duty_and_salary_cycle_engine.md
 │   └── README.md                   # Documentation Index
+├── supabase_service_reports_schema.sql # Supabase PostgreSQL schema for Field Service Reports
 ├── lib/
 │   ├── main.dart                   # Role-Based Router Entry Point (Web & Mobile)
 │   ├── app_config.dart             # Global environment configurations
 │   ├── core/                       # Shared utilities, constants, & themes
 │   │   ├── constants/              # Colors, Themes, Enums (UserRole, WorkflowStep, ActivityLogAction)
 │   │   ├── theme/                  # AppThemePreset, AppThemePalette, ThemeCubit, ThemeSelectorModal
-│   │   ├── services/               # LocationService, CameraService, SupabaseService, ExportServices
-│   │   ├── utils/                  # GeofenceCalculator, TimesheetCalculator
-│   │   └── widgets/                # AppButton, CustomTextField, StatusBadge, OfflineBanner, AppShell
-│   ├── database/                   # Hive Local Database Persistence
+│   │   ├── services/               # LocationService, CameraService, SupabaseService, ExportServices, AiReportService, ServiceReportPdfService
+│   │   ├── utils/                  # GeofenceCalculator, TimesheetCalculator, SalaryCycleHelper
+│   │   └── widgets/                # AppButton, CustomTextField, StatusBadge, OfflineBanner, AppShell, AiVoiceReportBottomSheet, ESignaturePad
+│   ├── database/                   # Hive Local Database Persistence (attendance, sync, service reports)
 │   └── features/                   # Clean Architecture Features
 │       ├── setup/                  # First-Time Wizard Screen & Cubit
 │       ├── auth/                   # Login Screen, Firebase/Supabase Auth & Cubit
 │       ├── attendance/             # Attendance Workflow Stepper, Camera Modal, SiteNameDialog, Cubit
-│       ├── employee/               # Employee Duty Portal & Timeline
+│       ├── employee/               # Employee Duty Portal, Dynamic Timeline, Service Report Generator & Directory
 │       ├── admin/                  # Dashboard, Employee & Office Management, Work Sites, Ownership Transfer & Responsive Desktop Web View
-│       ├── timesheet/              # Employee Timesheet Portal, Daily Entry Calculation, PDF Export
+│       ├── timesheet/              # Employee Timesheet Portal, Salary Cycle Work Hour Calculation, PDF Export
 │       ├── security/               # Hardware Device Binding Service
 │       └── sync/                   # Offline Sync Engine
 ├── pubspec.yaml

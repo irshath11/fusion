@@ -14,11 +14,14 @@ The **Fusion Attendance & Field Workforce Tracking Application** is a production
 | **Local Storage** | `hive` & `hive_flutter` | High-performance offline key-value & document database |
 | **Authentication** | Firebase Authentication (`firebase_auth`) | Identity management, password verification, & security tokens |
 | **Cloud Database** | Supabase PostgreSQL (`supabase_flutter`) | Central relational database, real-time sync, RLS policies, & administrative persistence |
+| **Generative AI** | Google Gemini AI (`google_generative_ai`) | Speech cleaning, technical acronym correction, & structured service report extraction |
+| **Voice & Speech** | `speech_to_text` & `flutter_tts` | Real-time field voice dictation & vocal report synthesis |
 | **Hardware APIs**| `camera`, `geolocator`, `connectivity_plus`, `device_info_plus` | GPS location validation, live selfie capture, network monitoring, & hardware device fingerprinting |
 | **Map Rendering** | OpenStreetMap / Flutter Map (`flutter_map`) & Leaflet.js | Interactive live tracking map with geofence radius visualizations (Flutter & Web Admin) |
 | **Image Compression** | `image` (Dart native) | Downscales live camera frames to 480px @ 65% JPEG (99% payload reduction) |
-| **Timesheet Calculator**| Internal (`TimesheetCalculator`) | Aggregates workflow steps into daily work durations, regular hours (capped at 8.0h), and overtime hours |
-| **Exporting** | `csv`, `excel`, `pdf`, `printing` | Multi-format reporting and timesheet PDF rendering engine |
+| **Timesheet & Salary Engine**| Internal (`TimesheetCalculator`, `SalaryCycleHelper`) | 25th-to-24th corporate salary cycles, daily work duration, 8.0h regular caps, and overtime |
+| **Digital Signatures** | Internal (`ESignaturePad`) | Touch-drawn vector e-signatures for customers & technicians |
+| **Exporting** | `csv`, `excel`, `pdf`, `printing` | Multi-format reporting, timesheet PDF, & branded service report PDF rendering engine |
 | **Standalone Web Admin**| HTML5, CSS3, JavaScript (ES6+), Supabase JS SDK, Leaflet.js | Lightweight, high-performance web portal for administrative management (`web_admin/`) |
 
 ---
@@ -41,20 +44,21 @@ The **Fusion Attendance & Field Workforce Tracking Application** is a production
                        ┌───────────────────────────────────────────┐
                        │             Data Layer                    │
                        │ (LocalDatabaseService, SupabaseService,   │
-                       │   SyncEngine, CameraService, DeviceBinding)│
+                       │   SyncEngine, CameraService, DeviceBinding│
+                       │   AiReportService, SalaryCycleHelper)     │
                        └───────────────────────────────────────────┘
 ```
 
 ### Key Modules & Directories
-- `lib/core/`: Application constants (`app_colors.dart`, `app_enums.dart`), reusable UI widgets (`app_button.dart`, `custom_text_field.dart`, `status_badge.dart`, `offline_banner.dart`), core utilities (`geofence_calculator.dart`, `timesheet_calculator.dart`), and services (`location_service.dart`, `camera_service.dart`, `supabase_service.dart`, `pdf_export_service.dart`).
-- `lib/database/`: Hive local database engine (`local_database_service.dart`) managing offline boxes: `organization`, `currentUser`, `employees`, `offices`, `attendanceRecords`, `pendingSyncRecords`, and `usersBox`.
+- `lib/core/`: Application constants (`app_colors.dart`, `app_enums.dart`, `app_theme.dart`), reusable UI widgets (`app_button.dart`, `custom_text_field.dart`, `status_badge.dart`, `offline_banner.dart`, `ai_voice_report_bottom_sheet.dart`, `e_signature_pad.dart`), core utilities (`geofence_calculator.dart`, `timesheet_calculator.dart`, `salary_cycle_helper.dart`), and services (`location_service.dart`, `camera_service.dart`, `supabase_service.dart`, `pdf_export_service.dart`, `ai_report_service.dart`, `service_report_pdf_service.dart`).
+- `lib/database/`: Hive local database engine (`local_database_service.dart`) managing offline boxes: `organization`, `currentUser`, `employees`, `offices`, `attendanceRecords`, `pendingSyncRecords`, `serviceReportsBox`, and `usersBox`.
 - `lib/features/`: Feature-sliced business logic:
   - `auth/`: Login, dual-layer authentication cubit, initial password change, and session handling.
   - `setup/`: Organization onboarding, initial geofence configuration, Super Admin provisioning.
   - `admin/`: User management (3-tier RBAC), office station setup, work site management, ownership transfer, live GPS tracking map, executive dashboard.
-  - `employee/`: Employee daily workflow dashboard, timeline, selfie capture.
-  - `attendance/`: 4-step workflow Cubit, camera modal, site selection dialog, Haversine geofence validation.
-  - `timesheet/`: Employee timesheet portal, daily work hour calculation, regular/overtime breakdown, PDF export.
+  - `employee/`: Employee daily workflow dashboard, dynamic timeline, selfie capture, service report generator (`employee_report_generator_screen.dart`), and past service reports directory.
+  - `attendance/`: 4-step workflow Cubit, multi-site sequential stepper, camera modal, site selection dialog, Haversine geofence validation, emergency duty check-in/out.
+  - `timesheet/`: Employee timesheet portal, salary cycle-aware work hour calculations, regular/overtime breakdown, PDF export.
   - `security/`: Hardware device binding service (`device_binding_service.dart`).
   - `sync/`: Background sync engine with exponential backoff & connectivity listener.
 - `web_admin/`: Standalone Enterprise Web Admin Portal container (`index.html`, `styles.css`, `app.js`).
@@ -111,6 +115,7 @@ The Supabase PostgreSQL database schema ([backend/supabase_schema.sql](file:///c
 11. `devices`: Bound hardware devices, hardware IDs, OS versions.
 12. `notifications`: In-app system alerts.
 13. `activity_logs`: Audit trail (`ORG_SETUP`, `EMPLOYEE_CREATED`, `OWNERSHIP_TRANSFERRED`, `DEVICE_BOUND`, etc.).
+14. `service_reports`: Field engineering service reports, call types, priorities, defects, work done, materials JSONB, customer/technician metadata, and digital signature data.
 
 ### Stored Procedures & Security
 - **`transfer_organization_ownership(p_org_id, p_current_super_admin_id, p_target_admin_id)`**: Stored procedure performing atomic promotion of target Admin to Super Admin and demotion of current Super Admin to Admin within a single transaction.

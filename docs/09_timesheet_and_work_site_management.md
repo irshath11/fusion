@@ -10,8 +10,8 @@ The **Employee Timesheet & Work Site Management** feature provides comprehensive
 ### A. Employee Work Timesheet Engine (`TimesheetCalculator`)
 1. **Daily Work Shift Calculation**:
    - Evaluates attendance logs for each employee grouped by date (`yyyy-MM-dd`).
-   - Identifies primary start time from `1. Office Check-In` (`OFFICE_CHECK_IN`) or fallback first site check-in.
-   - Identifies primary end time from `4. Office Check-Out` (`OFFICE_CHECK_OUT`) or last site check-out.
+   - Identifies primary start time from `Office Check-In` (`OFFICE_CHECK_IN`) or fallback first site check-in.
+   - Identifies primary end time from `Office Check-Out` (`OFFICE_CHECK_OUT`) or last site check-out.
    - Calculates total daily work duration (`totalWorkedDuration`).
 
 2. **Regular vs. Overtime Hours Breakdown**:
@@ -19,19 +19,27 @@ The **Employee Timesheet & Work Site Management** feature provides comprehensive
    - If total worked hours $\le 8.0$, all hours are classified as **Regular Hours**.
    - If total worked hours $> 8.0$, **Regular Hours** = $8.0$ and **Overtime Hours** = $\text{Total Hours} - 8.0$.
 
-3. **Site Visit Duration Breakdown (`SiteVisitSummary`)**:
-   - Tracks individual site visits during the shift.
-   - Measures time elapsed between `2. Site Check-In` and `3. Site Check-Out` for each site visit (e.g. `RELAAM (AMC)`, `CARRIER`).
+3. **Emergency Duty Hours Tracking**:
+   - Dedicated aggregation of on-call emergency shifts (`emergencyCheckIn` / `emergencyCheckOut`).
+   - Emergency hours are separated from scheduled shift hours for transparent payroll and overtime auditing.
 
-4. **Executive Timesheet KPI Cards**:
-   - **Total Worked Hours**: Aggregated hours across selected period.
+4. **Salary Cycle Filtering (`SalaryCycleHelper`)**:
+   - Timesheet calculations dynamically align with the corporate salary cycle (25th of previous month to 24th of current month).
+   - Allows employees and managers to review exact duty hours corresponding to their pay slip.
+
+5. **Multi-Site Visit Duration Breakdown (`SiteVisitSummary`)**:
+   - Tracks each individual site visit during the shift across multiple project sites.
+   - Measures time elapsed between `Site Check-In` and `Site Check-Out` for each site visit (e.g. `RELAAM (AMC)`, `CARRIER`, `MOPA`).
+
+6. **Executive Timesheet KPI Cards**:
+   - **Total Worked Hours**: Aggregated hours across selected salary cycle or period.
    - **Regular Hours**: Cumulative regular shift hours.
    - **Overtime Hours**: Cumulative overtime hours.
    - **Days Worked**: Total active duty days.
 
-5. **Timesheet PDF Download**:
+7. **Timesheet PDF Download**:
    - Integrated with `PdfExportService.generateTimesheetPdf()`.
-   - Renders formatted, printable timesheet documents featuring employee code, name, designation, daily breakdown table, regular vs overtime breakdown, site visit history, and total hours summary.
+   - Renders formatted, printable timesheet documents featuring employee code, name, designation, daily breakdown table, regular vs overtime breakdown, emergency duty breakdown, site visit history, and total hours summary.
 
 ---
 

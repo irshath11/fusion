@@ -7,16 +7,28 @@ The **Attendance Workflow & Camera Verification** feature enforces a strict sequ
 
 ## 1. Key Functionalities
 
-1. **Strict 4-Step Sequential Daily Workflow (`WorkflowStep`)**:
-   - **Step 1**: `1. Office Check-In` (`OFFICE_CHECK_IN`) – Recorded at the starting office station.
-   - **Step 2**: `2. Site Check-In` (`SITE_CHECK_IN`) – Recorded upon arrival at the client work site / project location.
-   - **Step 3**: `3. Site Check-Out (Leaving Site)` (`SITE_CHECK_OUT`) – Recorded upon completing field work and leaving the site.
-   - **Step 4**: `4. Office Check-Out (Reach Office)` (`OFFICE_CHECK_OUT`) – Recorded upon returning to the office station to complete the shift.
-   - **Shift Completed**: `Shift Completed` (`COMPLETED`) – Final state lock once all 4 steps are completed.
-   - State locks prevent skipping steps or altering step execution order.
+1. **Sequential Daily Workflow & Multi-Site Duty Stepper (`WorkflowStep`)**:
+   - **Office Check-In** (`OFFICE_CHECK_IN`) – Recorded at the starting office station.
+   - **Site Check-In** (`SITE_CHECK_IN`) – Recorded upon arrival at the client work site / project location.
+   - **Site Check-Out (Leaving Site)** (`SITE_CHECK_OUT`) – Recorded upon completing field work and leaving the site.
+   - **Multi-Site Dynamic Continuation**: If the technician travels to additional project sites during the day, the stepper seamlessly logs sequential site visits:
+     - `1. Office Check-In`
+     - `2. Site Check-In (Downtown Plaza)`
+     - `3. Site Check-Out (Leaving Site) (Downtown Plaza)`
+     - `4. Site Check-In (Uptown Complex)`
+     - `5. Site Check-Out (Leaving Site) (Uptown Complex)`
+     - `6. Office Check-Out (Reach Office)`
+   - **Office Check-Out (Reach Office)** (`OFFICE_CHECK_OUT`) – Recorded upon returning to the office station to complete the standard shift.
+   - **Shift Completed**: `Shift Completed` (`COMPLETED`) – Final state lock once the work day is finalized.
+   - **Dynamic Sequential Step Numbering**: The timeline UI calculates and prefixes every log with `${index + 1}. ` dynamically based on chronological sequence, eliminating static numbering resets.
 
-2. **Site Selection Dropdown (`SiteNameDialog`)**:
-   - During `2. Site Check-In`, employees select their assigned project location from a structured dropdown dialog containing:
+2. **Emergency Duty & On-Call Dispatch Workflow**:
+   - **Emergency Duty Check-In** (`EMERGENCY_CHECK_IN`) – For urgent breakdowns, late-night repairs, or emergency call-outs.
+   - **Emergency Duty Check-Out** (`EMERGENCY_CHECK_OUT`) – Logs departure after resolving the emergency.
+   - Can be added/edited by administrators directly from the Admin Dashboard and Reports screen.
+
+3. **Site Selection Dropdown (`SiteNameDialog`)**:
+   - During `Site Check-In`, employees select their assigned project location from a structured dropdown dialog containing:
      - `RELAAM (AMC)`
      - `RELAAM (WO)`
      - `CARRIER`
@@ -27,26 +39,26 @@ The **Attendance Workflow & Camera Verification** feature enforces a strict sequ
      - `OTHERS (WO)`
    - Selecting `OTHERS` options displays an interactive text input for specifying custom location details, while registered work sites are automatically selectable.
 
-3. **Live Hardware Camera Capture & Hardware Fallback**:
+4. **Live Hardware Camera Capture & Hardware Fallback**:
    - Integrates `camera` package to access hardware front selfie camera (`CameraLensDirection.front`).
    - Handles low-resolution OEM driver fallbacks for specialized enterprise Android devices (Xiaomi, Vivo, Oppo, MediaTek chipset hardware).
    - If camera hardware is inaccessible, falls back to verified fallback snapshot capturing.
 
-4. **High-Efficiency Image Compression & Downscaling Engine**:
+5. **High-Efficiency Image Compression & Downscaling Engine**:
    - Live camera snapshots are downscaled to a max dimension of **480px** preserving aspect ratio using pure Dart `image` processing.
    - Encoded at **65% JPEG quality**.
    - **Payload Reduction**: Reduces raw camera images from **3.0 MB – 5.0 MB** down to **~25 KB – 45 KB** (**99% payload reduction**).
    - Keeps facial features crystal clear while enabling instant sub-second database synchronization.
 
-5. **Timeline UI & Time Pill Display**:
-   - Renders a daily timeline displaying completed steps with green check icons.
+6. **Timeline UI & Time Pill Display**:
+   - Renders a daily timeline displaying completed steps with green check icons and coffee icons for breaks.
    - Formats and displays exact capture timestamps (e.g., `09:15 AM`, `05:30 PM`) in a styled badge next to step titles.
    - Displays sync badges (`SYNCED` / `PENDING`).
 
-6. **Duty Pause & Break Tracking Engine (`BreakTypeDialog`)**:
-   - Interactive dialog allowing field personnel to log duty breaks during an active shift.
-   - Displays an informational banner notifying users that break durations are automatically excluded from net billable work shift hours without breaking the 4-step shift sequence.
-   - Supports optional detail notes (e.g., `Quick rest`, `Personal errand`) for administrative auditing.
+7. **Duty Pause & Break Tracking Engine (`BreakTypeDialog`)**:
+   - Interactive dialog allowing field personnel to log duty breaks (`BREAK_START` / `BREAK_END`) during an active shift.
+   - Displays an informational banner notifying users that break durations are automatically excluded from net billable work shift hours without breaking the shift sequence.
+   - Supports optional detail notes (e.g., `Quick rest`, `Lunch break`) for administrative auditing.
 
 ---
 
@@ -58,23 +70,35 @@ enum WorkflowStep {
   officeCheckIn,
   siteCheckIn,
   siteCheckOut,
+  breakStart,
+  breakEnd,
   officeCheckOut,
   completed,
+  emergencyCheckIn,
+  emergencyCheckOut,
 }
 
 extension WorkflowStepExtension on WorkflowStep {
   String get displayName {
     switch (this) {
       case WorkflowStep.officeCheckIn:
-        return '1. Office Check-In';
+        return 'Office Check-In';
       case WorkflowStep.siteCheckIn:
-        return '2. Site Check-In';
+        return 'Site Check-In';
       case WorkflowStep.siteCheckOut:
-        return '3. Site Check-Out (Leaving Site)';
+        return 'Site Check-Out (Leaving Site)';
+      case WorkflowStep.breakStart:
+        return 'Break Started';
+      case WorkflowStep.breakEnd:
+        return 'Break Ended';
       case WorkflowStep.officeCheckOut:
-        return '4. Office Check-Out (Reach Office)';
+        return 'Office Check-Out (Reach Office)';
       case WorkflowStep.completed:
         return 'Shift Completed';
+      case WorkflowStep.emergencyCheckIn:
+        return 'Emergency Duty Check-In';
+      case WorkflowStep.emergencyCheckOut:
+        return 'Emergency Duty Check-Out';
     }
   }
 
@@ -86,10 +110,18 @@ extension WorkflowStepExtension on WorkflowStep {
         return 'SITE_CHECK_IN';
       case WorkflowStep.siteCheckOut:
         return 'SITE_CHECK_OUT';
+      case WorkflowStep.breakStart:
+        return 'BREAK_START';
+      case WorkflowStep.breakEnd:
+        return 'BREAK_END';
       case WorkflowStep.officeCheckOut:
         return 'OFFICE_CHECK_OUT';
       case WorkflowStep.completed:
         return 'COMPLETED';
+      case WorkflowStep.emergencyCheckIn:
+        return 'EMERGENCY_CHECK_IN';
+      case WorkflowStep.emergencyCheckOut:
+        return 'EMERGENCY_CHECK_OUT';
     }
   }
 }

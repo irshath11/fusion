@@ -30,6 +30,10 @@ The **Employee Management** feature empowers Super Admins and Administrators to 
    - **Password Reset**: Admin can trigger password resets for staff members.
    - **Audit Activity Logging**: Records `EMPLOYEE_CREATED`, `EMPLOYEE_UPDATED`, `EMPLOYEE_DISABLED`, `EMPLOYEE_ACTIVATED`, and `EMPLOYEE_DELETED` in `activity_logs`.
 
+5. **Attendance Records Reassignment Engine**:
+   - Allows administrators to reassign historical attendance records from one employee ID to another (e.g., when merging accounts, repairing credential mismatches, or transitioning employee profiles).
+   - Atomically updates record ownership across local Hive cache (`attendanceBox`) and cloud Supabase tables (`attendance_records`), preserving original audit timestamps and camera verification photos.
+
 ---
 
 ## 2. Technical Implementation & Data Structures
