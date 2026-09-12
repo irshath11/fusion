@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_theme.dart';
 import '../../../database/local_database_service.dart';
+import '../domain/employee_entity.dart';
 
 class AdminEditAttendanceDialog extends StatefulWidget {
   final String employeeId;
@@ -60,11 +61,66 @@ class _AdminEditAttendanceDialogState
   late TimeOfDay _checkOutTime;
   late TextEditingController _otController;
   late TextEditingController _remarksController;
+  late String _selectedEmployeeId;
+  late String _selectedEmployeeName;
+  List<EmployeeEntity> _availableEmployees = [];
   bool _isSaving = false;
+
+  double _calculateAutoOt(TimeOfDay checkIn, TimeOfDay checkOut) {
+    final checkInMins = checkIn.hour * 60 + checkIn.minute;
+    var checkOutMins = checkOut.hour * 60 + checkOut.minute;
+    if (checkOutMins < checkInMins) {
+      checkOutMins += 1440;
+    }
+    final grossMins = checkOutMins - checkInMins;
+    if (grossMins <= 480) {
+      return 0.0;
+    }
+    final remainingMins = grossMins > 540 ? (grossMins - 540) : 0;
+    final travelMins = remainingMins > 60 ? 60 : remainingMins;
+    final otMins = remainingMins > travelMins ? (remainingMins - travelMins) : 0;
+    return otMins / 60.0;
+  }
 
   @override
   void initState() {
     super.initState();
+    _selectedEmployeeId = widget.employeeId;
+    _selectedEmployeeName = widget.employeeName;
+
+    final db = LocalDatabaseService();
+    final all = db.getEmployees();
+    final Map<String, EmployeeEntity> uniqueEmp = {};
+    for (final e in all) {
+      uniqueEmp[e.id] = e;
+    }
+    if (!uniqueEmp.containsKey(widget.employeeId)) {
+      uniqueEmp[widget.employeeId] = EmployeeEntity(
+        id: widget.employeeId,
+        employeeCode: 'EMP',
+        name: widget.employeeName,
+        mobileNumber: '',
+        email: '',
+        designation: 'Staff',
+        department: 'General',
+      );
+    }
+    for (final u in db.getUsers()) {
+      if (!uniqueEmp.containsKey(u.id)) {
+        uniqueEmp[u.id] = EmployeeEntity(
+          id: u.id,
+          employeeCode: u.employeeCode ?? 'EMP',
+          name: u.fullName,
+          mobileNumber: u.phoneNumber ?? '',
+          email: u.email,
+          designation: u.designation ?? 'Staff',
+          department: u.department ?? 'General',
+        );
+      }
+    }
+    _availableEmployees = uniqueEmp.values.toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
     final defaultIn = widget.initialCheckIn ??
         DateTime(widget.date.year, widget.date.month, widget.date.day, 8, 0);
     final defaultOut = widget.initialCheckOut ??
@@ -73,10 +129,13 @@ class _AdminEditAttendanceDialogState
     _checkInTime = TimeOfDay.fromDateTime(defaultIn);
     _checkOutTime = TimeOfDay.fromDateTime(defaultOut);
 
+    final autoOt = _calculateAutoOt(_checkInTime, _checkOutTime);
+    final initialOt = (widget.initialOtHours != null && widget.initialOtHours! > 0)
+        ? widget.initialOtHours!
+        : (autoOt > 0 ? autoOt : (widget.initialOtHours ?? 0.0));
+
     _otController = TextEditingController(
-      text: widget.initialOtHours != null
-          ? widget.initialOtHours!.toStringAsFixed(1)
-          : '0.0',
+      text: initialOt.toStringAsFixed(1),
     );
     _remarksController = TextEditingController(
       text: widget.initialRemarks ?? '',
@@ -96,7 +155,11 @@ class _AdminEditAttendanceDialogState
       initialTime: _checkInTime,
     );
     if (picked != null) {
-      setState(() => _checkInTime = picked);
+      setState(() {
+        _checkInTime = picked;
+        _otController.text =
+            _calculateAutoOt(_checkInTime, _checkOutTime).toStringAsFixed(1);
+      });
     }
   }
 
@@ -106,7 +169,11 @@ class _AdminEditAttendanceDialogState
       initialTime: _checkOutTime,
     );
     if (picked != null) {
-      setState(() => _checkOutTime = picked);
+      setState(() {
+        _checkOutTime = picked;
+        _otController.text =
+            _calculateAutoOt(_checkInTime, _checkOutTime).toStringAsFixed(1);
+      });
     }
   }
 
@@ -178,14 +245,16 @@ class _AdminEditAttendanceDialogState
       final adminName = adminUser?.fullName ?? 'Administrator';
 
       await db.updateOrAddAdminAttendanceOverride(
-        employeeId: widget.employeeId,
-        employeeName: widget.employeeName,
+        employeeId: _selectedEmployeeId,
+        employeeName: _selectedEmployeeName,
         date: widget.date,
         checkInTime: fullCheckIn,
         checkOutTime: fullCheckOut,
         manualOvertimeHours: parsedOt,
         remarks: remarksStr.isNotEmpty ? remarksStr : 'Shift adjusted by admin',
         adminName: adminName,
+        originalEmployeeId: widget.employeeId,
+        originalEmployeeName: widget.employeeName,
       );
 
       if (!mounted) return;
@@ -234,7 +303,7 @@ class _AdminEditAttendanceDialogState
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 Text(
-                  '${widget.employeeName} • $formattedDateStr',
+                  '$_selectedEmployeeName • $formattedDateStr',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.normal,
@@ -254,6 +323,53 @@ class _AdminEditAttendanceDialogState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 8),
+
+            // Assigned Employee Dropdown Selector
+            const Text(
+              'Assigned Employee',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isDark ? palette.cardBorderDark : Colors.grey.shade400,
+                ),
+                color: isDark ? palette.surfaceDark : Colors.grey.shade50,
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _availableEmployees.any((e) => e.id == _selectedEmployeeId)
+                      ? _selectedEmployeeId
+                      : (_availableEmployees.isNotEmpty ? _availableEmployees.first.id : null),
+                  isExpanded: true,
+                  icon: const Icon(Icons.arrow_drop_down),
+                  items: _availableEmployees.map((emp) {
+                    return DropdownMenuItem<String>(
+                      value: emp.id,
+                      child: Text(
+                        '${emp.name} (${emp.employeeCode})',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: _isSaving
+                      ? null
+                      : (val) {
+                          if (val != null) {
+                            final match = _availableEmployees.firstWhere((e) => e.id == val);
+                            setState(() {
+                              _selectedEmployeeId = match.id;
+                              _selectedEmployeeName = match.name;
+                            });
+                          }
+                        },
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
 
             // Time Pickers Row
             Row(
@@ -362,35 +478,74 @@ class _AdminEditAttendanceDialogState
                   'Overtime (OT) Hours Adjustment',
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                 ),
-                Builder(
-                  builder: (context) {
-                    final otVal =
-                        double.tryParse(_otController.text.trim()) ?? 0.0;
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: otVal > 0
-                            ? Colors.orange.withValues(alpha: 0.15)
-                            : Colors.grey.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                            color: otVal > 0
-                                ? Colors.orange.shade400
-                                : Colors.grey.shade400),
-                      ),
-                      child: Text(
-                        '${otVal.toStringAsFixed(1)}h OT',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: otVal > 0
-                              ? Colors.orange.shade900
-                              : Colors.grey.shade700,
+                Row(
+                  children: [
+                    InkWell(
+                      onTap: _isSaving
+                          ? null
+                          : () => setState(() {
+                                _otController.text =
+                                    _calculateAutoOt(_checkInTime, _checkOutTime)
+                                        .toStringAsFixed(1);
+                              }),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        margin: const EdgeInsets.only(right: 6),
+                        decoration: BoxDecoration(
+                          color: primaryColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                              color: primaryColor.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.autorenew_rounded,
+                                size: 12, color: primaryColor),
+                            const SizedBox(width: 2),
+                            Text(
+                              'Auto OT',
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: primaryColor),
+                            ),
+                          ],
                         ),
                       ),
-                    );
-                  },
+                    ),
+                    Builder(
+                      builder: (context) {
+                        final otVal =
+                            double.tryParse(_otController.text.trim()) ?? 0.0;
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: otVal > 0
+                                ? Colors.orange.withValues(alpha: 0.15)
+                                : Colors.grey.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                                color: otVal > 0
+                                    ? Colors.orange.shade400
+                                    : Colors.grey.shade400),
+                          ),
+                          child: Text(
+                            '${otVal.toStringAsFixed(1)}h OT',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: otVal > 0
+                                  ? Colors.orange.shade900
+                                  : Colors.grey.shade700,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),

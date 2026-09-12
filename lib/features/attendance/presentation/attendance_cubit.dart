@@ -121,18 +121,58 @@ class AttendanceCubit extends Cubit<AttendanceState> {
 
       // 2. Resolve target geofence bounds based on employee's assigned office / site
       final employees = _db.getEmployees();
-      final emp = employees.firstWhere(
-        (e) => e.id == user.id || e.email == user.email,
-        orElse: () => employees.isNotEmpty ? employees.first : EmployeeEntity(
-          id: user.id,
-          employeeCode: 'EMP-DEFAULT',
-          name: user.fullName,
-          mobileNumber: '',
+      EmployeeEntity? matchedEmp;
+
+      // 2a. Match by exact user ID or Firebase UID
+      for (final e in employees) {
+        if (e.id.isNotEmpty && (e.id == user.id || (user.firebaseUid.isNotEmpty && e.id == user.firebaseUid))) {
+          matchedEmp = e;
+          break;
+        }
+      }
+
+      // 2b. Match by Email
+      if (matchedEmp == null && user.email.trim().isNotEmpty) {
+        for (final e in employees) {
+          if (e.email.trim().isNotEmpty && e.email.trim().toLowerCase() == user.email.trim().toLowerCase()) {
+            matchedEmp = e;
+            break;
+          }
+        }
+      }
+
+      // 2c. Match by Full Name
+      if (matchedEmp == null && user.fullName.trim().isNotEmpty) {
+        for (final e in employees) {
+          if (e.name.trim().isNotEmpty && e.name.trim().toLowerCase() == user.fullName.trim().toLowerCase()) {
+            matchedEmp = e;
+            break;
+          }
+        }
+      }
+
+      // 2d. If employee entity does not yet exist locally, construct from current user and save it
+      // CRITICAL: NEVER fallback to employees.first, which mistakenly assigns logs to another person!
+      if (matchedEmp == null) {
+        final cleanName = user.fullName.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+        final prefix = cleanName.length >= 4
+            ? cleanName.substring(0, 4)
+            : (cleanName.isNotEmpty ? cleanName : 'STAFF');
+        final code = user.employeeCode ?? 'EMP-$prefix';
+
+        matchedEmp = EmployeeEntity(
+          id: user.id.isNotEmpty ? user.id : (user.firebaseUid.isNotEmpty ? user.firebaseUid : _uuid.v4()),
+          employeeCode: code,
+          name: user.fullName.trim().isNotEmpty ? user.fullName.trim() : user.email.split('@').first,
+          mobileNumber: user.phoneNumber ?? '',
           email: user.email,
-          designation: 'Staff',
-          department: 'General',
-        ),
-      );
+          designation: user.designation ?? 'Field Staff',
+          department: user.department ?? 'Operations',
+          isActive: true,
+        );
+        _db.saveEmployee(matchedEmp);
+      }
+      final emp = matchedEmp;
 
       double targetLat = 0.0;
       double targetLng = 0.0;

@@ -204,6 +204,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             e.name.trim().toLowerCase() == name.trim().toLowerCase()) {
           return entry.key;
         }
+        // Aliases: match 'Anand' or 'emp-anan' to 'Anandh Veeramani'
+        if ((name.trim().toLowerCase() == 'anand' || id.toLowerCase() == 'emp-anan') &&
+            (e.name.toLowerCase().contains('anandh') || e.email.toLowerCase() == 'anand@gmail.com')) {
+          return entry.key;
+        }
       }
       return null;
     }
@@ -294,7 +299,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       final nameKey = r.employeeName.trim().toLowerCase();
       final idKey = r.employeeId;
 
-      bool alreadyExists = employeeMap.values.any((e) =>
+      // Special alias: if record is tagged as 'anand' or 'emp-anan', map it to Anandh Veeramani
+      final isAnandhAlias = (nameKey == 'anand' || idKey.toLowerCase() == 'emp-anan' || idKey.toLowerCase() == 'anand') &&
+          employeeMap.values.any((e) =>
+              e.name.toLowerCase().contains('anandh') ||
+              e.email.toLowerCase() == 'anand@gmail.com');
+
+      bool alreadyExists = isAnandhAlias || employeeMap.values.any((e) =>
           e.id == idKey ||
           (e.employeeCode.isNotEmpty &&
               e.employeeCode.toLowerCase() == idKey.toLowerCase()) ||
@@ -314,7 +325,18 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       }
     }
 
-    final list = employeeMap.values.toList();
+    final list = employeeMap.values.where((e) {
+      final eName = e.name.trim().toLowerCase();
+      final eCode = e.employeeCode.trim().toUpperCase();
+      // Completely remove phantom 'Anand' / 'EMP-ANAN' if 'Anandh Veeramani' is present
+      if ((eName == 'anand' || eCode == 'EMP-ANAN') &&
+          employeeMap.values.any((other) =>
+              other.name.trim().toLowerCase().contains('anandh') ||
+              other.email.trim().toLowerCase() == 'anand@gmail.com')) {
+        return false;
+      }
+      return true;
+    }).toList();
     list.sort((a, b) =>
         a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
     return list;
@@ -334,6 +356,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
     final all = _getSynthesizedEmployees();
     final cleanId = employeeId.trim().toLowerCase();
+
+    // If resolving 'anand' or 'emp-anan', resolve directly to Anandh Veeramani
+    if (cleanId == 'anand' || cleanId == 'emp-anan') {
+      final anandh = all.where((e) =>
+          e.name.toLowerCase().contains('anandh') ||
+          e.email.toLowerCase() == 'anand@gmail.com');
+      if (anandh.isNotEmpty) return anandh.first;
+    }
+
     final match = all.where((e) =>
         e.id.toLowerCase() == cleanId ||
         e.employeeCode.toLowerCase() == cleanId ||
@@ -1062,6 +1093,243 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       );
     }
   }
+
+  Widget _buildMisattributedLogsBanner(EmployeeEntity currentEmp, List<AttendanceRecord> records) {
+    final users = _db.getUsers();
+    final suspiciousRecords = <AttendanceRecord>[];
+    String? detectedOwnerName;
+    String? detectedOwnerId;
+
+    for (final r in records) {
+      if (r.deviceId.startsWith('device-hw-')) {
+        final rawUid = r.deviceId.substring('device-hw-'.length);
+        final match = users.where((u) => u.id == rawUid || (u.firebaseUid.isNotEmpty && u.firebaseUid == rawUid));
+        if (match.isNotEmpty &&
+            match.first.fullName.trim().toLowerCase() != currentEmp.name.trim().toLowerCase()) {
+          suspiciousRecords.add(r);
+          detectedOwnerName ??= match.first.fullName;
+          detectedOwnerId ??= match.first.id;
+        }
+      }
+    }
+
+    if (suspiciousRecords.isEmpty || detectedOwnerName == null || detectedOwnerId == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.amber.shade700),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Misattributed Logs Detected',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Colors.amber.shade900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${suspiciousRecords.length} log(s) appear to have been captured from $detectedOwnerName\'s account instead of ${currentEmp.name}.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.amber.shade900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          ElevatedButton.icon(
+            onPressed: () async {
+              final count = await _db.reassignEmployeeAttendanceRecords(
+                fromEmployeeId: currentEmp.id,
+                fromEmployeeName: currentEmp.name,
+                toEmployeeId: detectedOwnerId!,
+                toEmployeeName: detectedOwnerName!,
+              );
+              if (mounted) {
+                setState(() {});
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Successfully transferred $count log(s) to $detectedOwnerName!'),
+                    backgroundColor: AppColors.success,
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+            label: Text('Transfer to $detectedOwnerName'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.amber.shade800,
+              foregroundColor: Colors.white,
+              elevation: 2,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showReassignRecordsDialog(EmployeeEntity sourceEmp, List<AttendanceRecord> records) async {
+    final allEmployees = _getSynthesizedEmployees()
+        .where((e) => e.id != sourceEmp.id && e.name.trim().toLowerCase() != sourceEmp.name.trim().toLowerCase())
+        .toList();
+
+    if (allEmployees.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No other employee available to reassign records to.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    String targetEmpId = allEmployees.first.id;
+    String? selectedDateStr;
+
+    final Set<String> dateStrs = {};
+    for (final r in records) {
+      dateStrs.add(DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()));
+    }
+    final sortedDates = dateStrs.toList()..sort((a, b) => b.compareTo(a));
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final palette = AppTheme.currentColors;
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            backgroundColor: isDark ? palette.surfaceDark : Colors.white,
+            title: Row(
+              children: [
+                Icon(Icons.swap_horiz_rounded, color: Colors.indigo.shade700),
+                const SizedBox(width: 10),
+                const Text('Reassign Attendance Logs', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Reassign attendance logs from ${sourceEmp.name} to another employee:',
+                  style: const TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 14),
+                const Text('Target Employee', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade400),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: targetEmpId,
+                      isExpanded: true,
+                      items: allEmployees.map((e) {
+                        return DropdownMenuItem<String>(
+                          value: e.id,
+                          child: Text('${e.name} (${e.employeeCode})'),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) setDlgState(() => targetEmpId = val);
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text('Date Scope', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade400),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String?>(
+                      value: selectedDateStr,
+                      isExpanded: true,
+                      items: [
+                        DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('All Dates (All ${records.length} records)'),
+                        ),
+                        ...sortedDates.map((d) {
+                          DateTime parsed = DateTime.parse(d);
+                          return DropdownMenuItem<String?>(
+                            value: d,
+                            child: Text(DateFormat('dd MMM yyyy (EEEE)').format(parsed)),
+                          );
+                        }),
+                      ],
+                      onChanged: (val) => setDlgState(() => selectedDateStr = val),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo.shade700, foregroundColor: Colors.white),
+                child: const Text('Confirm & Reassign'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final targetEmp = allEmployees.firstWhere((e) => e.id == targetEmpId);
+      final count = await _db.reassignEmployeeAttendanceRecords(
+        fromEmployeeId: sourceEmp.id,
+        fromEmployeeName: sourceEmp.name,
+        toEmployeeId: targetEmp.id,
+        toEmployeeName: targetEmp.name,
+        specificDate: selectedDateStr != null ? DateTime.parse(selectedDateStr!) : null,
+      );
+
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Successfully reassigned $count record(s) to ${targetEmp.name}!'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildLevel2DateListView() {
     final emp = _resolveEmployee(_selectedEmployeeId);
 
@@ -1161,10 +1429,32 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-              )
+              ),
+              const SizedBox(width: 6),
+              ElevatedButton.icon(
+                onPressed: () => _showReassignRecordsDialog(emp, empRecords),
+                icon: const Icon(Icons.swap_horiz_rounded, size: 14),
+                label: const Text('Reassign Logs',
+                    style:
+                        TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.indigo.shade700,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
+
+          // Misattributed logs detection banner
+          _buildMisattributedLogsBanner(emp, empRecords),
 
           // Individual Employee Reports Navigation Bar (PDF Report Page & Work Image Page)
           Container(
@@ -4897,6 +5187,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     if (eName.isNotEmpty && rEmpName == eName) return true;
     if (eCode.isNotEmpty && (rEmpId == eCode || rEmpId == 'emp-$eCode')) return true;
     if (eId.length >= 8 && rEmpId.length >= 8 && (rEmpId.startsWith(eId) || eId.startsWith(rEmpId))) return true;
+
+    // Anandh Veeramani alias matching for records logged under 'Anand' or 'emp-anan'
+    if (eName.contains('anandh') || emp.email.trim().toLowerCase() == 'anand@gmail.com' || eCode == 'emp-ana') {
+      if (rEmpName == 'anand' || rEmpId == 'emp-anan' || rEmpId == 'anand') {
+        return true;
+      }
+    }
 
     return false;
   }
