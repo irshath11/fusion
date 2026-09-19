@@ -1,0 +1,18 @@
+{
+  "name": "wedding-invitation-thaiyeba-irshath",
+  "version": "1.0.0",
+  "description": "Luxury bespoke Islamic wedding invitation microsite for S. Thaiyeba Tasleema & S. Irshath Ahamed",
+  "scripts": {
+    "dev": "npx serve . -l 3000",
+    "start": "npx serve . -l 3000"
+  },
+  "keywords": [
+    "wedding",
+    "invitation",
+    "luxury",
+    "islamic-wedding",
+    "nikah"
+  ],
+  "author": "Fusion Groups",
+  "license": "ISC"
+}
