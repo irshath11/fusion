@@ -347,8 +347,9 @@ class LuxuryAudioExperience {
 // 3. OPENING EXPERIENCE (ENVELOPE CONTROLLER)
 // ==========================================================================
 class EnvelopeOpeningController {
-  constructor(audioEngine) {
+  constructor(audioEngine, confettiEngine) {
     this.audioEngine = audioEngine;
+    this.confettiEngine = confettiEngine;
     this.overlay = document.getElementById('envelope-overlay');
     this.openBtn = document.getElementById('btn-open-invitation');
     this.skipBtn = document.getElementById('btn-skip-intro');
@@ -398,6 +399,11 @@ class EnvelopeOpeningController {
     // Start luxury ambient soundscape synchronously on direct user gesture
     if (this.audioEngine && !this.audioEngine.isPlaying) {
       this.audioEngine.play();
+    }
+
+    // Fire royal celebration confetti & flower petal burst
+    if (this.confettiEngine) {
+      this.confettiEngine.fireCelebration();
     }
 
     this.overlay.classList.add('is-opening');
@@ -875,7 +881,7 @@ class AmbientCanvasParticles {
 
     this.ctx = this.canvas.getContext('2d');
     this.particles = [];
-    this.count = window.innerWidth < 768 ? 16 : 28;
+    this.count = window.innerWidth < 768 ? 18 : 32;
 
     this.resize();
     window.addEventListener('resize', () => this.resize());
@@ -894,7 +900,7 @@ class AmbientCanvasParticles {
       this.particles.push({
         x: Math.random() * this.width,
         y: Math.random() * this.height,
-        radius: 0.8 + Math.random() * 1.6,
+        radius: 0.8 + Math.random() * 1.8,
         alpha: 0.15 + Math.random() * 0.45,
         speedX: (Math.random() - 0.5) * 0.3,
         speedY: -0.15 - Math.random() * 0.35,
@@ -911,14 +917,16 @@ class AmbientCanvasParticles {
       p.y += p.speedY;
       p.alpha += Math.sin(Date.now() * p.pulseSpeed) * 0.005;
 
-      // Wrap around screen boundaries
+      // Wrap around boundaries
       if (p.y < -10) p.y = this.height + 10;
       if (p.x < -10) p.x = this.width + 10;
       if (p.x > this.width + 10) p.x = -10;
 
+      const currentAlpha = Math.max(0.08, Math.min(0.65, p.alpha));
+
       this.ctx.beginPath();
       this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-      this.ctx.fillStyle = `rgba(197, 168, 128, ${Math.max(0.08, Math.min(0.55, p.alpha))})`;
+      this.ctx.fillStyle = `rgba(197, 168, 128, ${currentAlpha})`;
       this.ctx.fill();
     }
 
@@ -1025,30 +1033,298 @@ class NavigationAndScrollController {
 }
 
 // ==========================================================================
-// 10. INITIALIZATION ENTRY POINT
+// 10. 3D CARD PERSPECTIVE TILT & SPECULAR GLARE CONTROLLER
+// ==========================================================================
+class CardTiltController {
+  constructor() {
+    // Respect user reduced motion
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return;
+    }
+
+    this.cards = document.querySelectorAll('.tilt-card');
+    this.init();
+  }
+
+  init() {
+    // Only enable 3D tilt on devices with hover/pointer capability
+    if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+      this.cards.forEach(card => this.attachTiltEffect(card));
+    }
+  }
+
+  attachTiltEffect(card) {
+    const glare = card.querySelector('.card-glare');
+
+    const handlePointerMove = (e) => {
+      const rect = card.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+
+      // Smooth subtle tilt angles (max ±6.5 degrees)
+      const rotateX = ((y - centerY) / centerY) * -6.5;
+      const rotateY = ((x - centerX) / centerX) * 6.5;
+
+      card.style.transform = `perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) translateZ(4px)`;
+
+      if (glare) {
+        const percentX = ((x / rect.width) * 100).toFixed(1);
+        const percentY = ((y / rect.height) * 100).toFixed(1);
+        glare.style.opacity = '1';
+        glare.style.background = `radial-gradient(circle 240px at ${percentX}% ${percentY}%, rgba(255, 255, 255, 0.2), transparent 70%)`;
+      }
+    };
+
+    const handlePointerLeave = () => {
+      card.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg) translateZ(0px)';
+      if (glare) {
+        glare.style.opacity = '0';
+      }
+    };
+
+    card.addEventListener('pointermove', handlePointerMove);
+    card.addEventListener('pointerleave', handlePointerLeave);
+  }
+}
+
+// ==========================================================================
+// 11. CELEBRATION FULLSCREEN CONFETTI & FLOWER PETAL BURST ENGINE
+// ==========================================================================
+class ConfettiAndPetalBurst {
+  constructor() {
+    this.canvas = document.getElementById('confetti-canvas');
+    if (!this.canvas) return;
+
+    this.ctx = this.canvas.getContext('2d');
+    this.particles = [];
+    this.animating = false;
+
+    this.colors = [
+      '#E2C99D', // Gold light
+      '#C5A880', // Gold antique
+      '#9E7E50', // Deep gold
+      '#F4DDD4', // Rose petal soft
+      '#E8B4B8', // Blush petal
+      '#FFFFFF'  // Ivory shimmer
+    ];
+
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+  }
+
+  resize() {
+    this.width = this.canvas.width = window.innerWidth;
+    this.height = this.canvas.height = window.innerHeight;
+  }
+
+  fireCelebration() {
+    // Grand celebration burst from center & both sides
+    this.burst({ x: this.width * 0.5, y: this.height * 0.35, count: 65, spread: 360 });
+    setTimeout(() => {
+      this.burst({ x: this.width * 0.25, y: this.height * 0.45, count: 40, spread: 90 });
+      this.burst({ x: this.width * 0.75, y: this.height * 0.45, count: 40, spread: 90 });
+    }, 260);
+  }
+
+  burst({ x = window.innerWidth / 2, y = window.innerHeight / 2, count = 45, spread = 360 } = {}) {
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.random() * spread - spread / 2) * (Math.PI / 180) - Math.PI / 2;
+      const speed = 4 + Math.random() * 9;
+      const isPetal = Math.random() > 0.45;
+
+      this.particles.push({
+        x: x,
+        y: y,
+        vx: Math.cos(angle) * speed + (Math.random() - 0.5) * 2,
+        vy: Math.sin(angle) * speed - 2,
+        gravity: 0.18 + Math.random() * 0.12,
+        wobble: Math.random() * Math.PI * 2,
+        wobbleSpeed: 0.04 + Math.random() * 0.06,
+        size: isPetal ? (7 + Math.random() * 6) : (5 + Math.random() * 5),
+        color: this.colors[Math.floor(Math.random() * this.colors.length)],
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.1,
+        isPetal: isPetal,
+        alpha: 1,
+        decay: 0.005 + Math.random() * 0.008
+      });
+    }
+
+    if (!this.animating) {
+      this.animating = true;
+      this.loop();
+    }
+  }
+
+  loop() {
+    this.ctx.clearRect(0, 0, this.width, this.height);
+
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.x += p.vx + Math.sin(p.wobble) * 1.5;
+      p.y += p.vy;
+      p.vy += p.gravity;
+      p.wobble += p.wobbleSpeed;
+      p.rotation += p.rotationSpeed;
+      p.alpha -= p.decay;
+
+      if (p.alpha <= 0 || p.y > this.height + 20) {
+        this.particles.splice(i, 1);
+        continue;
+      }
+
+      this.ctx.save();
+      this.ctx.translate(p.x, p.y);
+      this.ctx.rotate(p.rotation);
+      this.ctx.globalAlpha = Math.max(0, p.alpha);
+      this.ctx.fillStyle = p.color;
+
+      if (p.isPetal) {
+        // Draw organic curved flower petal
+        this.ctx.beginPath();
+        this.ctx.ellipse(0, 0, p.size * 0.6, p.size, Math.PI / 4, 0, Math.PI * 2);
+        this.ctx.fill();
+      } else {
+        // Draw metallic gold foil ribbon/square
+        this.ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.7);
+      }
+
+      this.ctx.restore();
+    }
+
+    if (this.particles.length > 0) {
+      requestAnimationFrame(() => this.loop());
+    } else {
+      this.animating = false;
+      this.ctx.clearRect(0, 0, this.width, this.height);
+    }
+  }
+}
+
+// ==========================================================================
+// 12. DUA WALL & SHOWER BLESSINGS CONTROLLER
+// ==========================================================================
+class BlessingsWallController {
+  constructor(confettiEngine) {
+    this.confettiEngine = confettiEngine;
+    this.duaChips = document.querySelectorAll('.dua-chip-btn');
+    this.showerBtn = document.getElementById('btn-shower-petals');
+    this.counterElem = document.getElementById('blessing-counter');
+    this.toastElem = document.getElementById('toast-copied');
+
+    this.blessingCount = parseInt(localStorage.getItem('wedding_blessing_count') || '128', 10);
+    this.updateCounterUI();
+    this.init();
+  }
+
+  init() {
+    this.duaChips.forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        const text = chip.getAttribute('data-dua-text');
+        this.handleDuaClick(chip, text, e);
+      });
+    });
+
+    if (this.showerBtn) {
+      this.showerBtn.addEventListener('click', () => this.handleShowerAll());
+    }
+  }
+
+  handleDuaClick(chip, text, event) {
+    // Add active feedback
+    chip.classList.add('dua-active');
+    setTimeout(() => chip.classList.remove('dua-active'), 600);
+
+    // Particle burst originating at chip position
+    if (this.confettiEngine) {
+      const rect = chip.getBoundingClientRect();
+      this.confettiEngine.burst({
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+        count: 28,
+        spread: 120
+      });
+    }
+
+    // Increment count
+    this.blessingCount++;
+    localStorage.setItem('wedding_blessing_count', String(this.blessingCount));
+    this.updateCounterUI();
+
+    // Show toast
+    this.showToast(text || 'Dua and blessings sent with heartfelt love!');
+  }
+
+  handleShowerAll() {
+    if (this.confettiEngine) {
+      this.confettiEngine.fireCelebration();
+    }
+
+    this.blessingCount += 5;
+    localStorage.setItem('wedding_blessing_count', String(this.blessingCount));
+    this.updateCounterUI();
+
+    this.showToast('Alhamdulillah! Golden petals and prayers showered upon Thaiyeba &amp; Irshath ✨');
+  }
+
+  updateCounterUI() {
+    if (this.counterElem) {
+      this.counterElem.textContent = `${this.blessingCount.toLocaleString()} Blessings Sent`;
+    }
+  }
+
+  showToast(message) {
+    if (!this.toastElem) return;
+
+    const span = this.toastElem.querySelector('span');
+    if (span) span.innerHTML = message;
+
+    this.toastElem.classList.add('is-visible');
+    clearTimeout(this.toastTimeout);
+    this.toastTimeout = setTimeout(() => {
+      this.toastElem.classList.remove('is-visible');
+    }, 3800);
+  }
+}
+
+// ==========================================================================
+// 13. INITIALIZATION ENTRY POINT
 // ==========================================================================
 document.addEventListener('DOMContentLoaded', () => {
   // 1. Audio Experience
   const audio = new LuxuryAudioExperience();
 
-  // 2. Opening Envelope Experience
-  new EnvelopeOpeningController(audio);
+  // 2. Confetti & Petals Engine
+  const confetti = new ConfettiAndPetalBurst();
+  window.confettiBurst = confetti;
 
-  // 3. Live Countdown
+  // 3. Opening Envelope Experience (with confetti celebration)
+  new EnvelopeOpeningController(audio, confetti);
+
+  // 4. Live Countdown
   new WeddingCountdown();
 
-  // 4. Interactive Venue Switcher (Karaikudi / Thanjavur)
+  // 5. Interactive Venue Switcher (Karaikudi / Thanjavur)
   new VenueSwitcherController();
 
-  // 5. Calendar Integration (Save Dates & Dual .ICS)
+  // 6. Calendar Integration (Save Dates & Dual .ICS)
   new CalendarIntegration();
 
-  // 6. Social Sharing & QR
+  // 7. Social Sharing & QR
   new SharingExperience();
 
-  // 7. Ambient Particle Canvas
+  // 8. Luxury Ambient Particle Canvas
   new AmbientCanvasParticles();
 
-  // 8. Navigation & Scroll Controller
+  // 9. 3D Card Perspective Tilt
+  new CardTiltController();
+
+  // 10. Interactive Dua Wall & Shower Blessings
+  new BlessingsWallController(confetti);
+
+  // 11. Navigation & Scroll Controller
   new NavigationAndScrollController();
 });

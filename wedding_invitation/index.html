@@ -80,6 +80,9 @@
     <canvas id="ambient-canvas" class="ambient-canvas"></canvas>
   </div>
 
+  <!-- Fullscreen Gold Foil & Flower Petal Confetti Canvas -->
+  <canvas id="confetti-canvas" class="confetti-canvas" aria-hidden="true"></canvas>
+
   <!-- ====================================================
        1. OPENING EXPERIENCE: Digital Envelope & Wax Seal
        ==================================================== -->
@@ -170,9 +173,11 @@
       <ul class="nav-menu" id="nav-menu">
         <li><a href="#hero" class="nav-link active">Home</a></li>
         <li><a href="#couple" class="nav-link">The Couple</a></li>
-        <li><a href="#events" class="nav-link">Events</a></li>
+        <li><a href="#traditions" class="nav-link">Traditions</a></li>
+        <li><a href="#events" class="nav-link">Celebrations</a></li>
         <li><a href="#venue" class="nav-link">Venues</a></li>
         <li><a href="#schedule" class="nav-link">Schedule</a></li>
+        <li><a href="#blessings" class="nav-link">Blessings</a></li>
       </ul>
 
       <!-- Mobile Hamburger Toggle -->
@@ -297,7 +302,8 @@
         <div class="couple-editorial-grid">
           
           <!-- Bride Card -->
-          <article class="editorial-card bride-card reveal-on-scroll">
+          <article class="editorial-card bride-card tilt-card reveal-on-scroll">
+            <div class="card-glare"></div>
             <div class="card-inner-frame">
               <div class="card-arch-header" aria-hidden="true">
                 <svg viewBox="0 0 100 60" preserveAspectRatio="none" class="arch-svg">
@@ -317,8 +323,10 @@
             </div>
           </article>
 
-          <!-- Intertwined Monogram Emblem -->
+          <!-- Intertwined Monogram Emblem with Celestial Orbit Rings -->
           <div class="couple-center-emblem reveal-on-scroll" aria-hidden="true">
+            <div class="orbit-ring orbit-ring-outer"></div>
+            <div class="orbit-ring orbit-ring-middle"></div>
             <div class="emblem-circle">
               <svg viewBox="0 0 120 120" class="emblem-svg">
                 <circle cx="60" cy="60" r="54" fill="none" stroke="var(--color-gold-light)" stroke-width="1" stroke-dasharray="3 3"/>
@@ -330,7 +338,8 @@
           </div>
 
           <!-- Groom Card -->
-          <article class="editorial-card groom-card reveal-on-scroll">
+          <article class="editorial-card groom-card tilt-card reveal-on-scroll">
+            <div class="card-glare"></div>
             <div class="card-inner-frame">
               <div class="card-arch-header" aria-hidden="true">
                 <svg viewBox="0 0 100 60" preserveAspectRatio="none" class="arch-svg">
@@ -357,6 +366,94 @@
     </section>
 
     <!-- ====================================================
+         7. AUSPICIOUS TRADITIONS & SACRED CUSTOMS
+         ==================================================== -->
+    <section id="traditions" class="section-padding traditions-section" aria-label="Islamic Wedding Customs and Sacred Traditions">
+      <div class="section-container">
+        
+        <div class="section-header text-center reveal-on-scroll">
+          <span class="section-subtitle">Heritage &amp; Grace</span>
+          <h2 class="section-title">Sacred Traditions</h2>
+          <div class="section-divider-gold"></div>
+          <p class="section-intro-text">
+            Every step of this holy union is woven with centuries of spiritual beauty, mutual devotion, and divine blessings.
+          </p>
+        </div>
+
+        <div class="traditions-grid">
+          
+          <div class="tradition-card tilt-card reveal-on-scroll">
+            <div class="card-glare"></div>
+            <div class="tradition-icon-box" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                <line x1="8" y1="7" x2="16" y2="7"/>
+                <line x1="8" y1="11" x2="14" y2="11"/>
+              </svg>
+            </div>
+            <h3 class="tradition-title">The Nikah Covenant</h3>
+            <p class="tradition-arabic" lang="ar" dir="rtl">عَقْدُ النِّكَاح</p>
+            <p class="tradition-desc">
+              The sacred bond uniting two souls under the grace of the Almighty, sealed with mutual consent (Ijab &amp; Qabul), reverence, and heartfelt prayers.
+            </p>
+          </div>
+
+          <div class="tradition-card tilt-card reveal-on-scroll">
+            <div class="card-glare"></div>
+            <div class="tradition-icon-box" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6">
+                <circle cx="12" cy="12" r="9"/>
+                <path d="M12 7v5l3 3"/>
+                <path d="M16.2 7.8l2.1-2.1"/>
+                <path d="M7.8 7.8L5.7 5.7"/>
+              </svg>
+            </div>
+            <h3 class="tradition-title">Dua for Barakah</h3>
+            <p class="tradition-arabic" lang="ar" dir="rtl">بَارَكَ اللَّهُ لَكُمَا</p>
+            <p class="tradition-desc">
+              Praying for divine abundance, lifelong affection, harmony, and resilience across all life&rsquo;s seasons and noble endeavors.
+            </p>
+          </div>
+
+          <div class="tradition-card tilt-card reveal-on-scroll">
+            <div class="card-glare"></div>
+            <div class="tradition-icon-box" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6">
+                <path d="M18 8h1a4 4 0 0 1 0 8h-1"/>
+                <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>
+                <line x1="6" y1="1" x2="6" y2="4"/>
+                <line x1="10" y1="1" x2="10" y2="4"/>
+                <line x1="14" y1="1" x2="14" y2="4"/>
+              </svg>
+            </div>
+            <h3 class="tradition-title">The Walima Feast</h3>
+            <p class="tradition-arabic" lang="ar" dir="rtl">الوَلِيمَةُ المُبَارَكَة</p>
+            <p class="tradition-desc">
+              The cherished Sunnah feast celebrating community, thanksgiving, joyous companionship, and sharing savory delights with cherished guests.
+            </p>
+          </div>
+
+          <div class="tradition-card tilt-card reveal-on-scroll">
+            <div class="card-glare"></div>
+            <div class="tradition-icon-box" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+              </svg>
+            </div>
+            <h3 class="tradition-title">Mawaddah &amp; Rahmah</h3>
+            <p class="tradition-arabic" lang="ar" dir="rtl">مَوَدَّةٌ وَرَحْمَة</p>
+            <p class="tradition-desc">
+              Living by the noble Quranic values of boundless kindness, gentleness, mutual respect, and quiet tranquility in the home.
+            </p>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ====================================================
          6. THE CELEBRATION EVENTS & CEREMONIES
          ==================================================== -->
     <section id="events" class="section-padding events-section" aria-label="Wedding Events and Ceremonies">
@@ -373,7 +470,8 @@
         <div class="events-duo-grid">
           
           <!-- Event 1: The Nikah Ceremony -->
-          <article class="nikah-sacred-card event-card reveal-on-scroll">
+          <article class="nikah-sacred-card event-card tilt-card reveal-on-scroll">
+            <div class="card-glare"></div>
             <div class="sacred-card-border"></div>
             <div class="sacred-inner-wrap">
               <span class="sacred-pill">Solemnization of Marriage</span>
@@ -444,7 +542,8 @@
           </article>
 
           <!-- Event 2: The Reception & Feast -->
-          <article class="nikah-sacred-card event-card reception-card reveal-on-scroll">
+          <article class="nikah-sacred-card event-card reception-card tilt-card reveal-on-scroll">
+            <div class="card-glare"></div>
             <div class="sacred-card-border"></div>
             <div class="sacred-inner-wrap">
               <span class="sacred-pill">Celebration &amp; Banquet</span>
@@ -518,7 +617,8 @@
 
         <!-- Live Countdown Timer (Counting down to Nikah) -->
         <div class="countdown-card-wrapper reveal-on-scroll">
-          <div class="countdown-block" aria-live="polite">
+          <div class="countdown-block tilt-card" aria-live="polite">
+            <div class="card-glare"></div>
             <span class="countdown-heading">Counting Down to the Blessed Moment</span>
             
             <div class="countdown-digits-wrapper" id="countdown-wrapper">
@@ -818,58 +918,185 @@
     </section>
 
     <!-- ====================================================
-         10. WHATSAPP & SOCIAL SHARING
+         10. SEND A DUA & SHOWER BLESSINGS
+         ==================================================== -->
+    <section id="blessings" class="section-padding blessings-section" aria-label="Shower Blessings and Duas for the Couple">
+      <div class="section-container">
+        
+        <div class="section-header text-center reveal-on-scroll">
+          <span class="section-subtitle">Heartfelt Prayers &amp; Supplications</span>
+          <h2 class="section-title">Send a Dua &amp; Blessings</h2>
+          <div class="section-divider-gold"></div>
+          <p class="section-intro-text">
+            Tap any sacred prayer below to shower Thaiyeba &amp; Irshath with golden petals, barakah, and heartfelt prayers.
+          </p>
+        </div>
+
+        <div class="blessings-card tilt-card reveal-on-scroll">
+          <div class="card-glare"></div>
+          
+          <div class="blessings-inner-frame">
+            
+            <!-- Sacred Hadith Arch Banner -->
+            <div class="blessing-hadith-banner">
+              <div class="hadith-crescent-badge" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c.44-.06.9-.1 1.36-.1z"/>
+                </svg>
+              </div>
+              <p class="blessing-arabic-main" lang="ar" dir="rtl">بَارَكَ اللَّهُ لَكَ وَبَارَكَ عَلَيْكَ وَجَمَعَ بَيْنَكُمَا فِي خَيْرٍ</p>
+              <p class="blessing-transliteration">Barakallahu laka wa baraka &lsquo;alayka wa jama&lsquo;a baynakuma fee khayr</p>
+              <p class="blessing-translation-main">
+                &ldquo;May Allah bless you, shower His blessings upon you, and unite you both in goodness.&rdquo;
+              </p>
+              <span class="hadith-citation">&mdash; Sunan Abu Dawood (Hadith 2130)</span>
+            </div>
+
+            <!-- 2x2 Symmetrical Dua Cards Grid -->
+            <div class="dua-cards-grid" role="region" aria-label="Select a Dua to send">
+              
+              <!-- Dua 1 -->
+              <button class="dua-chip-btn dua-card-item" data-dua-text="May Allah grant Thaiyeba &amp; Irshath a peaceful home filled with mercy, love, and eternal barakah.">
+                <div class="dua-item-header">
+                  <span class="dua-item-icon">🌿</span>
+                  <div class="dua-item-heading">
+                    <span class="dua-item-title">Love &amp; Mercy</span>
+                    <span class="dua-item-badge">Rahmah</span>
+                  </div>
+                </div>
+                <p class="dua-item-desc">May Allah grant them a peaceful home filled with mutual compassion, affection, and unending grace.</p>
+                <div class="dua-item-footer">
+                  <span class="dua-tap-prompt">✦ Tap to shower blessings ✦</span>
+                </div>
+              </button>
+
+              <!-- Dua 2 -->
+              <button class="dua-chip-btn dua-card-item" data-dua-text="May Allah expand their provision and bless every single endeavor with peace and abundance.">
+                <div class="dua-item-header">
+                  <span class="dua-item-icon">✨</span>
+                  <div class="dua-item-heading">
+                    <span class="dua-item-title">Barakah &amp; Abundance</span>
+                    <span class="dua-item-badge">Barkat</span>
+                  </div>
+                </div>
+                <p class="dua-item-desc">May Allah expand their provision, enrich their days with contentment, and bestow prosperous abundance.</p>
+                <div class="dua-item-footer">
+                  <span class="dua-tap-prompt">✦ Tap to shower blessings ✦</span>
+                </div>
+              </button>
+
+              <!-- Dua 3 -->
+              <button class="dua-chip-btn dua-card-item" data-dua-text="May Allah grant them righteous, joyful children who become the cool of their eyes.">
+                <div class="dua-item-header">
+                  <span class="dua-item-icon">💫</span>
+                  <div class="dua-item-heading">
+                    <span class="dua-item-title">Pious Generations</span>
+                    <span class="dua-item-badge">Dhurriyah</span>
+                  </div>
+                </div>
+                <p class="dua-item-desc">May Allah grant them loving, righteous descendants who bring boundless joy and solace to their eyes.</p>
+                <div class="dua-item-footer">
+                  <span class="dua-tap-prompt">✦ Tap to shower blessings ✦</span>
+                </div>
+              </button>
+
+              <!-- Dua 4 -->
+              <button class="dua-chip-btn dua-card-item" data-dua-text="May Allah grant them health, happiness, and companionship that blossoms all the way to Jannah.">
+                <div class="dua-item-header">
+                  <span class="dua-item-icon">🌸</span>
+                  <div class="dua-item-heading">
+                    <span class="dua-item-title">Together in Jannah</span>
+                    <span class="dua-item-badge">Firdous</span>
+                  </div>
+                </div>
+                <p class="dua-item-desc">May Allah unite their hearts in health and serenity, making their beautiful companionship eternal.</p>
+                <div class="dua-item-footer">
+                  <span class="dua-tap-prompt">✦ Tap to shower blessings ✦</span>
+                </div>
+              </button>
+
+            </div>
+
+            <!-- Grand Action Row: Shower Golden Petals Button -->
+            <div class="blessings-action-footer">
+              <div class="action-divider-flourish" aria-hidden="true">
+                <span class="flourish-line"></span>
+                <span class="flourish-symbol">❖</span>
+                <span class="flourish-line"></span>
+              </div>
+
+              <div class="shower-petals-action">
+                <button id="btn-shower-petals" class="btn-royal-shower" aria-label="Shower golden petals and confetti">
+                  <span class="btn-glow-aura"></span>
+                  <span class="btn-shower-icon">✨</span>
+                  <span class="btn-shower-text">Shower Golden Petals</span>
+                  <span class="btn-shower-count" id="blessing-counter">128 Blessings Sent</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ====================================================
+         11. WHATSAPP & SOCIAL SHARING
          ==================================================== -->
     <section id="share" class="section-padding share-section" aria-label="Share Wedding Invitation">
       <div class="section-container">
         
-        <div class="share-card reveal-on-scroll">
+        <div class="share-card tilt-card reveal-on-scroll">
+          <div class="card-glare"></div>
           
-          <div class="section-header text-center">
-            <span class="section-subtitle">Spread The Joy</span>
-            <h2 class="section-title">Share Invitation</h2>
-            <div class="section-divider-gold"></div>
-            <p class="share-desc">
-              Pass on the warm invitation to your beloved family members and friends.
-            </p>
-          </div>
+          <div class="share-card-inner">
+            <div class="section-header text-center">
+              <span class="section-subtitle">Spread The Joy</span>
+              <h2 class="section-title">Share Invitation</h2>
+              <div class="section-divider-gold"></div>
+              <p class="share-desc">
+                Pass on the warm invitation to your beloved family members, elders, and dear friends.
+              </p>
+            </div>
 
-          <div class="share-buttons-grid">
-            
-            <!-- WhatsApp -->
-            <button id="btn-share-whatsapp" class="btn-share btn-whatsapp" aria-label="Share invitation on WhatsApp">
-              <svg class="share-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
-              </svg>
-              <span>WhatsApp</span>
-            </button>
+            <div class="share-buttons-grid">
+              
+              <!-- WhatsApp -->
+              <button id="btn-share-whatsapp" class="btn-share btn-whatsapp" aria-label="Share invitation on WhatsApp">
+                <svg class="share-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+                </svg>
+                <span>WhatsApp</span>
+              </button>
 
-            <!-- Copy Link -->
-            <button id="btn-share-copy" class="btn-share btn-copylink" aria-label="Copy invitation website link">
-              <svg class="share-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-              </svg>
-              <span id="copy-btn-text">Copy Link</span>
-            </button>
+              <!-- Copy Link -->
+              <button id="btn-share-copy" class="btn-share btn-copylink" aria-label="Copy invitation website link">
+                <svg class="share-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                <span id="copy-btn-text">Copy Link</span>
+              </button>
 
-            <!-- Telegram -->
-            <a id="btn-share-telegram" href="#" target="_blank" rel="noopener noreferrer" class="btn-share btn-telegram" aria-label="Share on Telegram">
-              <svg class="share-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
-              </svg>
-              <span>Telegram</span>
-            </a>
+              <!-- Telegram -->
+              <a id="btn-share-telegram" href="#" target="_blank" rel="noopener noreferrer" class="btn-share btn-telegram" aria-label="Share on Telegram">
+                <svg class="share-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+                </svg>
+                <span>Telegram</span>
+              </a>
 
-            <!-- Email -->
-            <a id="btn-share-email" href="#" class="btn-share btn-email" aria-label="Share invitation via Email">
-              <svg class="share-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                <polyline points="22,6 12,13 2,6"/>
-              </svg>
-              <span>Email</span>
-            </a>
+              <!-- Email -->
+              <a id="btn-share-email" href="#" class="btn-share btn-email" aria-label="Share invitation via Email">
+                <svg class="share-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                  <polyline points="22,6 12,13 2,6"/>
+                </svg>
+                <span>Email</span>
+              </a>
 
+            </div>
           </div>
 
         </div>
