@@ -26,7 +26,7 @@ class GeofenceCalculator {
 
   /// Verifies if user GPS location is inside allowed geofence radius.
   static bool isWithinGeofence({
-    required double userLat,
+    required double userLat, 
     required double userLng,
     required double targetLat,
     required double targetLng,
