@@ -78,7 +78,7 @@ class LuxuryAudioExperience {
     this.gainNode = null;
     this.proceduralInterval = null;
     this.padOscillators = [];
-    
+
     // Soothing pentatonic frequencies for procedural fallback (F major / D minor)
     this.frequencies = [
       174.61, // F3
@@ -101,7 +101,7 @@ class LuxuryAudioExperience {
     this.musicButton = document.getElementById('btn-music-toggle');
     this.musicLabel = document.getElementById('music-status-label');
     this.audioElement = document.getElementById('wedding-bg-audio');
-    
+
     if (this.audioElement) {
       this.audioElement.volume = 0.45; // Serene, crystal-clear luxury volume
       this.audioElement.loop = true;
@@ -252,7 +252,7 @@ class LuxuryAudioExperience {
         osc.type = 'triangle';
         const freq = this.frequencies[noteIndex % this.frequencies.length];
         noteIndex = (noteIndex + 1 + Math.floor(Math.random() * 2));
-        
+
         osc.frequency.setValueAtTime(freq, this.audioCtx.currentTime);
 
         filter.type = 'lowpass';
@@ -320,7 +320,7 @@ class LuxuryAudioExperience {
 
     if (this.padOscillators && this.padOscillators.length > 0) {
       this.padOscillators.forEach(osc => {
-        try { osc.stop(this.audioCtx ? this.audioCtx.currentTime + 0.6 : 0); } catch (_) {}
+        try { osc.stop(this.audioCtx ? this.audioCtx.currentTime + 0.6 : 0); } catch (_) { }
       });
       this.padOscillators = [];
     }
@@ -366,6 +366,10 @@ class EnvelopeOpeningController {
       return;
     }
 
+    // Explicitly mark envelope active so bottom dock is hidden
+    document.body.classList.add('envelope-active');
+    document.getElementById('mobile-bottom-dock')?.classList.add('is-hidden');
+
     // Check URL personalization (?guest=Name or ?to=Name)
     this.applyPersonalization();
 
@@ -381,7 +385,7 @@ class EnvelopeOpeningController {
   applyPersonalization() {
     const params = new URLSearchParams(window.location.search);
     const guestName = params.get('guest') || params.get('to');
-    
+
     if (guestName) {
       const sanitized = guestName.trim().replace(/[<>]/g, '');
       const badgeElem = document.getElementById('guest-personalized-name');
@@ -411,8 +415,10 @@ class EnvelopeOpeningController {
     setTimeout(() => {
       this.overlay.classList.add('is-opened');
       sessionStorage.setItem('invitation_opened', 'true');
-      document.body.classList.remove('is-loading');
-      
+      document.body.classList.remove('is-loading', 'envelope-active');
+      document.body.classList.add('is-invitation-unveiled');
+      document.getElementById('mobile-bottom-dock')?.classList.remove('is-hidden');
+
       // Trigger Hero Reveal animations
       this.triggerHeroAnimations();
     }, 850);
@@ -422,7 +428,9 @@ class EnvelopeOpeningController {
     if (!this.overlay) return;
     this.overlay.classList.add('is-opened');
     sessionStorage.setItem('invitation_opened', 'true');
-    document.body.classList.remove('is-loading');
+    document.body.classList.remove('is-loading', 'envelope-active');
+    document.body.classList.add('is-invitation-unveiled');
+    document.getElementById('mobile-bottom-dock')?.classList.remove('is-hidden');
     this.triggerHeroAnimations();
   }
 
@@ -614,8 +622,8 @@ class CalendarIntegration {
   updateLinks() {
     const isNikah = this.selectedEvent === 'nikah';
     const title = encodeURIComponent(
-      isNikah 
-        ? 'Nikah - Thaiyeba Tasleema & Irshath Ahamed' 
+      isNikah
+        ? 'Nikah - Thaiyeba Tasleema & Irshath Ahamed'
         : 'Reception - Thaiyeba Tasleema & Irshath Ahamed'
     );
     const details = encodeURIComponent(
@@ -685,8 +693,8 @@ class CalendarIntegration {
       'END:VCALENDAR'
     ].join('\r\n');
 
-    const filename = mode === 'nikah' 
-      ? 'Nikah-Thaiyeba-Irshath.ics' 
+    const filename = mode === 'nikah'
+      ? 'Nikah-Thaiyeba-Irshath.ics'
       : (mode === 'reception' ? 'Reception-Thaiyeba-Irshath.ics' : 'Wedding-Thaiyeba-Irshath-Full.ics');
 
     const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
@@ -717,8 +725,8 @@ class SharingExperience {
     const emailBtn = document.getElementById('btn-share-email');
 
     const shareUrl = window.location.href.split('#')[0];
-    const rawMsg = 
-`بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
+    const rawMsg =
+      `بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
 With the blessings of Allah
 
 S. Thaiyeba Tasleema, B.E.
@@ -810,7 +818,7 @@ ${shareUrl}`;
 
   renderVenueQr(container) {
     if (!container || container.children.length > 0) return;
-    
+
     // High-precision clean SVG QR representation encoded to Google Maps destination
     const qrSvg = `
       <svg viewBox="0 0 160 160" width="160" height="160" style="background:#FFF; padding:12px; border-radius:12px; border:1px solid #C5A880;">
@@ -1291,7 +1299,155 @@ class BlessingsWallController {
 }
 
 // ==========================================================================
-// 13. INITIALIZATION ENTRY POINT
+// 13. MOBILE TABBED APP DECK CONTROLLER (For Viewports <= 768px)
+// ==========================================================================
+class MobileTabController {
+  constructor() {
+    this.dock = document.getElementById('mobile-bottom-dock');
+    this.tabButtons = document.querySelectorAll('.bottom-dock-btn');
+    this.tabPanels = document.querySelectorAll('.mobile-tab-panel');
+    this.navLinks = document.querySelectorAll('.nav-link');
+    this.isMobile = window.innerWidth <= 768;
+
+    // Section to Tab map for seamless internal anchor navigation
+    this.sectionToTabMap = {
+      'hero': 'tab-home',
+      'couple': 'tab-home',
+      'events': 'tab-events',
+      'nikah': 'tab-events',
+      'reception': 'tab-events',
+      'schedule': 'tab-events',
+      'calendar-suite': 'tab-events',
+      'venue': 'tab-venues',
+      'traditions': 'tab-blessings',
+      'blessings': 'tab-blessings',
+      'share': 'tab-blessings'
+    };
+
+    this.activeTabId = 'tab-home';
+    this.init();
+  }
+
+  init() {
+    if (!this.dock) return;
+
+    // Bottom dock tab clicks
+    this.tabButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const targetTabId = btn.getAttribute('data-tab-target');
+        if (targetTabId) {
+          this.switchTab(targetTabId, true);
+        }
+      });
+    });
+
+    // Top navigation menu links (when clicked on mobile)
+    this.navLinks.forEach(link => {
+      link.addEventListener('click', () => {
+        if (window.innerWidth <= 768) {
+          const href = link.getAttribute('href');
+          if (href && href.startsWith('#')) {
+            const sectionId = href.substring(1);
+            const targetTab = this.sectionToTabMap[sectionId];
+            if (targetTab) {
+              this.switchTab(targetTab, false);
+              setTimeout(() => {
+                const targetEl = document.getElementById(sectionId);
+                if (targetEl) {
+                  targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }, 120);
+            }
+          }
+        }
+      });
+    });
+
+    // In-page internal buttons/links (e.g. scroll indicator in hero, or "View Venue & Map" links)
+    document.querySelectorAll('a[href^="#"], button[data-target-venue], .venue-switch-trigger').forEach(el => {
+      el.addEventListener('click', () => {
+        if (window.innerWidth <= 768) {
+          if (el.classList.contains('venue-switch-trigger')) {
+            this.switchTab('tab-venues', true);
+            return;
+          }
+          const href = el.getAttribute('href');
+          if (href && href.startsWith('#') && href.length > 1) {
+            const sectionId = href.substring(1);
+            const targetTab = this.sectionToTabMap[sectionId];
+            if (targetTab) {
+              this.switchTab(targetTab, false);
+              setTimeout(() => {
+                const targetEl = document.getElementById(sectionId);
+                if (targetEl) {
+                  targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }, 120);
+            }
+          }
+        }
+      });
+    });
+
+    // Window resize listener
+    window.addEventListener('resize', () => {
+      const nowMobile = window.innerWidth <= 768;
+      if (nowMobile !== this.isMobile) {
+        this.isMobile = nowMobile;
+        if (this.isMobile) {
+          this.switchTab(this.activeTabId, false);
+        }
+      }
+    });
+
+    // Initial trigger on mobile
+    if (this.isMobile) {
+      this.switchTab(this.activeTabId, false);
+      const isEnvelopeOpened = sessionStorage.getItem('invitation_opened') === 'true' || document.getElementById('envelope-overlay')?.classList.contains('is-opened');
+      if (!isEnvelopeOpened) {
+        this.dock?.classList.add('is-hidden');
+      } else {
+        this.dock?.classList.remove('is-hidden');
+      }
+    }
+  }
+
+  switchTab(targetTabId, scrollToTop = true) {
+    this.activeTabId = targetTabId;
+
+    // Update Dock Buttons
+    this.tabButtons.forEach(btn => {
+      const isTarget = btn.getAttribute('data-tab-target') === targetTabId;
+      btn.classList.toggle('active', isTarget);
+      btn.setAttribute('aria-selected', String(isTarget));
+    });
+
+    // Update Tab Panels
+    this.tabPanels.forEach(panel => {
+      const isTarget = panel.id === targetTabId;
+      panel.classList.toggle('active-tab', isTarget);
+
+      // Force immediate reveal on child elements so cards aren't blank
+      if (isTarget) {
+        panel.querySelectorAll('.reveal-on-scroll').forEach(el => {
+          el.classList.add('is-visible');
+        });
+      }
+    });
+
+    // Smooth scroll to top of page
+    if (scrollToTop && window.innerWidth <= 768) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Trigger scroll event so any dependent listeners recheck
+    window.dispatchEvent(new Event('scroll'));
+  }
+}
+
+// ==========================================================================
+// 14. INITIALIZATION ENTRY POINT
 // ==========================================================================
 document.addEventListener('DOMContentLoaded', () => {
   // 1. Audio Experience
@@ -1327,4 +1483,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 11. Navigation & Scroll Controller
   new NavigationAndScrollController();
+
+  // 12. Mobile Tabbed App Deck Controller
+  new MobileTabController();
 });
+

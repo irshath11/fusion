@@ -181,7 +181,7 @@ img, svg {
 .envelope-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: 1200;
   background: radial-gradient(circle at center, rgba(22, 56, 44, 0.95), rgba(13, 37, 29, 0.98));
   display: flex;
   align-items: center;
@@ -2228,8 +2228,9 @@ img, svg {
   }
 
   .floating-music-wrapper {
-    bottom: 1.25rem;
-    right: 1.25rem;
+    bottom: calc(74px + env(safe-area-inset-bottom, 0));
+    right: 1rem;
+    z-index: 1010;
   }
 }
 
@@ -2808,3 +2809,138 @@ img, svg {
   pointer-events: none;
   z-index: 9999;
 }
+
+/* ==========================================================================
+   28. MOBILE TABBED APP DECK & BOTTOM NAVIGATION DOCK
+   ========================================================================== */
+.mobile-bottom-dock {
+  display: none !important;
+}
+
+.mobile-tab-panel {
+  display: block;
+}
+
+@media (max-width: 768px) {
+  /* Hide mobile bottom dock completely while initial cover page (envelope overlay) is visible */
+  body.is-loading .mobile-bottom-dock,
+  body.envelope-active .mobile-bottom-dock,
+  body:not(.is-invitation-unveiled) .mobile-bottom-dock,
+  .mobile-bottom-dock.is-hidden {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    transform: translateY(100%) !important;
+  }
+
+  /* Hide all panels by default on mobile */
+  .mobile-tab-panel {
+    display: none;
+  }
+
+  /* Display only the active tab panel */
+  .mobile-tab-panel.active-tab {
+    display: block;
+    animation: tabViewFadeIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /* Fixed Glassmorphic Mobile Bottom Dock */
+  .mobile-bottom-dock {
+    display: flex !important;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    background: rgba(253, 251, 247, 0.96);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(197, 168, 128, 0.35);
+    box-shadow: 0 -4px 24px rgba(22, 56, 44, 0.08);
+    z-index: 1000;
+    justify-content: space-around;
+    align-items: center;
+    padding: 0 4px;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  .bottom-dock-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--color-charcoal-muted);
+    padding: 6px 2px;
+    cursor: pointer;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    -webkit-tap-highlight-color: transparent;
+    gap: 2px;
+  }
+
+  .bottom-dock-btn .dock-icon-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 26px;
+    border-radius: 13px;
+    transition: all 0.22s ease;
+    color: currentColor;
+  }
+
+  .bottom-dock-btn .dock-label {
+    font-family: var(--font-body);
+    font-size: 0.68rem;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    transition: color 0.22s ease;
+  }
+
+  .bottom-dock-btn.active {
+    color: var(--color-emerald);
+  }
+
+  .bottom-dock-btn.active .dock-icon-wrapper {
+    background: rgba(22, 56, 44, 0.1);
+    color: var(--color-emerald);
+    transform: translateY(-1px);
+  }
+
+  .bottom-dock-btn.active .dock-label {
+    color: var(--color-emerald);
+    font-weight: 700;
+  }
+
+  .bottom-dock-btn.active::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    width: 4px;
+    height: 4px;
+    background: var(--color-gold);
+    border-radius: 50%;
+  }
+
+  /* Safe padding for body on mobile only when invitation is unveiled */
+  body.is-invitation-unveiled {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0)) !important;
+  }
+}
+
+@keyframes tabViewFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
