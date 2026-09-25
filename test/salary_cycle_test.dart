@@ -16,7 +16,7 @@ void main() {
       expect(cycle.salaryYear, equals(2026));
       expect(cycle.salaryMonth, equals(9));
       expect(cycle.title, contains('Sep 2026'));
-      expect(cycle.fullPeriodString, contains('25 Aug 2026 – 24 Sep 2026'));
+      expect(cycle.fullPeriodString, contains('25 Aug 2026 - 24 Sep 2026'));
     });
 
     test('Date before 25th belongs to previous month 25th to current month 24th', () {
@@ -39,7 +39,7 @@ void main() {
       expect(cycleJan.endDate, equals(DateTime(2027, 1, 24, 23, 59, 59, 999)));
       expect(cycleJan.salaryYear, equals(2027));
       expect(cycleJan.salaryMonth, equals(1));
-      expect(cycleJan.fullPeriodString, contains('25 Dec 2026 – 24 Jan 2027'));
+      expect(cycleJan.fullPeriodString, contains('25 Dec 2026 - 24 Jan 2027'));
 
       // 10 Jan 2027 -> same cycle
       final jan10 = DateTime(2027, 1, 10, 14, 0);

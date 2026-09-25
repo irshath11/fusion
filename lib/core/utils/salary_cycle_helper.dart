@@ -117,28 +117,28 @@ class SalaryCycle {
   /// Unique identifier key for dropdowns or caches (e.g. '2026-09')
   String get id => '$salaryYear-${salaryMonth.toString().padLeft(2, '0')}';
 
-  /// Title for display: e.g. "Aug – Sep 2026 Cycle (25 Aug – 24 Sep)"
+  /// Title for display: e.g. "Aug - Sep 2026 Cycle (25 Aug - 24 Sep)"
   String get title {
     final startM = DateFormat('MMM').format(startDate);
     final endM = DateFormat('MMM yyyy').format(endDate);
-    return '$startM – $endM Cycle (${DateFormat('dd MMM').format(startDate)} – ${DateFormat('dd MMM').format(endDate)})';
+    return '$startM - $endM Cycle (${DateFormat('dd MMM').format(startDate)} - ${DateFormat('dd MMM').format(endDate)})';
   }
 
-  /// Short label: e.g. "25 Aug – 24 Sep 2026"
+  /// Short label: e.g. "25 Aug - 24 Sep 2026"
   String get shortPeriodLabel {
-    return '${DateFormat('dd MMM').format(startDate)} – ${DateFormat('dd MMM yyyy').format(endDate)}';
+    return '${DateFormat('dd MMM').format(startDate)} - ${DateFormat('dd MMM yyyy').format(endDate)}';
   }
 
-  /// Dual-month cycle name: e.g. "Aug – Sep 2026"
+  /// Dual-month cycle name: e.g. "Aug - Sep 2026"
   String get salaryMonthName {
     final startM = DateFormat('MMM').format(startDate);
     final endM = DateFormat('MMM yyyy').format(endDate);
-    return '$startM – $endM';
+    return '$startM - $endM';
   }
 
-  /// Full period range string: e.g. "25 Aug 2026 – 24 Sep 2026"
+  /// Full period range string: e.g. "25 Aug 2026 - 24 Sep 2026"
   String get fullPeriodString {
-    return '${DateFormat('dd MMM yyyy').format(startDate)} – ${DateFormat('dd MMM yyyy').format(endDate)}';
+    return '${DateFormat('dd MMM yyyy').format(startDate)} - ${DateFormat('dd MMM yyyy').format(endDate)}';
   }
 
   /// Total days spanned by this cycle (normally 30 or 31 days)

@@ -12,6 +12,7 @@ import '../../../core/services/pdf_export_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/utils/timesheet_calculator.dart';
 import '../../../core/utils/salary_cycle_helper.dart';
+import '../../../core/utils/leave_calculator.dart';
 import '../../../core/widgets/app_animated_tab_switcher.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../attendance/domain/attendance_record.dart';
@@ -33,18 +34,22 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   String _searchQuery = '';
   bool _isLoadingCloud = false;
   int _activeTab =
-      0; // 0 = Directory, 1 = Cumulative Summary, 2 = Site / Client Man-Hours
+      0; // 0 = Directory, 1 = Cumulative Summary, 2 = Leave Record, 3 = Site / Client Man-Hours
   int _employeeRecordFilterTab =
       0; // 0 = With Records, 1 = No Records
   int _empDetailSubTab =
-      0; // 0 = Attendance & Timesheet Logs, 1 = Emergency Duty Details
+      0; // 0 = Attendance & Timesheet Logs, 1 = Emergency Duty Details, 2 = Leave Records
   String _siteDateFilter = 'cycle'; // 'cycle', 'today', 'week', 'month', 'all'
   bool _siteGroupByClient =
       false; // true = Group by Client, false = Specific Site
   final Set<String> _expandedSiteKeys = {};
+  final Set<String> _expandedLeaveEmpIds = {};
+  String _leaveFilterType = 'all'; // 'all', 'with_leaves', 'perfect_attendance'
+  String _empLeaveFilterType = 'all'; // 'all', 'leaves', 'sundays', 'present'
 
   SalaryCycle? _selectedSalaryCycle = SalaryCycle.current();
   SalaryCycle? _cumulativeSalaryCycle = SalaryCycle.current();
+  SalaryCycle? _leaveSalaryCycle = SalaryCycle.current();
   late final List<SalaryCycle> _availableSalaryCycles =
       SalaryCycle.getRecentCycles();
 
@@ -472,12 +477,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Tab Bar Switcher (Directory vs Cumulative Record vs Site Man-Hours)
+          // Tab Bar Switcher (Directory vs Cumulative Record vs Leave Record vs Site Man-Hours)
           AppAnimatedTabSwitcher(
             selectedIndex: _activeTab,
             tabs: const [
               TabItemData(label: 'Directory', icon: Icons.people_alt_rounded),
               TabItemData(label: 'Cumulative', icon: Icons.analytics_rounded),
+              TabItemData(
+                  label: 'Leave Record', icon: Icons.event_busy_rounded),
               TabItemData(
                   label: 'Site Hours', icon: Icons.location_city_rounded),
             ],
@@ -976,6 +983,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             ],
           ] else if (_activeTab == 1) ...[
             _buildCumulativeSummaryView(filteredEmployees, allRecords),
+          ] else if (_activeTab == 2) ...[
+            _buildLeaveRecordsView(filteredEmployees, allRecords),
           ] else ...[
             _buildSiteManHoursView(allRecords),
           ],
@@ -1273,6 +1282,12 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     final empRecords = _selectedSalaryCycle != null
         ? _selectedSalaryCycle!.filterRecords(allEmpRecords)
         : allEmpRecords;
+
+    final empLeaveSummary = LeaveCalculator.calculateEmployeeLeave(
+      emp,
+      allEmpRecords,
+      _selectedSalaryCycle ?? SalaryCycle.current(),
+    );
 
     // Group records by date (yyyy-MM-dd)
     final Map<String, List<AttendanceRecord>> groupedByDate = {};
@@ -1638,6 +1653,48 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? palette.surfaceDark
+                        : Colors.purple.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.purple.shade800
+                          : Colors.purple.shade200,
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Text('Leaves & Offs',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: isDark
+                                  ? Colors.purple.shade300
+                                  : Colors.purple.shade900,
+                              fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 2),
+                      Text('${empLeaveSummary.leaveDays} Leaves',
+                          style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: isDark
+                                  ? Colors.purple.shade300
+                                  : Colors.purple.shade900)),
+                      Text('${empLeaveSummary.sundayWeeklyOffs} Sundays Off',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: isDark
+                                  ? palette.textSecondaryDark
+                                  : palette.textSecondaryLight)),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -1803,7 +1860,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           const Divider(height: 20),
 
           const SizedBox(height: 4),
-          // Sub-Tab Navigation Bar: Attendance & Timesheet Logs vs Emergency Duty Details
+          // Sub-Tab Navigation Bar: Attendance & Timesheet Logs vs Emergency Duty Details vs Leave Records
           AppAnimatedTabSwitcher(
             selectedIndex: _empDetailSubTab,
             tabs: const [
@@ -1814,6 +1871,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               TabItemData(
                 label: 'Emergency Duty Details',
                 icon: Icons.warning_amber_rounded,
+              ),
+              TabItemData(
+                label: 'Leave Records',
+                icon: Icons.event_busy_rounded,
               ),
             ],
             onTabChanged: (index) {
@@ -1830,6 +1891,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               empRecords,
               timesheets,
               totalOtHours,
+              isDark,
+              palette,
+              activePrimary,
+            )
+          else if (_empDetailSubTab == 2)
+            _buildEmployeeLeaveRecordsSubTab(
+              emp,
+              empLeaveSummary,
               isDark,
               palette,
               activePrimary,
@@ -2821,6 +2890,499 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             },
           ),
       ],
+    );
+  }
+
+  Widget _buildEmployeeLeaveRecordsSubTab(
+    EmployeeEntity emp,
+    EmployeeLeaveSummary summary,
+    bool isDark,
+    dynamic palette,
+    Color activePrimary,
+  ) {
+    List<DailyLeaveRecord> displayedRecords = summary.dailyRecords;
+    if (_empLeaveFilterType == 'leaves') {
+      displayedRecords = summary.leaveDaysOnly;
+    } else if (_empLeaveFilterType == 'sundays') {
+      displayedRecords = summary.sundayOffsOnly;
+    } else if (_empLeaveFilterType == 'present') {
+      displayedRecords = summary.workedDaysOnly;
+    }
+
+    final sortedList = List<DailyLeaveRecord>.from(displayedRecords)
+      ..sort((a, b) => b.date.compareTo(a.date));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Policy Banner
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.purple.withValues(alpha: isDark ? 0.15 : 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark ? Colors.purple.shade700 : Colors.purple.shade200,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.beach_access_rounded,
+                  color:
+                      isDark ? Colors.purple.shade300 : Colors.purple.shade800,
+                  size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Leave Policy: Sunday is the Only Day of Leave in a Week',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: isDark
+                            ? Colors.purple.shade200
+                            : Colors.purple.shade900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Monday through Saturday are scheduled working days. Unworked working days are accounted as Leaves / Absences. Working on Sunday is counted as Sunday Duty.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark
+                            ? palette.textSecondaryDark
+                            : Colors.purple.shade900.withValues(alpha: 0.8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Metrics Breakdown Row
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _buildEmpDetailLeaveMetric(
+              label: 'Working Days',
+              value: '${summary.elapsedWorkingDays} Days',
+              subtitle: 'Mon–Sat Scheduled',
+              color: activePrimary,
+              icon: Icons.calendar_today_rounded,
+              isDark: isDark,
+              palette: palette,
+            ),
+            _buildEmpDetailLeaveMetric(
+              label: 'Days Worked',
+              value: '${summary.daysWorked} Days',
+              subtitle:
+                  '${summary.workingDaysPresent} Mon–Sat + ${summary.sundayDutyDays} Sun',
+              color: Colors.green.shade700,
+              icon: Icons.check_circle_rounded,
+              isDark: isDark,
+              palette: palette,
+            ),
+            _buildEmpDetailLeaveMetric(
+              label: 'Leaves Taken',
+              value: '${summary.leaveDays} Days',
+              subtitle: summary.leaveDays == 0
+                  ? 'Perfect Attendance'
+                  : 'Working Days Missed',
+              color: summary.leaveDays > 0
+                  ? Colors.red.shade700
+                  : Colors.green.shade700,
+              icon: Icons.event_busy_rounded,
+              isDark: isDark,
+              palette: palette,
+            ),
+            _buildEmpDetailLeaveMetric(
+              label: 'Sunday Offs',
+              value: '${summary.sundayWeeklyOffs} Days',
+              subtitle: 'Weekly Leave Days',
+              color: Colors.purple.shade700,
+              icon: Icons.weekend_rounded,
+              isDark: isDark,
+              palette: palette,
+            ),
+            _buildEmpDetailLeaveMetric(
+              label: 'Attendance Rate',
+              value: '${summary.attendancePercentage.toStringAsFixed(1)}%',
+              subtitle: 'On Working Days',
+              color: Colors.indigo.shade700,
+              icon: Icons.pie_chart_rounded,
+              isDark: isDark,
+              palette: palette,
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+
+        // Filter Chips Row
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _buildFilterChoiceChip(
+                label: 'All Days (${summary.dailyRecords.length})',
+                isSelected: _empLeaveFilterType == 'all',
+                onSelected: () => setState(() => _empLeaveFilterType = 'all'),
+                activePrimary: activePrimary,
+                isDark: isDark,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChoiceChip(
+                label: 'Leaves Only (${summary.leaveDays})',
+                isSelected: _empLeaveFilterType == 'leaves',
+                onSelected: () =>
+                    setState(() => _empLeaveFilterType = 'leaves'),
+                activePrimary: Colors.red.shade700,
+                isDark: isDark,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChoiceChip(
+                label: 'Sunday Offs (${summary.sundayWeeklyOffs})',
+                isSelected: _empLeaveFilterType == 'sundays',
+                onSelected: () =>
+                    setState(() => _empLeaveFilterType = 'sundays'),
+                activePrimary: Colors.purple.shade700,
+                isDark: isDark,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChoiceChip(
+                label: 'Worked Days (${summary.daysWorked})',
+                isSelected: _empLeaveFilterType == 'present',
+                onSelected: () =>
+                    setState(() => _empLeaveFilterType = 'present'),
+                activePrimary: Colors.green.shade700,
+                isDark: isDark,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // List of Day Records
+        if (sortedList.isEmpty)
+          Card(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Center(
+                child: Text(
+                  'No records matching the selected filter.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark
+                        ? palette.textSecondaryDark
+                        : Colors.grey.shade600,
+                  ),
+                ),
+              ),
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: sortedList.length,
+            itemBuilder: (context, index) {
+              final d = sortedList[index];
+              return _buildDailyLeaveRecordCard(
+                  d, isDark, palette, activePrimary);
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildDailyLeaveRecordCard(
+    DailyLeaveRecord d,
+    bool isDark,
+    dynamic palette,
+    Color activePrimary,
+  ) {
+    Color statusColor;
+    IconData statusIcon;
+    String statusTitle;
+    String statusSubtitle;
+
+    switch (d.type) {
+      case LeaveDayType.present:
+        statusColor = Colors.green;
+        statusIcon = Icons.check_circle_rounded;
+        statusTitle = 'Present (${d.totalHours.toStringAsFixed(1)}h)';
+        statusSubtitle =
+            'Regular: ${d.regularHours.toStringAsFixed(1)}h • OT: ${d.overtimeHours.toStringAsFixed(1)}h';
+        break;
+      case LeaveDayType.leaveAbsent:
+        statusColor = Colors.red.shade700;
+        statusIcon = Icons.cancel_rounded;
+        statusTitle = 'Leave / Absent';
+        statusSubtitle = 'Working day missed • No attendance logged';
+        break;
+      case LeaveDayType.sundayWeeklyOff:
+        statusColor = Colors.purple.shade700;
+        statusIcon = Icons.weekend_rounded;
+        statusTitle = 'Sunday (Weekly Off)';
+        statusSubtitle = 'Designated weekly leave day • Scheduled rest day';
+        break;
+      case LeaveDayType.sundayDuty:
+        statusColor = Colors.orange.shade800;
+        statusIcon = Icons.stars_rounded;
+        statusTitle = 'Sunday Duty (${d.totalHours.toStringAsFixed(1)}h)';
+        statusSubtitle = 'Worked on weekly off • OT / Sunday duty';
+        break;
+      case LeaveDayType.futureDay:
+        statusColor = Colors.grey;
+        statusIcon = Icons.schedule_rounded;
+        statusTitle = 'Upcoming Day';
+        statusSubtitle = 'Scheduled day in current cycle';
+        break;
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      elevation: 0.8,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isDark
+              ? palette.cardBorderDark
+              : statusColor.withValues(alpha: 0.25),
+          width: 1,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: isDark ? 0.2 : 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(statusIcon, color: statusColor, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        d.fullDisplay,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: isDark
+                              ? palette.textPrimaryDark
+                              : palette.textPrimaryLight,
+                        ),
+                      ),
+                      if (d.isSunday) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Sunday',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: isDark
+                                  ? Colors.purple.shade300
+                                  : Colors.purple.shade800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    statusSubtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark
+                          ? palette.textSecondaryDark
+                          : Colors.grey.shade700,
+                    ),
+                  ),
+                  if (d.remarks != null && d.remarks!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Note: ${d.remarks!}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontStyle: FontStyle.italic,
+                        color: activePrimary,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: isDark ? 0.22 : 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                statusTitle,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: statusColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChoiceChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onSelected,
+    required Color activePrimary,
+    required bool isDark,
+  }) {
+    return InkWell(
+      onTap: onSelected,
+      borderRadius: BorderRadius.circular(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? activePrimary
+              : (isDark ? Colors.grey.shade800 : Colors.grey.shade100),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? activePrimary
+                : (isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected
+                ? Colors.white
+                : (isDark ? Colors.grey.shade300 : Colors.grey.shade800),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMiniBadge({
+    required String label,
+    required Color color,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: isDark ? 0.2 : 0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmpDetailLeaveMetric({
+    required String label,
+    required String value,
+    required String subtitle,
+    required Color color,
+    required IconData icon,
+    required bool isDark,
+    required dynamic palette,
+  }) {
+    return Container(
+      width: 140,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isDark ? palette.surfaceDark : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color:
+              isDark ? palette.cardBorderDark : color.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                    color: isDark
+                        ? palette.textSecondaryDark
+                        : palette.textSecondaryLight,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 9.5,
+              color: isDark
+                  ? palette.textSecondaryDark
+                  : palette.textSecondaryLight,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
     );
   }
 
@@ -4784,6 +5346,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         employee: emp,
         records: records,
         salaryCyclePeriod: _selectedSalaryCycle?.shortPeriodLabel,
+        salaryCycle: _selectedSalaryCycle,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -4818,6 +5381,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         employees: employees,
         records: recordsToExport,
         salaryCyclePeriod: _cumulativeSalaryCycle?.shortPeriodLabel,
+        salaryCycle: _cumulativeSalaryCycle,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -4874,6 +5438,12 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       grandReg += regHours;
       grandOt += otHours;
 
+      final empLeave = LeaveCalculator.calculateEmployeeLeave(
+        emp,
+        recordsToUse,
+        _cumulativeSalaryCycle ?? SalaryCycle.current(),
+      );
+
       summaries.add(
         _EmpCumulativeData(
           employee: emp,
@@ -4882,6 +5452,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           emergencyDutyHours: emgHours,
           combinedHours: regHours + otHours,
           daysWorked: timesheets.length,
+          leaveDays: empLeave.leaveDays,
+          sundayOffs: empLeave.sundayWeeklyOffs,
+          sundayDuties: empLeave.sundayDutyDays,
         ),
       );
     }
@@ -5199,21 +5772,59 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               ],
                             ),
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: activePrimary.withValues(
-                                  alpha: isDark ? 0.2 : 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '${item.daysWorked} Days',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: activePrimary),
-                            ),
+                          Wrap(
+                            spacing: 4,
+                            runSpacing: 4,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: activePrimary.withValues(
+                                      alpha: isDark ? 0.2 : 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '${item.daysWorked}d Worked',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: activePrimary),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: (item.leaveDays > 0 ? Colors.red : Colors.green).withValues(
+                                      alpha: isDark ? 0.2 : 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '${item.leaveDays} Leaves',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: item.leaveDays > 0 ? Colors.red : Colors.green),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.purple.withValues(
+                                      alpha: isDark ? 0.2 : 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '${item.sundayOffs} Sun Off',
+                                  style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.purple),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -5566,6 +6177,682 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  // ==========================================
+  // LEVEL 1 TAB 2: LEAVE RECORDS LEDGER
+  // ==========================================
+  Future<void> _exportWorkforceLeavePdf(
+      List<EmployeeEntity> employees, List<AttendanceRecord> records) async {
+    try {
+      final activeCycle = _leaveSalaryCycle ?? SalaryCycle.current();
+      final recordsToExport = activeCycle.filterRecords(records);
+
+      await PdfExportService.downloadLeaveReportPdfFile(
+        organizationName: _db.organization?.name ?? 'Fusion Enterprise',
+        employees: employees,
+        records: recordsToExport,
+        cycle: activeCycle,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Workforce Leave Report PDF ready for download!'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error downloading Leave PDF: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not generate Leave PDF: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildLeaveRecordsView(
+    List<EmployeeEntity> employees,
+    List<AttendanceRecord> allRecords,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = AppTheme.currentColors;
+    final activePrimary =
+        palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
+
+    final activeCycle = _leaveSalaryCycle ?? SalaryCycle.current();
+    final recordsToUse = activeCycle.filterRecords(allRecords);
+
+    final summaries = LeaveCalculator.calculateWorkforceLeaveSummaries(
+      employees,
+      recordsToUse,
+      activeCycle,
+    );
+    final metrics =
+        LeaveCalculator.calculateWorkforceMetrics(summaries, activeCycle);
+
+    final withLeaves = summaries.where((s) => s.leaveDays > 0).toList();
+    final perfectAttendance =
+        summaries.where((s) => s.leaveDays == 0).toList();
+
+    List<EmployeeLeaveSummary> displayedSummaries = summaries;
+    if (_leaveFilterType == 'with_leaves') {
+      displayedSummaries = withLeaves;
+    } else if (_leaveFilterType == 'perfect_attendance') {
+      displayedSummaries = perfectAttendance;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Leave Salary Cycle Filter Dropdown (25th - 24th Cutoff)
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: isDark ? palette.surfaceDark : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark
+                  ? palette.cardBorderDark
+                  : activePrimary.withValues(alpha: 0.25),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: activePrimary.withValues(alpha: isDark ? 0.08 : 0.04),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: activePrimary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.date_range_rounded,
+                    color: activePrimary, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Leave Record Salary Cycle Filter',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: isDark
+                                ? palette.textSecondaryDark
+                                : palette.textSecondaryLight,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: palette.success.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '25th - 24th Cutoff',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: palette.success,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _leaveSalaryCycle?.id ?? 'all',
+                        isDense: true,
+                        isExpanded: true,
+                        icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                            size: 20),
+                        items: [
+                          ..._availableSalaryCycles.map((c) {
+                            final isCur =
+                                c.id == SalaryCycle.current().id;
+                            return DropdownMenuItem<String>(
+                              value: c.id,
+                              child: Text(
+                                '${c.salaryMonthName} (${c.shortPeriodLabel})${isCur ? " • Current Cycle" : ""}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isCur
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            );
+                          }),
+                          const DropdownMenuItem<String>(
+                            value: 'all',
+                            child: Text(
+                              'All Recorded Cycles (Full History)',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          setState(() {
+                            if (val == null || val == 'all') {
+                              _leaveSalaryCycle = null;
+                            } else {
+                              _leaveSalaryCycle =
+                                  _availableSalaryCycles.firstWhere(
+                                (c) => c.id == val,
+                                orElse: () => SalaryCycle.current(),
+                              );
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Policy Banner Container
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isDark
+                ? palette.surfaceDark
+                : Colors.purple.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color:
+                  isDark ? Colors.purple.shade700 : Colors.purple.shade200,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color:
+                      Colors.purple.withValues(alpha: isDark ? 0.25 : 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.beach_access_rounded,
+                    color: isDark
+                        ? Colors.purple.shade300
+                        : Colors.purple.shade800,
+                    size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Official Leave Policy: Sunday is the Only Day of Leave in a Week',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: isDark
+                            ? Colors.purple.shade200
+                            : Colors.purple.shade900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Workforce schedule runs 6 days a week (Monday through Saturday). Every Sunday is an official weekly leave day. Any working day with no attendance logged is treated as an employee leave / absence.',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: isDark
+                            ? palette.textSecondaryDark
+                            : Colors.purple.shade900.withValues(alpha: 0.8),
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Executive Workforce Leave KPI Cards
+        Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isDark ? palette.surfaceDark : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color:
+                  isDark ? palette.cardBorderDark : Colors.grey.shade200,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.analytics_rounded,
+                          color: activePrimary, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Workforce Leave & Attendance Summary',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: isDark
+                              ? palette.textPrimaryDark
+                              : palette.textPrimaryLight,
+                        ),
+                      ),
+                    ],
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () =>
+                        _exportWorkforceLeavePdf(employees, allRecords),
+                    icon:
+                        const Icon(Icons.picture_as_pdf_rounded, size: 16),
+                    label: const Text('Download PDF',
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildSummaryMetricBadge(
+                      label: 'Staff Count',
+                      value: '${metrics.totalEmployees}',
+                      color: activePrimary,
+                      icon: Icons.people_rounded,
+                      isDark: isDark,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildSummaryMetricBadge(
+                      label: 'Days Worked',
+                      value: '${metrics.totalWorkforceDaysWorked}d',
+                      color: Colors.green.shade700,
+                      icon: Icons.check_circle_rounded,
+                      isDark: isDark,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildSummaryMetricBadge(
+                      label: 'Leaves Taken',
+                      value: '${metrics.totalWorkforceLeavesTaken}d',
+                      color: metrics.totalWorkforceLeavesTaken > 0
+                          ? Colors.red.shade700
+                          : Colors.green.shade700,
+                      icon: Icons.event_busy_rounded,
+                      isDark: isDark,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildSummaryMetricBadge(
+                      label: 'Sunday Offs',
+                      value: '${metrics.totalWorkforceSundayOffs}d',
+                      color: Colors.purple.shade700,
+                      icon: Icons.weekend_rounded,
+                      isDark: isDark,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildSummaryMetricBadge(
+                      label: 'Avg Attendance',
+                      value:
+                          '${metrics.averageAttendanceRate.toStringAsFixed(1)}%',
+                      color: Colors.indigo.shade700,
+                      icon: Icons.pie_chart_rounded,
+                      isDark: isDark,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        // Filter Chips for Workforce View
+        Row(
+          children: [
+            _buildFilterChoiceChip(
+              label: 'All Staff (${summaries.length})',
+              isSelected: _leaveFilterType == 'all',
+              onSelected: () => setState(() => _leaveFilterType = 'all'),
+              activePrimary: activePrimary,
+              isDark: isDark,
+            ),
+            const SizedBox(width: 8),
+            _buildFilterChoiceChip(
+              label: 'With Leaves (${withLeaves.length})',
+              isSelected: _leaveFilterType == 'with_leaves',
+              onSelected: () =>
+                  setState(() => _leaveFilterType = 'with_leaves'),
+              activePrimary: Colors.red.shade700,
+              isDark: isDark,
+            ),
+            const SizedBox(width: 8),
+            _buildFilterChoiceChip(
+              label: 'Perfect Attendance (${perfectAttendance.length})',
+              isSelected: _leaveFilterType == 'perfect_attendance',
+              onSelected: () =>
+                  setState(() => _leaveFilterType = 'perfect_attendance'),
+              activePrimary: Colors.green.shade700,
+              isDark: isDark,
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // Employee Leave Cards List
+        if (displayedSummaries.isEmpty)
+          Card(
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14)),
+            child: const Padding(
+              padding: EdgeInsets.all(32),
+              child:
+                  Center(child: Text('No employees matching this filter.')),
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: displayedSummaries.length,
+            itemBuilder: (context, index) {
+              final item = displayedSummaries[index];
+              final emp = item.employee;
+              final isExpanded = _expandedLeaveEmpIds.contains(emp.id);
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(
+                    color: isDark
+                        ? palette.cardBorderDark
+                        : Colors.grey.shade200,
+                  ),
+                ),
+                elevation: 1,
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header Row: Avatar, Name, Code, Badges
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 20,
+                            backgroundColor: activePrimary,
+                            child: Text(
+                              emp.name.isNotEmpty
+                                  ? emp.name.substring(0, 1).toUpperCase()
+                                  : 'E',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  emp.name,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  '${emp.employeeCode} • ${emp.department}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isDark
+                                        ? palette.textSecondaryDark
+                                        : palette.textSecondaryLight,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () {
+                              setState(() {
+                                if (isExpanded) {
+                                  _expandedLeaveEmpIds.remove(emp.id);
+                                } else {
+                                  _expandedLeaveEmpIds.add(emp.id);
+                                }
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.all(6),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    isExpanded ? 'Hide Dates' : 'Leave Dates',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: activePrimary,
+                                    ),
+                                  ),
+                                  Icon(
+                                    isExpanded
+                                        ? Icons.keyboard_arrow_up_rounded
+                                        : Icons.keyboard_arrow_down_rounded,
+                                    color: activePrimary,
+                                    size: 18,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Metrics Badges Bar
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          _buildMiniBadge(
+                            label: '${item.daysWorked} Worked',
+                            color: Colors.green,
+                            isDark: isDark,
+                          ),
+                          _buildMiniBadge(
+                            label: '${item.leaveDays} Leaves Taken',
+                            color: item.leaveDays > 0
+                                ? Colors.red
+                                : Colors.green,
+                            isDark: isDark,
+                          ),
+                          _buildMiniBadge(
+                            label: '${item.sundayWeeklyOffs} Sundays Off',
+                            color: Colors.purple,
+                            isDark: isDark,
+                          ),
+                          if (item.sundayDutyDays > 0)
+                            _buildMiniBadge(
+                              label: '${item.sundayDutyDays} Sunday Duty',
+                              color: Colors.orange,
+                              isDark: isDark,
+                            ),
+                          _buildMiniBadge(
+                            label:
+                                '${item.attendancePercentage.toStringAsFixed(0)}% Attendance',
+                            color: Colors.indigo,
+                            isDark: isDark,
+                          ),
+                        ],
+                      ),
+
+                      // Expanded Day-by-Day Leaves Table
+                      if (isExpanded) ...[
+                        const SizedBox(height: 12),
+                        const Divider(height: 1),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Detailed Leave & Weekly Off Record for ${emp.name}:',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: isDark
+                                ? palette.textPrimaryDark
+                                : palette.textPrimaryLight,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        if (item.leaveDaysOnly.isEmpty)
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.check_circle_rounded,
+                                    color: Colors.green, size: 16),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Zero leaves taken on scheduled working days. Excellent attendance!',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green),
+                                ),
+                              ],
+                            ),
+                          )
+                        else ...[
+                          Text(
+                            'Leaves / Absences on Scheduled Working Days:',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.red.shade700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: item.leaveDaysOnly.map((leave) {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.red
+                                      .withValues(alpha: isDark ? 0.2 : 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                      color: Colors.red.shade300, width: 0.5),
+                                ),
+                                child: Text(
+                                  '${leave.shortDayOfWeek}, ${leave.displayDate}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red.shade800,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        Text(
+                          'Sundays (Weekly Offs): ${item.sundayOffsOnly.map((s) => s.displayDate).join(", ")}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark
+                                ? palette.textSecondaryDark
+                                : Colors.purple.shade800,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _selectedEmployeeId = emp.id;
+                                _empDetailSubTab =
+                                    2; // Jump directly to Leave Records sub-tab
+                              });
+                            },
+                            icon: const Icon(Icons.open_in_new_rounded,
+                                size: 14),
+                            label: const Text(
+                                'Open Full Employee Leave Ledger',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
     );
   }
 
@@ -6359,6 +7646,9 @@ class _EmpCumulativeData {
   final double emergencyDutyHours;
   final double combinedHours;
   final int daysWorked;
+  final int leaveDays;
+  final int sundayOffs;
+  final int sundayDuties;
 
   _EmpCumulativeData({
     required this.employee,
@@ -6367,5 +7657,8 @@ class _EmpCumulativeData {
     this.emergencyDutyHours = 0.0,
     required this.combinedHours,
     required this.daysWorked,
+    this.leaveDays = 0,
+    this.sundayOffs = 0,
+    this.sundayDuties = 0,
   });
 }

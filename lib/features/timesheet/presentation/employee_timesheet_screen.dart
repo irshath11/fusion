@@ -568,6 +568,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
         employee: emp,
         records: records,
         salaryCyclePeriod: _selectedSalaryCycle?.shortPeriodLabel,
+        salaryCycle: _selectedSalaryCycle,
       );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
