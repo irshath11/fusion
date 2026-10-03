@@ -522,17 +522,40 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     final localNow = now.toLocal();
     final todayStr = "${localNow.year}-${localNow.month.toString().padLeft(2, '0')}-${localNow.day.toString().padLeft(2, '0')}";
 
+    final userTodayRecords = _db.getTodayAttendanceRecords(empId);
+
     DailyTimesheetEntry? todayTimesheetEntry;
+    // 1. Check for active (in-progress) shift entry first
     for (final entry in dailyEntries) {
-      final entryLocal = entry.date.toLocal();
-      final entryDateStr = "${entryLocal.year}-${entryLocal.month.toString().padLeft(2, '0')}-${entryLocal.day.toString().padLeft(2, '0')}";
-      if (entryDateStr == todayStr) {
+      if (!entry.isCompleted && !entry.isAutoCompleted) {
         todayTimesheetEntry = entry;
         break;
       }
     }
-
-    final userTodayRecords = _db.getTodayAttendanceRecords(empId);
+    // 2. Look for entry matching the anchor date of userTodayRecords (e.g. overnight shift)
+    if (todayTimesheetEntry == null && userTodayRecords.isNotEmpty) {
+      final anchorLocal = userTodayRecords.first.eventTimestamp.toLocal();
+      final anchorDateStr = "${anchorLocal.year}-${anchorLocal.month.toString().padLeft(2, '0')}-${anchorLocal.day.toString().padLeft(2, '0')}";
+      for (final entry in dailyEntries) {
+        final entryLocal = entry.date.toLocal();
+        final entryDateStr = "${entryLocal.year}-${entryLocal.month.toString().padLeft(2, '0')}-${entryLocal.day.toString().padLeft(2, '0')}";
+        if (entryDateStr == anchorDateStr) {
+          todayTimesheetEntry = entry;
+          break;
+        }
+      }
+    }
+    // 3. Fallback to calendar todayStr
+    if (todayTimesheetEntry == null) {
+      for (final entry in dailyEntries) {
+        final entryLocal = entry.date.toLocal();
+        final entryDateStr = "${entryLocal.year}-${entryLocal.month.toString().padLeft(2, '0')}-${entryLocal.day.toString().padLeft(2, '0')}";
+        if (entryDateStr == todayStr) {
+          todayTimesheetEntry = entry;
+          break;
+        }
+      }
+    }
 
     String workingTime = '00h 00m';
     final bool isOnBreak =
@@ -1335,18 +1358,33 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                           .withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
-                                    child: Row(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Icon(Icons.check_circle_rounded,
-                                            color: AppColors.success, size: 28),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Text(
-                                            'Daily attendance workflow fully completed. Thank you!',
-                                            style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                color: AppColors.success),
-                                          ),
+                                        Row(
+                                          children: [
+                                            Icon(Icons.check_circle_rounded,
+                                                color: AppColors.success, size: 28),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Text(
+                                                'Daily attendance workflow fully completed. Thank you!',
+                                                style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppColors.success),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 14),
+                                        AppButton(
+                                          text: state is AttendanceProcessing
+                                              ? 'Processing...'
+                                              : 'Start New Shift (Office Check-In)',
+                                          isLoading: state is AttendanceProcessing,
+                                          icon: Icons.login_rounded,
+                                          onPressed: () => _handleAttendanceStep(
+                                              WorkflowStep.officeCheckIn),
                                         ),
                                       ],
                                     ),

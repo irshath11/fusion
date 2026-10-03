@@ -436,11 +436,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       final empRecords = allRecords
           .where((r) => _recordMatchesEmployee(r, emp))
           .toList();
-      final datesCount = empRecords
-          .map((r) =>
-              DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()))
-          .toSet()
-          .length;
+      final datesCount = TimesheetCalculator.groupRecordsByShiftDate(
+        empRecords,
+        isSingleEmployee: true,
+      ).keys.length;
 
       if (datesCount > 0) {
         employeesWithRecords.add(MapEntry(emp, datesCount));
@@ -1080,12 +1079,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         ? _selectedSalaryCycle!.filterRecords(allEmpRecords)
         : allEmpRecords;
 
-    // Group records by date (yyyy-MM-dd)
-    final Map<String, List<AttendanceRecord>> groupedByDate = {};
-    for (final r in empRecords) {
-      final dateKey = DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal());
-      groupedByDate.putIfAbsent(dateKey, () => []).add(r);
-    }
+    // Group records by shift anchor date (yyyy-MM-dd)
+    final Map<String, List<AttendanceRecord>> groupedByDate =
+        TimesheetCalculator.groupRecordsByShiftDate(empRecords, isSingleEmployee: true);
 
     final sortedDateKeys = groupedByDate.keys.toList()
       ..sort((a, b) => b.compareTo(a));
@@ -3607,13 +3603,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
     final selectedDateStr = DateFormat('yyyy-MM-dd').format(_selectedDate!);
 
-    final dateRecords = _db.getAttendanceRecords().where((r) {
-      final matchesUser = _recordMatchesEmployee(r, emp);
-      final matchesDate =
-          DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()) == selectedDateStr;
-      return matchesUser && matchesDate;
+    final allEmpRecords = _db.getAttendanceRecords().where((r) {
+      return _recordMatchesEmployee(r, emp);
     }).toList();
 
+    final groupedByDate =
+        TimesheetCalculator.groupRecordsByShiftDate(allEmpRecords, isSingleEmployee: true);
+    final dateRecords =
+        List<AttendanceRecord>.from(groupedByDate[selectedDateStr] ?? []);
     dateRecords.sort((a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
 
     final formattedDateTitle =
