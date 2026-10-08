@@ -142,11 +142,8 @@ class LocalDatabaseService {
     // Automatically resolve any dangling check-ins older than 24 hours
     autoResolveExpiredCheckIns();
 
-    // Sanitize any phantom/duplicate employee records (e.g. 'Anand' -> 'Anandh Veeramani')
+    // Sanitize phantom/duplicate employee records strictly for Anandh, Rafi, and Azharudeen
     sanitizeDuplicateEmployees();
-
-    // Seed and sync canonical master company employee directory with photos and full names
-    seedMasterEmployeeDirectory();
 
     _persistOffices();
     _persistEmployees();
@@ -214,53 +211,84 @@ class LocalDatabaseService {
   List<UserEntity> getUsers() {
     final Map<String, UserEntity> uniqueMap = {};
     for (final u in _users) {
-      final key = u.email.trim().isNotEmpty
-          ? u.email.trim().toLowerCase()
-          : (u.fullName.trim().isNotEmpty ? u.fullName.trim().toLowerCase() : u.id);
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: u.employeeCode,
+        name: u.fullName,
+        email: u.email,
+        id: u.id,
+      );
+      final key = official != null
+          ? official.employeeId.toUpperCase()
+          : (u.email.trim().isNotEmpty
+              ? u.email.trim().toLowerCase()
+              : (u.fullName.trim().isNotEmpty ? u.fullName.trim().toLowerCase() : u.id));
       uniqueMap[key] = u;
     }
     for (final e in _employees) {
-      final key = e.email.trim().isNotEmpty
-          ? e.email.trim().toLowerCase()
-          : (e.name.trim().isNotEmpty ? e.name.trim().toLowerCase() : e.id);
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: e.employeeCode,
+        name: e.name,
+        email: e.email,
+        id: e.id,
+      );
+      final key = official != null
+          ? official.employeeId.toUpperCase()
+          : (e.email.trim().isNotEmpty
+              ? e.email.trim().toLowerCase()
+              : (e.name.trim().isNotEmpty ? e.name.trim().toLowerCase() : e.id));
       if (!uniqueMap.containsKey(key)) {
         uniqueMap[key] = UserEntity(
           id: e.id,
           firebaseUid: e.id,
           email: e.email,
-          fullName: e.name,
+          fullName: official != null ? official.fullName : e.name,
           phoneNumber: e.mobileNumber,
-          employeeCode: e.employeeCode,
-          designation: e.designation,
-          department: e.department,
+          employeeCode: official != null ? official.employeeId : e.employeeCode,
+          designation: official != null ? official.designation : e.designation,
+          department: official != null ? official.department : e.department,
           role: UserRole.employee,
           organizationId: _organization?.id ?? '00000000-0000-0000-0000-000000000001',
           isActive: e.isActive,
           useDefaultOffice: e.useDefaultOffice,
           assignedOfficeId: e.assignedOfficeId,
           assignedOfficeName: e.assignedOfficeName,
-          photoUrl: e.photoUrl,
+          photoUrl: official != null ? official.photoAsset : e.photoUrl,
         );
       } else {
         final existing = uniqueMap[key]!;
         uniqueMap[key] = existing.copyWith(
-          employeeCode: (existing.employeeCode != null && existing.employeeCode!.isNotEmpty && existing.employeeCode != 'EMP-000')
-              ? existing.employeeCode
-              : e.employeeCode,
-          designation: (existing.designation != null && existing.designation!.isNotEmpty)
-              ? existing.designation
-              : e.designation,
-          department: (existing.department != null && existing.department!.isNotEmpty)
-              ? existing.department
-              : e.department,
-          photoUrl: existing.photoUrl ?? e.photoUrl,
+          fullName: official != null ? official.fullName : existing.fullName,
+          employeeCode: official != null
+              ? official.employeeId
+              : ((existing.employeeCode != null && existing.employeeCode!.isNotEmpty && existing.employeeCode != 'EMP-000')
+                  ? existing.employeeCode
+                  : e.employeeCode),
+          designation: official != null
+              ? official.designation
+              : ((existing.designation != null && existing.designation!.isNotEmpty)
+                  ? existing.designation
+                  : e.designation),
+          department: official != null
+              ? official.department
+              : ((existing.department != null && existing.department!.isNotEmpty)
+                  ? existing.department
+                  : e.department),
+          photoUrl: official != null ? official.photoAsset : (existing.photoUrl ?? e.photoUrl),
         );
       }
     }
     if (_currentUser != null) {
-      final key = _currentUser!.email.trim().isNotEmpty
-          ? _currentUser!.email.trim().toLowerCase()
-          : (_currentUser!.fullName.trim().isNotEmpty ? _currentUser!.fullName.trim().toLowerCase() : _currentUser!.id);
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: _currentUser!.employeeCode,
+        name: _currentUser!.fullName,
+        email: _currentUser!.email,
+        id: _currentUser!.id,
+      );
+      final key = official != null
+          ? official.employeeId.toUpperCase()
+          : (_currentUser!.email.trim().isNotEmpty
+              ? _currentUser!.email.trim().toLowerCase()
+              : (_currentUser!.fullName.trim().isNotEmpty ? _currentUser!.fullName.trim().toLowerCase() : _currentUser!.id));
       if (!uniqueMap.containsKey(key) || _currentUser!.role == UserRole.superAdmin || _currentUser!.role == UserRole.admin) {
         uniqueMap[key] = _currentUser!;
       }
@@ -378,31 +406,61 @@ class LocalDatabaseService {
   List<EmployeeEntity> getEmployees() {
     final Map<String, EmployeeEntity> uniqueMap = {};
     for (final e in _employees) {
-      final String key = e.email.trim().isNotEmpty
-          ? e.email.trim().toLowerCase()
-          : (e.name.trim().isNotEmpty ? e.name.trim().toLowerCase() : e.id);
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: e.employeeCode,
+        name: e.name,
+        email: e.email,
+        id: e.id,
+      );
+      final String key = official != null
+          ? official.employeeId.toUpperCase()
+          : (e.email.trim().isNotEmpty
+              ? e.email.trim().toLowerCase()
+              : (e.name.trim().isNotEmpty ? e.name.trim().toLowerCase() : e.id));
 
       if (!uniqueMap.containsKey(key)) {
-        uniqueMap[key] = e;
+        uniqueMap[key] = official != null
+            ? e.copyWith(
+                name: official.fullName,
+                employeeCode: official.employeeId,
+                photoUrl: official.photoAsset,
+                designation: (e.designation.isNotEmpty && e.designation != 'Staff' && e.designation != 'Team Member')
+                    ? e.designation
+                    : official.designation,
+                department: (e.department.isNotEmpty && e.department != 'Operations')
+                    ? e.department
+                    : official.department,
+              )
+            : e;
       } else {
         final existing = uniqueMap[key]!;
         uniqueMap[key] = EmployeeEntity(
           id: existing.id.length > e.id.length ? existing.id : e.id,
-          employeeCode: existing.employeeCode.startsWith('EMP-') && existing.employeeCode != 'EMP-000'
-              ? existing.employeeCode
-              : e.employeeCode,
-          name: existing.name.isNotEmpty ? existing.name : e.name,
+          employeeCode: official != null
+              ? official.employeeId
+              : (existing.employeeCode.startsWith('EMP-') && existing.employeeCode != 'EMP-000'
+                  ? existing.employeeCode
+                  : e.employeeCode),
+          name: official != null
+              ? official.fullName
+              : (existing.name.isNotEmpty ? existing.name : e.name),
           mobileNumber: existing.mobileNumber.isNotEmpty ? existing.mobileNumber : e.mobileNumber,
           email: existing.email.isNotEmpty ? existing.email : e.email,
-          designation: existing.designation != 'Team Member' ? existing.designation : e.designation,
-          department: existing.department != 'Operations' ? existing.department : e.department,
+          designation: official != null
+              ? official.designation
+              : (existing.designation != 'Team Member' ? existing.designation : e.designation),
+          department: official != null
+              ? official.department
+              : (existing.department != 'Operations' ? existing.department : e.department),
           useDefaultOffice: existing.useDefaultOffice,
           assignedOfficeId: existing.assignedOfficeId ?? e.assignedOfficeId,
           assignedOfficeName: existing.assignedOfficeName ?? e.assignedOfficeName,
           isActive: existing.isActive && e.isActive,
-          photoUrl: (existing.photoUrl != null && existing.photoUrl!.trim().isNotEmpty)
-              ? existing.photoUrl
-              : e.photoUrl,
+          photoUrl: official != null
+              ? official.photoAsset
+              : ((existing.photoUrl != null && existing.photoUrl!.trim().isNotEmpty)
+                  ? existing.photoUrl
+                  : e.photoUrl),
         );
       }
     }
@@ -428,76 +486,25 @@ class LocalDatabaseService {
               : official.department,
         );
       }
+      if (e.photoUrl == null || e.photoUrl!.trim().isEmpty) {
+        final photo = EmployeeDirectoryHelper.resolvePhoto(
+          employeeCode: e.employeeCode,
+          fullName: e.name,
+          email: e.email,
+          id: e.id,
+        );
+        if (photo != null) {
+          return e.copyWith(photoUrl: photo);
+        }
+      }
       return e;
     }).toList();
     list.sort((a, b) => a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
     return List.unmodifiable(list);
   }
 
-  /// Seeds and syncs canonical master enterprise employee directory with photos, full names, and official IDs
-  void seedMasterEmployeeDirectory() {
-    for (final rec in EmployeeDirectoryHelper.masterDirectory) {
-      final existingEmpIndex = _employees.indexWhere((e) =>
-          e.employeeCode.toUpperCase() == rec.employeeId.toUpperCase() ||
-          (e.email.isNotEmpty && e.email.toLowerCase() == rec.email.toLowerCase()) ||
-          e.name.toLowerCase() == rec.fullName.toLowerCase() ||
-          (e.name.trim().length >= 4 && rec.fullName.toLowerCase().contains(e.name.toLowerCase())));
-
-      if (existingEmpIndex >= 0) {
-        final existing = _employees[existingEmpIndex];
-        _employees[existingEmpIndex] = existing.copyWith(
-          name: rec.fullName,
-          employeeCode: rec.employeeId,
-          photoUrl: (existing.photoUrl != null && existing.photoUrl!.trim().isNotEmpty)
-              ? existing.photoUrl
-              : rec.photoAsset,
-          designation: (existing.designation.isNotEmpty && existing.designation != 'Staff' && existing.designation != 'Team Member')
-              ? existing.designation
-              : rec.designation,
-          department: (existing.department.isNotEmpty && existing.department != 'Operations')
-              ? existing.department
-              : rec.department,
-        );
-      } else {
-        _employees.add(EmployeeEntity(
-          id: 'emp-${rec.employeeId.toLowerCase()}',
-          employeeCode: rec.employeeId,
-          name: rec.fullName,
-          mobileNumber: '',
-          email: rec.email,
-          designation: rec.designation,
-          department: rec.department,
-          photoUrl: rec.photoAsset,
-          useDefaultOffice: true,
-          isActive: true,
-        ));
-      }
-
-      // Also enrich _users if present
-      final userIndex = _users.indexWhere((u) =>
-          (u.email.isNotEmpty && u.email.toLowerCase() == rec.email.toLowerCase()) ||
-          u.fullName.toLowerCase() == rec.fullName.toLowerCase() ||
-          (u.fullName.trim().length >= 4 && rec.fullName.toLowerCase().contains(u.fullName.toLowerCase())));
-      if (userIndex >= 0) {
-        final existingUser = _users[userIndex];
-        _users[userIndex] = existingUser.copyWith(
-          fullName: rec.fullName,
-          employeeCode: rec.employeeId,
-          photoUrl: (existingUser.photoUrl != null && existingUser.photoUrl!.trim().isNotEmpty)
-              ? existingUser.photoUrl
-              : rec.photoAsset,
-          designation: (existingUser.designation != null && existingUser.designation!.isNotEmpty)
-              ? existingUser.designation
-              : rec.designation,
-          department: (existingUser.department != null && existingUser.department!.isNotEmpty)
-              ? existingUser.department
-              : rec.department,
-        );
-      }
-    }
-    _persistEmployees();
-    _persistUsers();
-  }
+  /// No-op: prevents injecting synthetic directory employees into local database
+  void seedMasterEmployeeDirectory() {}
 
   void setEmployees(List<EmployeeEntity> employees) {
     _employees.clear();
@@ -675,7 +682,13 @@ class LocalDatabaseService {
           r.employeeId == employeeId ||
           (r.employeeName.trim().isNotEmpty &&
               (r.employeeName.trim().toLowerCase() == searchEmpName.trim().toLowerCase() ||
-               r.employeeName.trim().toLowerCase() == employeeName.trim().toLowerCase()));
+               r.employeeName.trim().toLowerCase() == employeeName.trim().toLowerCase())) ||
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: r.employeeId,
+            recordEmployeeName: r.employeeName,
+            employeeId: employeeId,
+            employeeName: employeeName,
+          );
       final localEv = r.eventTimestamp.toLocal();
       final rDateStr =
           "${localEv.year}-${localEv.month.toString().padLeft(2, '0')}-${localEv.day.toString().padLeft(2, '0')}";
@@ -893,78 +906,226 @@ class LocalDatabaseService {
     return count;
   }
 
-  /// Merges phantom/truncated duplicate employees (specifically "Anand" into official "Anandh Veeramani")
+  /// Merges previous short-name duplicate employee records into their official enterprise profile across all staff,
+  /// and consolidates all historical attendance records under the employee's official full name and canonical ID.
   Future<int> sanitizeDuplicateEmployees() async {
-    final anandhUser = _users.firstWhere(
-      (u) => u.fullName.trim().toLowerCase() == 'anandh veeramani' ||
-             u.email.trim().toLowerCase() == 'anand@gmail.com' ||
-             (u.employeeCode != null && u.employeeCode!.trim().toUpperCase() == 'EMP-ANA'),
-      orElse: () => _users.firstWhere(
-        (u) => u.fullName.trim().toLowerCase().contains('anandh'),
-        orElse: () => UserEntity(
-          id: '',
-          firebaseUid: '',
-          email: '',
-          fullName: '',
-          role: UserRole.employee,
-          organizationId: '',
-        ),
-      ),
-    );
-
     int migratedCount = 0;
-    if (anandhUser.id.isNotEmpty) {
-      final targetId = anandhUser.id;
-      final targetName = anandhUser.fullName;
+    final List<AttendanceRecord> updatedRecords = [];
 
-      // 1. Migrate attendance records from phantom 'Anand' or 'emp-anan'
-      final List<AttendanceRecord> updatedRecords = [];
-      for (int i = 0; i < _attendanceRecords.length; i++) {
-        final r = _attendanceRecords[i];
-        final rName = r.employeeName.trim().toLowerCase();
-        final rId = r.employeeId.trim().toLowerCase();
+    // Map each OfficialEmployeeRecord to its target ID and target full name.
+    final Map<String, ({String targetId, String targetName})> officialTargetMap = {};
 
-        final isPhantomAnand = (rName == 'anand' || rId == 'emp-anan' || rId == 'anand') &&
-            rName != targetName.toLowerCase() &&
-            r.employeeId != targetId;
+    for (final official in EmployeeDirectoryHelper.masterDirectory) {
+      // Find authentic user in _users
+      final realUser = _users.where((u) {
+        if (u.email.trim().isNotEmpty && u.email.trim().toLowerCase() == official.email.toLowerCase()) {
+          return true;
+        }
+        if (u.employeeCode != null && u.employeeCode!.trim().isNotEmpty &&
+            u.employeeCode!.trim().toUpperCase() == official.employeeId.toUpperCase()) {
+          return true;
+        }
+        if (u.fullName.trim().toLowerCase() == official.fullName.toLowerCase()) {
+          return true;
+        }
+        for (final alias in official.aliases) {
+          final a = alias.toLowerCase();
+          if (u.fullName.trim().toLowerCase() == a ||
+              (u.employeeCode != null && u.employeeCode!.trim().toLowerCase() == a) ||
+              u.id.toLowerCase() == a) {
+            return true;
+          }
+        }
+        return false;
+      }).firstOrNull;
 
-        if (isPhantomAnand) {
-          final updated = r.copyWith(
-            employeeId: targetId,
-            employeeName: targetName,
-            isEdited: true,
-            editedBy: 'System Consolidation',
-            syncStatus: SyncStatus.pending,
+      // Find existing canonical employee in _employees
+      final canonicalEmp = _employees.where((e) {
+        if (e.email.trim().isNotEmpty && e.email.trim().toLowerCase() == official.email.toLowerCase()) {
+          return true;
+        }
+        if (e.employeeCode.trim().toUpperCase() == official.employeeId.toUpperCase()) {
+          return true;
+        }
+        if (e.name.trim().toLowerCase() == official.fullName.toLowerCase()) {
+          return true;
+        }
+        for (final alias in official.aliases) {
+          final a = alias.toLowerCase();
+          if (e.name.trim().toLowerCase() == a ||
+              e.employeeCode.trim().toLowerCase() == a ||
+              e.id.toLowerCase() == a) {
+            return true;
+          }
+        }
+        return false;
+      }).firstOrNull;
+
+      final String targetId = (realUser != null && realUser.id.isNotEmpty && !realUser.id.startsWith('emp-'))
+          ? realUser.id
+          : (canonicalEmp != null && canonicalEmp.id.isNotEmpty && !canonicalEmp.id.startsWith('emp-')
+              ? canonicalEmp.id
+              : (realUser != null && realUser.id.isNotEmpty
+                  ? realUser.id
+                  : (canonicalEmp != null && canonicalEmp.id.isNotEmpty ? canonicalEmp.id : 'emp-${official.employeeId}')));
+      final String targetName = official.fullName;
+
+      officialTargetMap[official.employeeId] = (targetId: targetId, targetName: targetName);
+
+      // Update realUser in _users if found
+      if (realUser != null) {
+        final uIndex = _users.indexOf(realUser);
+        if (uIndex >= 0) {
+          _users[uIndex] = realUser.copyWith(
+            fullName: official.fullName,
+            employeeCode: official.employeeId,
+            designation: (realUser.designation != null && realUser.designation!.isNotEmpty && realUser.designation != 'Staff')
+                ? realUser.designation
+                : official.designation,
+            department: (realUser.department != null && realUser.department!.isNotEmpty && realUser.department != 'Operations')
+                ? realUser.department
+                : official.department,
+            photoUrl: official.photoAsset,
           );
-          _attendanceRecords[i] = updated;
-          updatedRecords.add(updated);
-          migratedCount++;
         }
-      }
-
-      if (updatedRecords.isNotEmpty) {
-        _persistAttendanceRecords();
-        try {
-          await SupabaseService().saveAdminAttendanceOverride(records: updatedRecords);
-        } catch (e) {
-          debugPrint('Cloud sync note during sanitizeDuplicateEmployees: $e');
-        }
-      }
-
-      // 2. Remove phantom 'Anand' / 'EMP-ANAN' from _employees
-      final originalLen = _employees.length;
-      _employees.removeWhere((e) {
-        final eName = e.name.trim().toLowerCase();
-        final eCode = e.employeeCode.trim().toUpperCase();
-        return (eName == 'anand' || eCode == 'EMP-ANAN') &&
-            eName != targetName.toLowerCase() &&
-            e.id != targetId;
-      });
-
-      if (_employees.length != originalLen) {
-        _persistEmployees();
       }
     }
+
+    // Consolidate attendance records for all employees
+    for (int i = 0; i < _attendanceRecords.length; i++) {
+      final r = _attendanceRecords[i];
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: r.employeeId,
+        name: r.employeeName,
+        id: r.employeeId,
+      );
+
+      if (official != null) {
+        final target = officialTargetMap[official.employeeId];
+        if (target != null) {
+          if (r.employeeId != target.targetId || r.employeeName != target.targetName) {
+            final updated = r.copyWith(
+              employeeId: target.targetId,
+              employeeName: target.targetName,
+              isEdited: true,
+              editedBy: 'System Consolidation',
+              syncStatus: SyncStatus.pending,
+            );
+            _attendanceRecords[i] = updated;
+            updatedRecords.add(updated);
+            migratedCount++;
+          }
+        }
+      } else {
+        // Revert any records of OTHER employees that were mistakenly tagged with synthetic 'emp-' IDs
+        if (r.employeeId.startsWith('emp-')) {
+          final codePart = r.employeeId.replaceFirst('emp-', '').toUpperCase();
+          final realUser = _users.where((u) =>
+              u.id.isNotEmpty && !u.id.startsWith('emp-') &&
+              (u.employeeCode?.toUpperCase() == codePart ||
+               u.fullName.trim().toLowerCase() == r.employeeName.trim().toLowerCase())).firstOrNull;
+          if (realUser != null && r.employeeId != realUser.id) {
+            final updated = r.copyWith(
+              employeeId: realUser.id,
+              employeeName: realUser.fullName,
+              isEdited: false,
+              editedBy: null,
+              syncStatus: SyncStatus.pending,
+            );
+            _attendanceRecords[i] = updated;
+            updatedRecords.add(updated);
+            migratedCount++;
+          }
+        }
+      }
+    }
+
+    if (updatedRecords.isNotEmpty) {
+      _persistAttendanceRecords();
+      try {
+        await SupabaseService().saveAdminAttendanceOverride(records: updatedRecords);
+      } catch (e) {
+        debugPrint('Cloud sync note during sanitizeDuplicateEmployees: $e');
+      }
+    }
+
+    // Purge phantom and short-name duplicate employees from _employees
+    final originalLen = _employees.length;
+    _employees.removeWhere((e) {
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: e.employeeCode,
+        name: e.name,
+        email: e.email,
+        id: e.id,
+      );
+
+      if (official != null) {
+        final target = officialTargetMap[official.employeeId];
+        if (target != null) {
+          final isShortName = e.name.trim().toLowerCase() != target.targetName.toLowerCase();
+          final isWrongId = e.id != target.targetId;
+          final canonicalExistsInEmployees = _employees.any((other) =>
+              other != e && (other.id == target.targetId || other.name.trim().toLowerCase() == target.targetName.toLowerCase()));
+          final canonicalExistsInUsers = _users.any((u) =>
+              u.id == target.targetId || u.fullName.trim().toLowerCase() == target.targetName.toLowerCase());
+
+          if ((isShortName || isWrongId) && (canonicalExistsInEmployees || canonicalExistsInUsers)) {
+            return true;
+          }
+        }
+      }
+
+      // Remove synthetic seeded employees with id 'emp-' that duplicate existing users or have no attendance records
+      if (e.id.startsWith('emp-')) {
+        final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+          code: e.employeeCode,
+          name: e.name,
+          id: e.id,
+        );
+        final isCanonicalTarget = official != null && officialTargetMap[official.employeeId]?.targetId == e.id;
+        if (!isCanonicalTarget) {
+          final duplicateUser = _users.any((u) =>
+              u.id != e.id && (u.employeeCode?.toUpperCase() == e.employeeCode.toUpperCase() ||
+                               u.fullName.trim().toLowerCase() == e.name.trim().toLowerCase()));
+          final hasNoAttendance = !_attendanceRecords.any((rec) => rec.employeeId == e.id);
+          if (duplicateUser || hasNoAttendance) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    });
+
+    // Update remaining employees with official details
+    for (int i = 0; i < _employees.length; i++) {
+      final e = _employees[i];
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: e.employeeCode,
+        name: e.name,
+        email: e.email,
+        id: e.id,
+      );
+      if (official != null) {
+        _employees[i] = e.copyWith(
+          name: official.fullName,
+          employeeCode: official.employeeId,
+          photoUrl: official.photoAsset,
+          designation: (e.designation.isNotEmpty && e.designation != 'Staff' && e.designation != 'Team Member')
+              ? e.designation
+              : official.designation,
+          department: (e.department.isNotEmpty && e.department != 'Operations')
+              ? e.department
+              : official.department,
+        );
+      }
+    }
+
+    if (_employees.length != originalLen) {
+      _persistEmployees();
+    }
+    _persistUsers();
+
     return migratedCount;
   }
 
@@ -1066,9 +1227,15 @@ class LocalDatabaseService {
       return _attendanceRecords.where((r) {
         final matchesId = r.employeeId.trim().toLowerCase() == cleanTarget;
         final matchesName = r.employeeName.trim().toLowerCase() == cleanTarget;
+        final matchesIdentity = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+          recordEmployeeId: r.employeeId,
+          recordEmployeeName: r.employeeName,
+          employeeId: cleanTarget,
+          employeeName: cleanTarget,
+        );
         final localEv = r.eventTimestamp.toLocal();
         final rDate = DateTime(localEv.year, localEv.month, localEv.day);
-        return (matchesId || matchesName) && rDate.isAtSameMomentAs(today);
+        return (matchesId || matchesName || matchesIdentity) && rDate.isAtSameMomentAs(today);
       }).toList();
     }
 

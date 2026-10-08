@@ -13,6 +13,7 @@ import '../../../core/services/supabase_service.dart';
 import '../../../core/utils/timesheet_calculator.dart';
 import '../../../core/utils/salary_cycle_helper.dart';
 import '../../../core/utils/leave_calculator.dart';
+import '../../../core/utils/employee_directory_helper.dart';
 import '../../../core/widgets/app_animated_tab_switcher.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../attendance/domain/attendance_record.dart';
@@ -160,9 +161,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             e.name.trim().toLowerCase() == name.trim().toLowerCase()) {
           return entry.key;
         }
-        // Aliases: match 'Anand' or 'emp-anan' to 'Anandh Veeramani'
-        if ((name.trim().toLowerCase() == 'anand' || id.toLowerCase() == 'emp-anan') &&
-            (e.name.toLowerCase().contains('anandh') || e.email.toLowerCase() == 'anand@gmail.com')) {
+        if (EmployeeDirectoryHelper.matchesEmployeeIdentity(
+          recordEmployeeId: id,
+          recordEmployeeName: name,
+          employeeId: e.id,
+          employeeCode: e.employeeCode,
+          employeeName: e.name,
+          employeeEmail: e.email,
+        )) {
           return entry.key;
         }
       }
@@ -255,40 +261,72 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       final nameKey = r.employeeName.trim().toLowerCase();
       final idKey = r.employeeId;
 
-      // Special alias: if record is tagged as 'anand' or 'emp-anan', map it to Anandh Veeramani
-      final isAnandhAlias = (nameKey == 'anand' || idKey.toLowerCase() == 'emp-anan' || idKey.toLowerCase() == 'anand') &&
-          employeeMap.values.any((e) =>
-              e.name.toLowerCase().contains('anandh') ||
-              e.email.toLowerCase() == 'anand@gmail.com');
-
-      bool alreadyExists = isAnandhAlias || employeeMap.values.any((e) =>
+      bool alreadyExists = employeeMap.values.any((e) =>
           e.id == idKey ||
           (e.employeeCode.isNotEmpty &&
               e.employeeCode.toLowerCase() == idKey.toLowerCase()) ||
-          (e.name.trim().toLowerCase() == nameKey && nameKey.isNotEmpty));
+          (e.name.trim().toLowerCase() == nameKey && nameKey.isNotEmpty) ||
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: idKey,
+            recordEmployeeName: r.employeeName,
+            employeeId: e.id,
+            employeeCode: e.employeeCode,
+            employeeName: e.name,
+            employeeEmail: e.email,
+          ));
 
       if (!alreadyExists && r.employeeName.trim().isNotEmpty) {
-        final code = resolveBestCode(null, r.employeeName, r.employeeId);
+        final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+          code: r.employeeId,
+          name: r.employeeName,
+          id: r.employeeId,
+        );
+        if (official != null) {
+          final alreadyInMap = employeeMap.values.any((e) =>
+              e.name.trim().toLowerCase() == official.fullName.toLowerCase() ||
+              (e.employeeCode.isNotEmpty && e.employeeCode.toUpperCase() == official.employeeId.toUpperCase()));
+          if (alreadyInMap) continue;
+        }
+
+        final code = official?.employeeId ?? resolveBestCode(null, r.employeeName, r.employeeId);
+        final name = official?.fullName ?? r.employeeName;
         employeeMap[idKey.isNotEmpty ? idKey : nameKey] = EmployeeEntity(
           id: r.employeeId,
           employeeCode: code,
-          name: r.employeeName,
+          name: name,
           mobileNumber: '',
-          email: '',
-          designation: 'Field Staff',
-          department: 'Operations',
+          email: official?.email ?? '',
+          designation: official?.designation ?? 'Field Staff',
+          department: official?.department ?? 'Operations',
         );
       }
     }
 
     final list = employeeMap.values.where((e) {
       final eName = e.name.trim().toLowerCase();
-      final eCode = e.employeeCode.trim().toUpperCase();
-      // Completely remove phantom 'Anand' / 'EMP-ANAN' if 'Anandh Veeramani' is present
-      if ((eName == 'anand' || eCode == 'EMP-ANAN') &&
+
+      // Check if e resolves to an official record
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: e.employeeCode,
+        name: e.name,
+        email: e.email,
+        id: e.id,
+      );
+      if (official != null) {
+        final hasCanonicalFull = employeeMap.values.any((other) =>
+            other != e && other.name.trim().toLowerCase() == official.fullName.toLowerCase());
+        if (hasCanonicalFull && eName != official.fullName.toLowerCase()) {
+          return false;
+        }
+      }
+
+      final isSyntheticDuplicate = e.id.startsWith('emp-') &&
           employeeMap.values.any((other) =>
-              other.name.trim().toLowerCase().contains('anandh') ||
-              other.email.trim().toLowerCase() == 'anand@gmail.com')) {
+              other != e &&
+              (other.employeeCode == e.employeeCode ||
+               other.name.trim().toLowerCase() == eName));
+
+      if (isSyntheticDuplicate) {
         return false;
       }
       return true;
@@ -298,35 +336,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   }
 
   bool _recordMatchesEmployee(AttendanceRecord r, EmployeeEntity emp) {
-    final rEmpId = r.employeeId.trim().toLowerCase();
-    final rEmpName = r.employeeName.trim().toLowerCase();
-    final eId = emp.id.trim().toLowerCase();
-    final eName = emp.name.trim().toLowerCase();
-    final eCode = emp.employeeCode.trim().toLowerCase();
-
-    // 1. Match by exact ID
-    if (eId.isNotEmpty && rEmpId.isNotEmpty && rEmpId == eId) {
-      return true;
-    }
-
-    // 2. Match by Employee Code (exact)
-    if (eCode.isNotEmpty && rEmpId.isNotEmpty && rEmpId == eCode) {
-      return true;
-    }
-
-    // 3. Match by Name (exact match only - prevents partial string matches like krishnan vs ramakrishnan)
-    if (eName.isNotEmpty && rEmpName.isNotEmpty && rEmpName == eName) {
-      return true;
-    }
-
-    // 4. Anandh Veeramani alias matching for records logged under 'Anand' or 'emp-anan'
-    if (eName.contains('anandh') || emp.email.trim().toLowerCase() == 'anand@gmail.com' || eCode == 'emp-ana') {
-      if (rEmpName == 'anand' || rEmpId == 'emp-anan' || rEmpId == 'anand') {
-        return true;
-      }
-    }
-
-    return false;
+    return EmployeeDirectoryHelper.matchesEmployeeIdentity(
+      recordEmployeeId: r.employeeId,
+      recordEmployeeName: r.employeeName,
+      employeeId: emp.id,
+      employeeCode: emp.employeeCode,
+      employeeName: emp.name,
+      employeeEmail: emp.email,
+    );
   }
 
   EmployeeEntity _resolveEmployee(String? employeeId) {
@@ -344,12 +361,18 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     final all = _getSynthesizedEmployees();
     final cleanId = employeeId.trim().toLowerCase();
 
-    // If resolving 'anand' or 'emp-anan', resolve directly to Anandh Veeramani
-    if (cleanId == 'anand' || cleanId == 'emp-anan') {
-      final anandh = all.where((e) =>
-          e.name.toLowerCase().contains('anandh') ||
-          e.email.toLowerCase() == 'anand@gmail.com');
-      if (anandh.isNotEmpty) return anandh.first;
+    // Match by EmployeeDirectoryHelper
+    for (final e in all) {
+      if (EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: employeeId,
+        recordEmployeeName: employeeId,
+        employeeId: e.id,
+        employeeCode: e.employeeCode,
+        employeeName: e.name,
+        employeeEmail: e.email,
+      )) {
+        return e;
+      }
     }
 
     // Exact matches by ID, code, name, or email
@@ -5926,10 +5949,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                       // Site-Wise Hours Spent Section for Employee
                       () {
                         final empRecs = allRecords
-                            .where((r) =>
-                                r.employeeId == emp.id ||
-                                r.employeeName.toLowerCase() ==
-                                    emp.name.toLowerCase())
+                            .where((r) => _recordMatchesEmployee(r, emp))
                             .toList();
                         final empSiteBreakdown =
                             TimesheetCalculator.calculateSiteManHours(empRecs);

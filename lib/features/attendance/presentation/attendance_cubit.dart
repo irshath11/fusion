@@ -10,6 +10,7 @@ import '../../../core/utils/geofence_calculator.dart';
 import '../domain/attendance_record.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../admin/domain/office_entity.dart';
+import '../../sync/data/sync_engine.dart';
 
 abstract class AttendanceState extends Equatable {
   @override
@@ -319,6 +320,9 @@ class AttendanceCubit extends Cubit<AttendanceState> {
       );
 
       _db.addAttendanceRecord(record);
+
+      // Immediately trigger auto-sync in background to upload to Supabase if connected
+      SyncEngine().triggerAutoSync();
 
       WorkflowStep next = _db.getWorkflowStepForEmployee();
       emit(AttendanceStepSuccess(record, next));

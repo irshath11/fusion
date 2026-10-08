@@ -3,6 +3,7 @@ import '../../features/admin/domain/employee_entity.dart';
 import '../../features/attendance/domain/attendance_record.dart';
 import 'salary_cycle_helper.dart';
 import 'timesheet_calculator.dart';
+import 'employee_directory_helper.dart';
 
 /// Categorization of a specific calendar day in the leave and attendance ledger.
 /// Sunday is the only designated weekly off / leave day in each week.
@@ -198,16 +199,14 @@ class WorkforceLeaveMetrics {
 class LeaveCalculator {
   /// Matches an attendance record to an employee by id, name, or employeeCode
   static bool _recordMatchesEmployee(AttendanceRecord r, EmployeeEntity emp) {
-    if (r.employeeId.isNotEmpty &&
-        (r.employeeId == emp.id || r.employeeId == emp.employeeCode)) {
-      return true;
-    }
-    if (r.employeeName.trim().isNotEmpty &&
-        emp.name.trim().isNotEmpty &&
-        r.employeeName.trim().toLowerCase() == emp.name.trim().toLowerCase()) {
-      return true;
-    }
-    return false;
+    return EmployeeDirectoryHelper.matchesEmployeeIdentity(
+      recordEmployeeId: r.employeeId,
+      recordEmployeeName: r.employeeName,
+      employeeId: emp.id,
+      employeeCode: emp.employeeCode,
+      employeeName: emp.name,
+      employeeEmail: emp.email,
+    );
   }
 
   /// Calculates the complete Leave Summary and day-by-day ledger for an employee

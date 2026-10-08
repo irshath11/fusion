@@ -6,6 +6,7 @@ import '../../../core/constants/app_theme.dart';
 import '../../../core/services/pdf_export_service.dart';
 import '../../../core/utils/timesheet_calculator.dart';
 import '../../../core/utils/salary_cycle_helper.dart';
+import '../../../core/utils/employee_directory_helper.dart';
 import '../../../database/local_database_service.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../admin/presentation/admin_edit_attendance_dialog.dart';
@@ -553,8 +554,14 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
         );
 
     final records = db.getAttendanceRecords().where((r) {
-      final isEmp = r.employeeId == emp.id ||
-          r.employeeName.toLowerCase() == emp.name.toLowerCase();
+      final isEmp = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: r.employeeId,
+        recordEmployeeName: r.employeeName,
+        employeeId: emp.id,
+        employeeCode: emp.employeeCode,
+        employeeName: emp.name,
+        employeeEmail: emp.email,
+      );
       if (!isEmp) return false;
       if (_selectedSalaryCycle != null) {
         return _selectedSalaryCycle!.contains(r.eventTimestamp);

@@ -17,6 +17,7 @@ import '../domain/employee_entity.dart';
 import '../../attendance/domain/attendance_record.dart';
 import '../../../core/utils/timesheet_calculator.dart';
 import '../../../core/utils/salary_cycle_helper.dart';
+import '../../../core/utils/employee_directory_helper.dart';
 import '../../../core/widgets/status_badge.dart';
 
 import '../../../core/widgets/app_bounceable.dart';
@@ -704,14 +705,14 @@ class AdminOverviewTab extends StatelessWidget {
 
     for (final emp in employees) {
       final empRecords = cycleRecords.where((r) =>
-          r.employeeId == emp.id ||
-          (r.employeeId.isNotEmpty &&
-              emp.employeeCode.isNotEmpty &&
-              r.employeeId.toLowerCase() == emp.employeeCode.toLowerCase()) ||
-          (r.employeeName.trim().isNotEmpty &&
-              emp.name.trim().isNotEmpty &&
-              r.employeeName.trim().toLowerCase() ==
-                  emp.name.trim().toLowerCase())).toList();
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: r.employeeId,
+            recordEmployeeName: r.employeeName,
+            employeeId: emp.id,
+            employeeCode: emp.employeeCode,
+            employeeName: emp.name,
+            employeeEmail: emp.email,
+          )).toList();
 
       if (empRecords.isNotEmpty) {
         activeStaffCount++;

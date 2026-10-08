@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:attendance_app/core/constants/app_enums.dart';
+import 'package:attendance_app/core/utils/employee_directory_helper.dart';
 import 'package:attendance_app/core/utils/timesheet_calculator.dart';
 import 'package:attendance_app/features/admin/domain/employee_entity.dart';
 import 'package:attendance_app/features/attendance/domain/attendance_record.dart';
@@ -245,6 +246,36 @@ void main() {
       expect(withRecords.first.id, 'emp-active-1');
       expect(withoutRecords.length, 1);
       expect(withoutRecords.first.id, 'emp-new-2');
+    });
+
+    test('Resolves previous short name "Shabi" to "Shabi Bismillah Bismillah" and matches all records under full name', () {
+      final shabiOfficial = EmployeeDirectoryHelper.resolveOfficialRecord(name: 'Shabi');
+      expect(shabiOfficial, isNotNull);
+      expect(shabiOfficial!.fullName, 'Shabi Bismillah Bismillah');
+      expect(shabiOfficial.employeeId, 'N-1004');
+
+      // Check aliases match
+      final matchesShort = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: 'emp-shabi',
+        recordEmployeeName: 'Shabi',
+        employeeId: 'N-1004',
+        employeeName: 'Shabi Bismillah Bismillah',
+      );
+      expect(matchesShort, isTrue);
+
+      final matchesOfficialId = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: 'N-1004',
+        recordEmployeeName: 'Shabi',
+        employeeName: 'Shabi Bismillah Bismillah',
+      );
+      expect(matchesOfficialId, isTrue);
+
+      // Verify non-directory employee is preserved and returns null
+      final asikOfficial = EmployeeDirectoryHelper.resolveOfficialRecord(
+        name: 'Asik Saheel',
+        email: 'asik@gmail.com',
+      );
+      expect(asikOfficial, isNull);
     });
   });
 }

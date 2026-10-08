@@ -10,6 +10,7 @@ import '../../features/admin/domain/office_entity.dart';
 import '../../features/admin/domain/employee_entity.dart';
 import '../../database/local_database_service.dart';
 import '../constants/app_enums.dart';
+import '../utils/employee_directory_helper.dart';
 
 class SupabaseService {
   static final SupabaseService _instance = SupabaseService._internal();
@@ -1361,7 +1362,67 @@ class SupabaseService {
         }
       }
 
-      // 2. Resolve user_id from public.users by firebase_uid or id
+      // 2. Resolve via Master Employee Directory (critical for Anandh Veeramani & Rafi Ullah)
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: employeeIdOrUid,
+        name: employeeName,
+        id: employeeIdOrUid,
+      );
+
+      if (official != null) {
+        // 2a. Search by email in users table
+        try {
+          final userByEmail = await client!
+              .from('users')
+              .select('id')
+              .eq('email', official.email.toLowerCase())
+              .maybeSingle();
+
+          if (userByEmail != null && userByEmail['id'] != null) {
+            final empByUser = await client!
+                .from('employees')
+                .select('id')
+                .eq('user_id', userByEmail['id'].toString())
+                .maybeSingle();
+            if (empByUser != null && empByUser['id'] != null) {
+              return empByUser['id'].toString();
+            }
+          }
+        } catch (_) {}
+
+        // 2b. Search by employee_code in employees table
+        try {
+          final empByCode = await client!
+              .from('employees')
+              .select('id')
+              .or('employee_code.eq.${official.employeeId},employee_code.eq.EMP-${official.employeeId}')
+              .maybeSingle();
+          if (empByCode != null && empByCode['id'] != null) {
+            return empByCode['id'].toString();
+          }
+        } catch (_) {}
+
+        // 2c. Search by employee_code in users table
+        try {
+          final userByCode = await client!
+              .from('users')
+              .select('id')
+              .or('employee_code.eq.${official.employeeId},employee_code.eq.EMP-${official.employeeId}')
+              .maybeSingle();
+          if (userByCode != null && userByCode['id'] != null) {
+            final empByUser = await client!
+                .from('employees')
+                .select('id')
+                .eq('user_id', userByCode['id'].toString())
+                .maybeSingle();
+            if (empByUser != null && empByUser['id'] != null) {
+              return empByUser['id'].toString();
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 3. Resolve user_id from public.users by firebase_uid or id
       String? userUuid;
       if (_isValidUuid(employeeIdOrUid)) {
         userUuid = employeeIdOrUid;
@@ -1377,7 +1438,6 @@ class SupabaseService {
         }
       }
 
-      // 3. If user found, check if employee row exists for this user_id
       if (userUuid != null) {
         final empByUser = await client!
             .from('employees')
@@ -1390,30 +1450,26 @@ class SupabaseService {
         }
       }
 
-      // 4. Auto-provision user + employee in cloud if missing
+      // 4. Provision employee if known in directory
       final localOrg = LocalDatabaseService().organization;
       final orgId = localOrg?.id ?? '00000000-0000-0000-0000-000000000001';
       final validOrgId = await ensureOrganizationExistsInCloud(orgId) ?? orgId;
-      final currentUser = LocalDatabaseService().currentUser;
 
-      final targetFirebaseUid = _isValidUuid(employeeIdOrUid)
-          ? 'user_${_uuid.v4()}'
-          : employeeIdOrUid;
+      final targetName = official != null ? official.fullName : (employeeName.isNotEmpty ? employeeName : 'Field Employee');
+      final targetEmail = official != null ? official.email : 'user_${_uuid.v4().substring(0, 8)}@enterprise.com';
+      final targetCode = official != null ? official.employeeId : 'EMP-${_uuid.v4().substring(0, 4).toUpperCase()}';
+      final targetUid = 'user_${official?.employeeId ?? _uuid.v4()}';
 
       final createdUser = await createUserInSupabase(
-        firebaseUid: targetFirebaseUid,
+        firebaseUid: targetUid,
         orgId: validOrgId,
-        email: currentUser?.email ?? 'user@enterprise.com',
-        fullName: employeeName.isNotEmpty
-            ? employeeName
-            : (currentUser?.fullName ?? 'Field Employee'),
-        phoneNumber: currentUser?.phoneNumber,
-        role: currentUser?.role ?? UserRole.employee,
+        email: targetEmail,
+        fullName: targetName,
+        role: UserRole.employee,
         requiresPasswordChange: false,
-        employeeCode:
-            'EMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
-        designation: 'Field Engineer',
-        department: 'Operations',
+        employeeCode: targetCode,
+        designation: official?.designation ?? 'Field Staff',
+        department: official?.department ?? 'Operations',
       );
 
       if (createdUser != null) {
@@ -1431,20 +1487,6 @@ class SupabaseService {
     } catch (e) {
       debugPrint('ensureEmployeeExistsInCloud note: $e');
     }
-
-    // 5. Fallback: Any active employee in employees table
-    try {
-      final anyEmp = await client!
-          .from('employees')
-          .select('id')
-          .eq('is_deleted', false)
-          .limit(1)
-          .maybeSingle();
-
-      if (anyEmp != null && anyEmp['id'] != null) {
-        return anyEmp['id'].toString();
-      }
-    } catch (_) {}
 
     return null;
   }

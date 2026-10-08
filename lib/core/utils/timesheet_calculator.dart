@@ -4,6 +4,7 @@ import '../../features/attendance/domain/attendance_record.dart';
 import '../../features/timesheet/domain/timesheet_entry.dart';
 import '../constants/app_enums.dart';
 import 'salary_cycle_helper.dart';
+import 'employee_directory_helper.dart';
 
 class TimesheetCalculator {
   /// Standard max regular work hours per day before overtime applies
@@ -126,7 +127,13 @@ class TimesheetCalculator {
           targetEmployeeName.isNotEmpty &&
           r.employeeName.trim().toLowerCase() ==
               targetEmployeeName.trim().toLowerCase();
-      return idMatch || nameMatch;
+      final identityMatch = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: r.employeeId,
+        recordEmployeeName: r.employeeName,
+        employeeId: targetEmployeeId,
+        employeeName: targetEmployeeName,
+      );
+      return idMatch || nameMatch || identityMatch;
     }).toList();
 
     final bool isSingleEmployee = (targetEmployeeId != null && targetEmployeeId.isNotEmpty) ||

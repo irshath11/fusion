@@ -43,6 +43,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
   int _pendingSyncCount = 0;
   bool _isSyncing = false;
   Timer? _workingTimeTimer;
+  StreamSubscription? _syncResultSub;
 
   @override
   void initState() {
@@ -50,11 +51,28 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     _refreshSyncCount();
     _startWorkingTimeTimer();
     _syncCloudData();
+
+    _syncEngine.isSyncingNotifier.addListener(_onSyncNotifierChanged);
+    _syncResultSub = _syncEngine.syncResultStream.listen((_) {
+      if (mounted) {
+        _refreshSyncCount();
+      }
+    });
+  }
+
+  void _onSyncNotifierChanged() {
+    if (mounted) {
+      setState(() {
+        _isSyncing = _syncEngine.isSyncingNotifier.value;
+      });
+      _refreshSyncCount();
+    }
   }
 
   Future<void> _syncCloudData() async {
     try {
       await SupabaseService().syncCloudDataToLocal();
+      await _db.sanitizeDuplicateEmployees();
       if (mounted) setState(() {});
     } catch (_) {}
   }
@@ -71,6 +89,8 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
 
   @override
   void dispose() {
+    _syncEngine.isSyncingNotifier.removeListener(_onSyncNotifierChanged);
+    _syncResultSub?.cancel();
     _workingTimeTimer?.cancel();
     super.dispose();
   }

@@ -70,6 +70,10 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
           // Apply filters
           final filteredUsers = users.where((u) {
             final q = _searchQuery.toLowerCase().trim();
+            final isAzharAlias = (q == 'azhar' || q == 'azharudeen') &&
+                (u.fullName.toLowerCase().contains('azar') || u.employeeCode == '1021');
+            final isAnandhAlias = (q == 'anand' || q == 'anandh') &&
+                (u.fullName.toLowerCase().contains('anand') || u.employeeCode == '1057');
             final matchesSearch = q.isEmpty ||
                 u.fullName.toLowerCase().contains(q) ||
                 u.email.toLowerCase().contains(q) ||
@@ -78,7 +82,9 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                 (u.designation != null &&
                     u.designation!.toLowerCase().contains(q)) ||
                 (u.department != null &&
-                    u.department!.toLowerCase().contains(q));
+                    u.department!.toLowerCase().contains(q)) ||
+                isAzharAlias ||
+                isAnandhAlias;
             final matchesRole = _selectedRoleFilter == 'ALL' ||
                 u.role.nameString == _selectedRoleFilter;
             return matchesSearch && matchesRole;

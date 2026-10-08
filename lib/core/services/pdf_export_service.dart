@@ -9,6 +9,7 @@ import '../../features/timesheet/domain/timesheet_entry.dart';
 import '../utils/leave_calculator.dart';
 import '../utils/salary_cycle_helper.dart';
 import '../utils/timesheet_calculator.dart';
+import '../utils/employee_directory_helper.dart';
 
 class PdfExportService {
   /// Generates a formatted PDF binary document for cumulative employee hours report
@@ -32,9 +33,14 @@ class PdfExportService {
 
     for (final emp in employees) {
       final empRecords = records.where((r) {
-        return r.employeeId == emp.id ||
-            r.employeeName.toLowerCase() == emp.name.toLowerCase() ||
-            (emp.employeeCode != null && r.employeeId == emp.employeeCode);
+        return EmployeeDirectoryHelper.matchesEmployeeIdentity(
+          recordEmployeeId: r.employeeId,
+          recordEmployeeName: r.employeeName,
+          employeeId: emp.id,
+          employeeCode: emp.employeeCode,
+          employeeName: emp.name,
+          employeeEmail: emp.email,
+        );
       }).toList();
 
       final timesheets = TimesheetCalculator.calculateDailyTimesheets(empRecords);

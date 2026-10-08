@@ -107,18 +107,49 @@ class UserManagementCubit extends Cubit<UserManagementState> {
       // Always merge local employees into userMap so locally active/registered employees are never omitted
       final localEmployees = _db.getEmployees();
       for (final e in localEmployees) {
-        final key = e.email.trim().isNotEmpty
-            ? e.email.trim().toLowerCase()
-            : (e.name.trim().isNotEmpty
-                ? e.name.trim().toLowerCase()
-                : e.id);
+        final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+          code: e.employeeCode,
+          name: e.name,
+          email: e.email,
+          id: e.id,
+        );
+
+        // Skip synthetic placeholders if actual user exists
+        if (e.id.startsWith('emp-')) {
+          final hasRealUser = userMap.values.any((u) =>
+              !u.id.startsWith('emp-') &&
+              (u.id == e.id ||
+               (official != null && u.employeeCode?.toUpperCase() == official.employeeId.toUpperCase()) ||
+               (official != null && u.fullName.trim().toLowerCase() == official.fullName.toLowerCase())));
+          if (hasRealUser) continue;
+        }
+
+        final key = official != null
+            ? official.employeeId.toUpperCase()
+            : (e.email.trim().isNotEmpty
+                ? e.email.trim().toLowerCase()
+                : (e.name.trim().isNotEmpty
+                    ? e.name.trim().toLowerCase()
+                    : e.id));
         final alreadyPresent = userMap.containsKey(key) ||
             userMap.values.any((u) =>
                 (u.id.isNotEmpty && u.id == e.id) ||
+                (official != null &&
+                 (u.employeeCode?.toUpperCase() == official.employeeId.toUpperCase() ||
+                  u.fullName.trim().toLowerCase() == official.fullName.toLowerCase() ||
+                  u.email.trim().toLowerCase() == official.email.toLowerCase())) ||
                 (e.email.isNotEmpty &&
                     u.email.trim().toLowerCase() == e.email.trim().toLowerCase()) ||
                 (e.name.isNotEmpty &&
-                    u.fullName.trim().toLowerCase() == e.name.trim().toLowerCase()));
+                    u.fullName.trim().toLowerCase() == e.name.trim().toLowerCase()) ||
+                EmployeeDirectoryHelper.matchesEmployeeIdentity(
+                  recordEmployeeId: e.id,
+                  recordEmployeeName: e.name,
+                  employeeId: u.id,
+                  employeeCode: u.employeeCode,
+                  employeeName: u.fullName,
+                  employeeEmail: u.email,
+                ));
 
         if (!alreadyPresent) {
           final completeName = EmployeeDirectoryHelper.getCompleteFullName(
@@ -161,7 +192,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
               userMap.values.firstWhere((u) =>
                   (u.id.isNotEmpty && u.id == e.id) ||
                   (e.email.isNotEmpty &&
-                      u.email.trim().toLowerCase() == u.email.trim().toLowerCase()) ||
+                      u.email.trim().toLowerCase() == e.email.trim().toLowerCase()) ||
                   (e.name.isNotEmpty &&
                       u.fullName.trim().toLowerCase() == e.name.trim().toLowerCase()));
 
