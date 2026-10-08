@@ -9,6 +9,7 @@ import '../../../core/services/supabase_service.dart';
 import '../../auth/domain/user_entity.dart';
 import '../domain/employee_entity.dart';
 import '../../../core/constants/app_enums.dart';
+import '../../../core/utils/employee_directory_helper.dart';
 
 abstract class UserManagementState extends Equatable {
   @override
@@ -75,7 +76,32 @@ class UserManagementCubit extends Cubit<UserManagementState> {
             : (u.fullName.trim().isNotEmpty
                 ? u.fullName.trim().toLowerCase()
                 : u.id);
-        userMap[key] = u;
+
+        final completeName = EmployeeDirectoryHelper.getCompleteFullName(
+          currentName: u.fullName,
+          email: u.email,
+          code: u.employeeCode,
+          id: u.id,
+        );
+        final officialId = EmployeeDirectoryHelper.getEmployeeId(
+          currentCode: u.employeeCode,
+          name: u.fullName,
+          email: u.email,
+          id: u.id,
+        );
+        final photo = EmployeeDirectoryHelper.resolvePhoto(
+          customPhotoUrl: u.photoUrl,
+          employeeCode: u.employeeCode,
+          fullName: u.fullName,
+          email: u.email,
+          id: u.id,
+        );
+
+        userMap[key] = u.copyWith(
+          fullName: completeName,
+          employeeCode: officialId,
+          photoUrl: photo,
+        );
       }
 
       // Always merge local employees into userMap so locally active/registered employees are never omitted
@@ -95,20 +121,81 @@ class UserManagementCubit extends Cubit<UserManagementState> {
                     u.fullName.trim().toLowerCase() == e.name.trim().toLowerCase()));
 
         if (!alreadyPresent) {
+          final completeName = EmployeeDirectoryHelper.getCompleteFullName(
+            currentName: e.name,
+            email: e.email,
+            code: e.employeeCode,
+            id: e.id,
+          );
+          final officialId = EmployeeDirectoryHelper.getEmployeeId(
+            currentCode: e.employeeCode,
+            name: e.name,
+            email: e.email,
+            id: e.id,
+          );
+          final photo = EmployeeDirectoryHelper.resolvePhoto(
+            customPhotoUrl: e.photoUrl,
+            employeeCode: e.employeeCode,
+            fullName: e.name,
+            email: e.email,
+            id: e.id,
+          );
+
           final localUser = UserEntity(
             id: e.id,
             firebaseUid: e.id,
             email: e.email,
-            fullName: e.name,
+            fullName: completeName,
             phoneNumber: e.mobileNumber,
-            employeeCode: e.employeeCode,
+            employeeCode: officialId,
             designation: e.designation,
             department: e.department,
             role: UserRole.employee,
             organizationId: orgId,
             isActive: e.isActive,
+            photoUrl: photo,
           );
           userMap[key] = localUser;
+        } else {
+          final existing = userMap[key] ??
+              userMap.values.firstWhere((u) =>
+                  (u.id.isNotEmpty && u.id == e.id) ||
+                  (e.email.isNotEmpty &&
+                      u.email.trim().toLowerCase() == u.email.trim().toLowerCase()) ||
+                  (e.name.isNotEmpty &&
+                      u.fullName.trim().toLowerCase() == e.name.trim().toLowerCase()));
+
+          final existingKey =
+              userMap.keys.firstWhere((k) => userMap[k] == existing, orElse: () => key);
+
+          final completeName = EmployeeDirectoryHelper.getCompleteFullName(
+            currentName: existing.fullName,
+            email: existing.email,
+            code: existing.employeeCode ?? e.employeeCode,
+            id: existing.id,
+          );
+          final officialId = EmployeeDirectoryHelper.getEmployeeId(
+            currentCode: existing.employeeCode ?? e.employeeCode,
+            name: existing.fullName,
+            email: existing.email,
+            id: existing.id,
+          );
+          final photo = (existing.photoUrl != null &&
+                  existing.photoUrl!.trim().isNotEmpty)
+              ? existing.photoUrl
+              : EmployeeDirectoryHelper.resolvePhoto(
+                  customPhotoUrl: e.photoUrl,
+                  employeeCode: existing.employeeCode ?? e.employeeCode,
+                  fullName: existing.fullName,
+                  email: existing.email,
+                  id: existing.id,
+                );
+
+          userMap[existingKey] = existing.copyWith(
+            fullName: completeName,
+            employeeCode: officialId,
+            photoUrl: photo,
+          );
         }
       }
 
@@ -132,6 +219,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
     bool useDefaultOffice = true,
     String? assignedOfficeId,
     String? assignedOfficeName,
+    String? photoUrl,
   }) async {
     emit(UserManagementLoading());
     try {
@@ -210,6 +298,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         assignedOfficeId: assignedOfficeId,
         assignedOfficeName: assignedOfficeName,
         isActive: true,
+        photoUrl: photoUrl,
       );
       _db.saveEmployee(newLocalEmp);
 
@@ -248,6 +337,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
           assignedOfficeId: assignedOfficeId,
           assignedOfficeName: assignedOfficeName,
           isActive: true,
+          photoUrl: photoUrl,
         );
         _db.saveEmployee(officialLocalEmp);
         emit(UserManagementActionSuccess(
@@ -274,6 +364,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
     bool? useDefaultOffice,
     String? assignedOfficeId,
     String? assignedOfficeName,
+    String? photoUrl,
   }) async {
     emit(UserManagementLoading());
     try {
@@ -291,6 +382,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
           email: (email != null && email.trim().isNotEmpty) ? email.trim() : existingUser.email,
           phoneNumber: phoneNumber?.trim() ?? existingUser.phoneNumber,
           role: role ?? existingUser.role,
+          photoUrl: photoUrl ?? existingUser.photoUrl,
         );
         _db.saveUser(updatedUser);
       }
@@ -309,6 +401,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
           email: email?.trim() ?? '',
           designation: designation ?? 'Team Member',
           department: department ?? 'Operations',
+          photoUrl: photoUrl,
         ),
       );
 
@@ -327,6 +420,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         assignedOfficeName:
             assignedOfficeName ?? existingEmp.assignedOfficeName,
         isActive: existingEmp.isActive,
+        photoUrl: photoUrl ?? existingEmp.photoUrl,
       );
       _db.saveEmployee(updatedEmp);
 
@@ -349,6 +443,53 @@ class UserManagementCubit extends Cubit<UserManagementState> {
       await fetchUsers();
     } catch (e) {
       emit(UserManagementError('Failed to update user: ${e.toString()}'));
+    }
+  }
+
+  Future<void> updateEmployeePhoto(String userId, String photoUrl) async {
+    try {
+      final localUsers = _db.getUsers();
+      final userIndex = localUsers.indexWhere((u) => u.id == userId || u.email == userId);
+      if (userIndex >= 0) {
+        final existingUser = localUsers[userIndex];
+        _db.saveUser(existingUser.copyWith(photoUrl: photoUrl));
+      }
+
+      final localEmployees = _db.getEmployees();
+      final empIndex = localEmployees.indexWhere((e) => e.id == userId || e.email == userId);
+      if (empIndex >= 0) {
+        final existingEmp = localEmployees[empIndex];
+        _db.saveEmployee(existingEmp.copyWith(photoUrl: photoUrl));
+      } else {
+        final user = localUsers.firstWhere(
+          (u) => u.id == userId || u.email == userId,
+          orElse: () => _db.currentUser ??
+              UserEntity(
+                id: userId,
+                firebaseUid: userId,
+                email: '',
+                fullName: 'Employee',
+                role: UserRole.employee,
+                organizationId: '',
+                isActive: true,
+              ),
+        );
+        _db.saveEmployee(EmployeeEntity(
+          id: userId,
+          employeeCode: user.employeeCode ?? 'EMP-001',
+          name: user.fullName,
+          mobileNumber: user.phoneNumber ?? '',
+          email: user.email,
+          designation: user.designation ?? 'Team Member',
+          department: user.department ?? 'Operations',
+          photoUrl: photoUrl,
+        ));
+      }
+
+      emit(UserManagementActionSuccess('Employee photo attached successfully.'));
+      await fetchUsers();
+    } catch (e) {
+      emit(UserManagementError('Failed to attach employee photo: ${e.toString()}'));
     }
   }
 

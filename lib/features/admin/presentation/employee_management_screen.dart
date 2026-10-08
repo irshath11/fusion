@@ -8,6 +8,9 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_theme.dart';
 import '../../../core/constants/app_enums.dart';
 import '../../../core/utils/role_permissions.dart';
+import '../../../core/utils/employee_directory_helper.dart';
+import '../../../core/utils/photo_attachment_helper.dart';
+import '../../../core/widgets/employee_avatar.dart';
 import '../../../database/local_database_service.dart';
 import '../../auth/domain/user_entity.dart';
 
@@ -138,6 +141,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                       required useDefaultOffice,
                       assignedOfficeId,
                       assignedOfficeName,
+                      photoUrl,
                     }) {
                       context.read<UserManagementCubit>().createUser(
                             fullName: fullName,
@@ -151,6 +155,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                             useDefaultOffice: useDefaultOffice,
                             assignedOfficeId: assignedOfficeId,
                             assignedOfficeName: assignedOfficeName,
+                            photoUrl: photoUrl,
                           );
                     },
                   ),
@@ -227,8 +232,26 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                       itemBuilder: (ctx, index) {
                         final user = filteredUsers[index];
                         final isSelf = user.id == currentUser?.id;
-                        final displayCode = _resolveCleanCode(
-                            user.employeeCode, user.fullName, user.id);
+                        final completeFullName =
+                            EmployeeDirectoryHelper.getCompleteFullName(
+                          currentName: user.fullName,
+                          email: user.email,
+                          code: user.employeeCode,
+                          id: user.id,
+                        );
+                        final employeeId = EmployeeDirectoryHelper.getEmployeeId(
+                          currentCode: user.employeeCode,
+                          name: user.fullName,
+                          email: user.email,
+                          id: user.id,
+                        );
+                        final photoUrl = EmployeeDirectoryHelper.resolvePhoto(
+                          customPhotoUrl: user.photoUrl,
+                          employeeCode: employeeId,
+                          fullName: completeFullName,
+                          email: user.email,
+                          id: user.id,
+                        );
 
                         Color roleBadgeColor;
                         switch (user.role) {
@@ -244,6 +267,11 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                         }
 
                         final isDark = Theme.of(context).brightness == Brightness.dark;
+                        final idBadgeColor =
+                            isDark ? const Color(0xFF38BDF8) : AppColors.primary;
+                        if (user.role == UserRole.admin && isDark) {
+                          roleBadgeColor = const Color(0xFF38BDF8);
+                        }
                         final palette = AppTheme.currentColors;
                         final officeName = user.assignedOfficeName != null &&
                                 user.assignedOfficeName!.isNotEmpty
@@ -280,33 +308,28 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
-                                    // Avatar with Status Dot Indicator
+                                    // Avatar with Status Dot Indicator + Tap to Attach Photo
                                     Stack(
                                       children: [
-                                        Container(
-                                          width: 44,
-                                          height: 44,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: roleBadgeColor
-                                                .withValues(alpha: 0.15),
-                                            border: Border.all(
-                                              color: roleBadgeColor
-                                                  .withValues(alpha: 0.4),
-                                              width: 1.5,
-                                            ),
-                                          ),
-                                          alignment: Alignment.center,
-                                          child: Text(
-                                            user.fullName.isNotEmpty
-                                                ? user.fullName[0].toUpperCase()
-                                                : 'U',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 18,
-                                              color: roleBadgeColor,
-                                            ),
-                                          ),
+                                        EmployeeAvatar(
+                                          photoUrl: photoUrl,
+                                          fullName: completeFullName,
+                                          radius: 24,
+                                          borderColor: roleBadgeColor,
+                                          badgeColor: roleBadgeColor,
+                                          showEditBadge: true,
+                                          onTap: () async {
+                                            final cubit = context
+                                                .read<UserManagementCubit>();
+                                            final picked =
+                                                await PhotoAttachmentHelper
+                                                    .showPhotoSourceModal(
+                                                        context);
+                                            if (picked != null) {
+                                              cubit.updateEmployeePhoto(
+                                                  user.id, picked);
+                                            }
+                                          },
                                         ),
                                         Positioned(
                                           right: 0,
@@ -331,52 +354,84 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                     ),
                                     const SizedBox(width: 12),
 
-                                    // Name & Designation
+                                    // Complete Full Name + Employee ID right next to name + Designation
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          Row(
+                                          Wrap(
+                                            crossAxisAlignment:
+                                                WrapCrossAlignment.center,
+                                            spacing: 6,
+                                            runSpacing: 4,
                                             children: [
-                                              Flexible(
-                                                child: Text(
-                                                  user.fullName,
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 16,
+                                              Text(
+                                                completeFullName,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 15,
+                                                ),
+                                              ),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 7,
+                                                        vertical: 2.5),
+                                                decoration: BoxDecoration(
+                                                  color: idBadgeColor
+                                                      .withValues(
+                                                          alpha: isDark ? 0.18 : 0.10),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                  border: Border.all(
+                                                    color: idBadgeColor
+                                                        .withValues(
+                                                            alpha: isDark ? 0.50 : 0.30),
+                                                    width: 1,
                                                   ),
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
+                                                ),
+                                                child: Text(
+                                                  'ID: $employeeId',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: idBadgeColor,
+                                                    letterSpacing: 0.5,
+                                                  ),
                                                 ),
                                               ),
                                               if (isSelf) ...[
-                                                const SizedBox(width: 6),
                                                 Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                          horizontal: 6,
-                                                          vertical: 2),
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2),
                                                   decoration: BoxDecoration(
-                                                    color: AppColors.primary
-                                                        .withValues(alpha: 0.15),
+                                                    color: (isDark
+                                                            ? const Color(0xFF38BDF8)
+                                                            : AppColors.primary)
+                                                        .withValues(
+                                                            alpha: isDark ? 0.20 : 0.15),
                                                     borderRadius:
                                                         BorderRadius.circular(4),
                                                   ),
-                                                  child: const Text(
+                                                  child: Text(
                                                     'You',
                                                     style: TextStyle(
                                                       fontSize: 10,
                                                       fontWeight:
                                                           FontWeight.bold,
-                                                      color: AppColors.primary,
+                                                      color: isDark
+                                                          ? const Color(0xFF38BDF8)
+                                                          : AppColors.primary,
                                                     ),
                                                   ),
                                                 ),
                                               ],
                                             ],
                                           ),
-                                          const SizedBox(height: 2),
+                                          const SizedBox(height: 3),
                                           Text(
                                             (user.designation != null &&
                                                     user.designation!
@@ -454,6 +509,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                                       required useDefaultOffice,
                                                       assignedOfficeId,
                                                       assignedOfficeName,
+                                                      photoUrl,
                                                     }) {
                                                       cubit.updateUser(
                                                         userId: user.id,
@@ -471,10 +527,21 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                                             assignedOfficeId,
                                                         assignedOfficeName:
                                                             assignedOfficeName,
+                                                        photoUrl: photoUrl,
                                                       );
                                                     },
                                                   ),
                                                 );
+                                              } else if (val == 'attach_photo') {
+                                                PhotoAttachmentHelper
+                                                    .showPhotoSourceModal(
+                                                        context)
+                                                    .then((picked) {
+                                                  if (picked != null) {
+                                                    cubit.updateEmployeePhoto(
+                                                        user.id, picked);
+                                                  }
+                                                });
                                               } else if (val ==
                                                   'toggle_status') {
                                                 cubit.setUserActiveStatus(
@@ -496,6 +563,18 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                                         size: 18),
                                                     SizedBox(width: 8),
                                                     Text('Edit Profile'),
+                                                  ],
+                                                ),
+                                              ),
+                                              const PopupMenuItem(
+                                                value: 'attach_photo',
+                                                child: Row(
+                                                  children: [
+                                                    Icon(
+                                                        Icons.add_a_photo_outlined,
+                                                        size: 18),
+                                                    SizedBox(width: 8),
+                                                    Text('Attach Photo'),
                                                   ],
                                                 ),
                                               ),
@@ -555,21 +634,12 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                 const Divider(height: 1, thickness: 0.8),
                                 const SizedBox(height: 12),
 
-                                // Bottom Details Chips: Code, Email, Phone, Office, Status Pill
+                                // Bottom Details Chips: Email, Phone, Office, Status Pill
                                 Wrap(
                                   spacing: 8,
                                   runSpacing: 8,
                                   crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
-                                    if (displayCode.isNotEmpty)
-                                      _buildInfoChip(
-                                        icon: Icons.badge_outlined,
-                                        label: displayCode,
-                                        bgColor: Colors.blueGrey
-                                            .withValues(alpha: 0.12),
-                                        textColor: Colors.blueGrey.shade700,
-                                        isBold: true,
-                                      ),
                                     _buildInfoChip(
                                       icon: Icons.email_outlined,
                                       label: user.email,
@@ -651,43 +721,6 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
         ],
       ),
     );
-  }
-
-  static bool _isHexFallback(String? code, String? id) {
-    if (code == null || code.isEmpty) return false;
-    if (id != null &&
-        id.length >= 4 &&
-        code.toUpperCase() == 'EMP-${id.substring(0, 4).toUpperCase()}') {
-      return true;
-    }
-    final reg = RegExp(r'^EMP-[0-9A-Fa-f]{4}$');
-    if (reg.hasMatch(code) &&
-        id != null &&
-        id.toLowerCase().startsWith(code.substring(4).toLowerCase())) {
-      return true;
-    }
-    return false;
-  }
-
-  static String _resolveCleanCode(String? rawCode, String? name, String? id) {
-    if (rawCode != null &&
-        rawCode.trim().isNotEmpty &&
-        rawCode.trim() != 'EMP-000' &&
-        !_isHexFallback(rawCode.trim(), id)) {
-      return rawCode.trim();
-    }
-    final cleanName =
-        (name ?? '').replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
-    if (cleanName.isNotEmpty) {
-      final prefix = cleanName.length >= 4
-          ? cleanName.substring(0, 4)
-          : (cleanName.length >= 3 ? cleanName.substring(0, 3) : cleanName);
-      return 'EMP-$prefix';
-    }
-    if (id != null && id.length >= 4) {
-      return 'EMP-${id.substring(0, 4).toUpperCase()}';
-    }
-    return 'EMP-001';
   }
 
   Widget _buildInfoChip({

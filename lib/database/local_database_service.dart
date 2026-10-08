@@ -10,6 +10,7 @@ import '../features/admin/domain/employee_entity.dart';
 import '../features/admin/domain/office_entity.dart';
 import '../features/admin/domain/work_site_entity.dart';
 import '../features/attendance/domain/attendance_record.dart';
+import '../core/utils/employee_directory_helper.dart';
 
 class LocalDatabaseService {
   static final LocalDatabaseService _instance =
@@ -144,6 +145,9 @@ class LocalDatabaseService {
     // Sanitize any phantom/duplicate employee records (e.g. 'Anand' -> 'Anandh Veeramani')
     sanitizeDuplicateEmployees();
 
+    // Seed and sync canonical master company employee directory with photos and full names
+    seedMasterEmployeeDirectory();
+
     _persistOffices();
     _persistEmployees();
     _persistWorkSites();
@@ -226,9 +230,30 @@ class LocalDatabaseService {
           email: e.email,
           fullName: e.name,
           phoneNumber: e.mobileNumber,
+          employeeCode: e.employeeCode,
+          designation: e.designation,
+          department: e.department,
           role: UserRole.employee,
           organizationId: _organization?.id ?? '00000000-0000-0000-0000-000000000001',
           isActive: e.isActive,
+          useDefaultOffice: e.useDefaultOffice,
+          assignedOfficeId: e.assignedOfficeId,
+          assignedOfficeName: e.assignedOfficeName,
+          photoUrl: e.photoUrl,
+        );
+      } else {
+        final existing = uniqueMap[key]!;
+        uniqueMap[key] = existing.copyWith(
+          employeeCode: (existing.employeeCode != null && existing.employeeCode!.isNotEmpty && existing.employeeCode != 'EMP-000')
+              ? existing.employeeCode
+              : e.employeeCode,
+          designation: (existing.designation != null && existing.designation!.isNotEmpty)
+              ? existing.designation
+              : e.designation,
+          department: (existing.department != null && existing.department!.isNotEmpty)
+              ? existing.department
+              : e.department,
+          photoUrl: existing.photoUrl ?? e.photoUrl,
         );
       }
     }
@@ -240,7 +265,34 @@ class LocalDatabaseService {
         uniqueMap[key] = _currentUser!;
       }
     }
-    return List.unmodifiable(uniqueMap.values.toList());
+
+    final result = uniqueMap.values.map((u) {
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: u.employeeCode,
+        name: u.fullName,
+        email: u.email,
+        id: u.id,
+      );
+      if (official != null) {
+        return u.copyWith(
+          fullName: official.fullName,
+          employeeCode: official.employeeId,
+          photoUrl: (u.photoUrl != null && u.photoUrl!.isNotEmpty)
+              ? u.photoUrl
+              : official.photoAsset,
+          designation: (u.designation != null && u.designation!.isNotEmpty && u.designation != 'Staff')
+              ? u.designation
+              : official.designation,
+          department: (u.department != null && u.department!.isNotEmpty && u.department != 'Operations')
+              ? u.department
+              : official.department,
+        );
+      }
+      return u;
+    }).toList();
+
+    result.sort((a, b) => a.fullName.trim().toLowerCase().compareTo(b.fullName.trim().toLowerCase()));
+    return List.unmodifiable(result);
   }
 
   void saveUser(UserEntity user) {
@@ -348,12 +400,103 @@ class LocalDatabaseService {
           assignedOfficeId: existing.assignedOfficeId ?? e.assignedOfficeId,
           assignedOfficeName: existing.assignedOfficeName ?? e.assignedOfficeName,
           isActive: existing.isActive && e.isActive,
+          photoUrl: (existing.photoUrl != null && existing.photoUrl!.trim().isNotEmpty)
+              ? existing.photoUrl
+              : e.photoUrl,
         );
       }
     }
-    final list = uniqueMap.values.toList();
+    final list = uniqueMap.values.map((e) {
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: e.employeeCode,
+        name: e.name,
+        email: e.email,
+        id: e.id,
+      );
+      if (official != null) {
+        return e.copyWith(
+          name: official.fullName,
+          employeeCode: official.employeeId,
+          photoUrl: (e.photoUrl != null && e.photoUrl!.trim().isNotEmpty)
+              ? e.photoUrl
+              : official.photoAsset,
+          designation: (e.designation.isNotEmpty && e.designation != 'Staff' && e.designation != 'Team Member')
+              ? e.designation
+              : official.designation,
+          department: (e.department.isNotEmpty && e.department != 'Operations')
+              ? e.department
+              : official.department,
+        );
+      }
+      return e;
+    }).toList();
     list.sort((a, b) => a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
     return List.unmodifiable(list);
+  }
+
+  /// Seeds and syncs canonical master enterprise employee directory with photos, full names, and official IDs
+  void seedMasterEmployeeDirectory() {
+    for (final rec in EmployeeDirectoryHelper.masterDirectory) {
+      final existingEmpIndex = _employees.indexWhere((e) =>
+          e.employeeCode.toUpperCase() == rec.employeeId.toUpperCase() ||
+          (e.email.isNotEmpty && e.email.toLowerCase() == rec.email.toLowerCase()) ||
+          e.name.toLowerCase() == rec.fullName.toLowerCase() ||
+          (e.name.trim().length >= 4 && rec.fullName.toLowerCase().contains(e.name.toLowerCase())));
+
+      if (existingEmpIndex >= 0) {
+        final existing = _employees[existingEmpIndex];
+        _employees[existingEmpIndex] = existing.copyWith(
+          name: rec.fullName,
+          employeeCode: rec.employeeId,
+          photoUrl: (existing.photoUrl != null && existing.photoUrl!.trim().isNotEmpty)
+              ? existing.photoUrl
+              : rec.photoAsset,
+          designation: (existing.designation.isNotEmpty && existing.designation != 'Staff' && existing.designation != 'Team Member')
+              ? existing.designation
+              : rec.designation,
+          department: (existing.department.isNotEmpty && existing.department != 'Operations')
+              ? existing.department
+              : rec.department,
+        );
+      } else {
+        _employees.add(EmployeeEntity(
+          id: 'emp-${rec.employeeId.toLowerCase()}',
+          employeeCode: rec.employeeId,
+          name: rec.fullName,
+          mobileNumber: '',
+          email: rec.email,
+          designation: rec.designation,
+          department: rec.department,
+          photoUrl: rec.photoAsset,
+          useDefaultOffice: true,
+          isActive: true,
+        ));
+      }
+
+      // Also enrich _users if present
+      final userIndex = _users.indexWhere((u) =>
+          (u.email.isNotEmpty && u.email.toLowerCase() == rec.email.toLowerCase()) ||
+          u.fullName.toLowerCase() == rec.fullName.toLowerCase() ||
+          (u.fullName.trim().length >= 4 && rec.fullName.toLowerCase().contains(u.fullName.toLowerCase())));
+      if (userIndex >= 0) {
+        final existingUser = _users[userIndex];
+        _users[userIndex] = existingUser.copyWith(
+          fullName: rec.fullName,
+          employeeCode: rec.employeeId,
+          photoUrl: (existingUser.photoUrl != null && existingUser.photoUrl!.trim().isNotEmpty)
+              ? existingUser.photoUrl
+              : rec.photoAsset,
+          designation: (existingUser.designation != null && existingUser.designation!.isNotEmpty)
+              ? existingUser.designation
+              : rec.designation,
+          department: (existingUser.department != null && existingUser.department!.isNotEmpty)
+              ? existingUser.department
+              : rec.department,
+        );
+      }
+    }
+    _persistEmployees();
+    _persistUsers();
   }
 
   void setEmployees(List<EmployeeEntity> employees) {

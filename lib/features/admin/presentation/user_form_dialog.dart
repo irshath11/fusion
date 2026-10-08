@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_enums.dart';
 import '../../../core/services/supabase_service.dart';
+import '../../../core/utils/employee_directory_helper.dart';
+import '../../../core/utils/photo_attachment_helper.dart';
 import '../../../core/widgets/custom_text_field.dart';
+import '../../../core/widgets/employee_avatar.dart';
 import '../../../database/local_database_service.dart';
 import '../../auth/domain/user_entity.dart';
 
@@ -20,6 +23,7 @@ class UserFormDialog extends StatefulWidget {
     required bool useDefaultOffice,
     String? assignedOfficeId,
     String? assignedOfficeName,
+    String? photoUrl,
   }) onSubmit;
 
   const UserFormDialog({
@@ -45,6 +49,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
   bool _useDefaultOffice = true;
   String _selectedOfficeId = 'default_main';
   String _selectedOfficeName = 'Head Office (Main Office)';
+  String? _photoUrl;
 
   List<Map<String, String>> _availableLocations = [];
   bool _isLoadingDetails = false;
@@ -66,6 +71,14 @@ class _UserFormDialogState extends State<UserFormDialog> {
     ];
 
     final user = widget.userToEdit;
+    _photoUrl = user?.photoUrl ??
+        EmployeeDirectoryHelper.resolvePhoto(
+          customPhotoUrl: user?.photoUrl,
+          employeeCode: user?.employeeCode,
+          fullName: user?.fullName,
+          email: user?.email,
+          id: user?.id,
+        );
     _nameController = TextEditingController(text: user?.fullName ?? '');
     _emailController = TextEditingController(text: user?.email ?? '');
     _phoneController = TextEditingController(text: user?.phoneNumber ?? '');
@@ -184,6 +197,9 @@ class _UserFormDialogState extends State<UserFormDialog> {
           _codeController.text =
               _resolveCleanCode(null, user.fullName, user.id);
         }
+        if (remoteEmp.photoUrl != null && remoteEmp.photoUrl!.isNotEmpty && _photoUrl == null) {
+          _photoUrl = remoteEmp.photoUrl;
+        }
         if (remoteEmp.designation.isNotEmpty) {
           _designationController.text = remoteEmp.designation;
         }
@@ -287,6 +303,50 @@ class _UserFormDialogState extends State<UserFormDialog> {
                 ),
               ),
             ],
+            Center(
+              child: Column(
+                children: [
+                  EmployeeAvatar(
+                    photoUrl: _photoUrl,
+                    fullName: _nameController.text.isNotEmpty
+                        ? _nameController.text
+                        : 'Employee',
+                    radius: 40,
+                    showEditBadge: true,
+                    onTap: () async {
+                      final picked =
+                          await PhotoAttachmentHelper.showPhotoSourceModal(
+                              context);
+                      if (picked != null) {
+                        setState(() {
+                          _photoUrl = picked;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 6),
+                  TextButton.icon(
+                    onPressed: () async {
+                      final picked =
+                          await PhotoAttachmentHelper.showPhotoSourceModal(
+                              context);
+                      if (picked != null) {
+                        setState(() {
+                          _photoUrl = picked;
+                        });
+                      }
+                    },
+                    icon: const Icon(Icons.add_a_photo_outlined, size: 16),
+                    label: Text(
+                      _photoUrl != null ? 'Change Photo' : 'Attach Photo',
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
             CustomTextField(
               controller: _nameController,
               label: 'Full Name',
@@ -457,6 +517,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
               assignedOfficeId: _useDefaultOffice ? null : _selectedOfficeId,
               assignedOfficeName:
                   _useDefaultOffice ? null : _selectedOfficeName,
+              photoUrl: _photoUrl,
             );
             Navigator.of(context).pop();
           },
