@@ -1001,21 +1001,12 @@ class LocalDatabaseService {
       );
 
       if (official != null) {
-        final target = officialTargetMap[official.employeeId];
-        if (target != null) {
-          if (r.employeeId != target.targetId || r.employeeName != target.targetName) {
-            final updated = r.copyWith(
-              employeeId: target.targetId,
-              employeeName: target.targetName,
-              isEdited: true,
-              editedBy: 'System Consolidation',
-              syncStatus: SyncStatus.pending,
-            );
-            _attendanceRecords[i] = updated;
-            updatedRecords.add(updated);
-            migratedCount++;
-          }
-        }
+        // NOTE: We do not overwrite attendance records' employeeName with official.fullName.
+        // Employees in the field run older APK versions whose local profile stores
+        // short names (e.g. 'Saleem', 'Shabi'). Overwriting employeeName in the cloud/local DB
+        // breaks their datewise timeline and timesheet calculation on existing APKs.
+        // Consolidation for administrative views and PDF reports is handled dynamically
+        // via EmployeeDirectoryHelper without mutating raw record names.
       } else {
         // Revert any records of OTHER employees that were mistakenly tagged with synthetic 'emp-' IDs
         if (r.employeeId.startsWith('emp-')) {
@@ -1248,9 +1239,18 @@ class LocalDatabaseService {
               (r.employeeId == _currentUser!.id ||
                r.employeeId == _currentUser!.firebaseUid ||
                r.employeeName.trim().toLowerCase() == _currentUser!.fullName.trim().toLowerCase())));
+      final matchesIdentity = _currentUser != null &&
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: r.employeeId,
+            recordEmployeeName: r.employeeName,
+            employeeId: _currentUser!.id,
+            employeeCode: _currentUser!.employeeCode,
+            employeeName: _currentUser!.fullName,
+            employeeEmail: _currentUser!.email,
+          );
       final localEv = r.eventTimestamp.toLocal();
       final rDate = DateTime(localEv.year, localEv.month, localEv.day);
-      return matchesUser && rDate.isAtSameMomentAs(today);
+      return (matchesUser || matchesIdentity) && rDate.isAtSameMomentAs(today);
     }).toList();
   }
 
