@@ -196,6 +196,33 @@ class SupabaseService {
     }
   }
 
+  /// Delete Office from Supabase (Soft delete by setting is_deleted = true)
+  Future<void> deleteOfficeFromSupabase(String officeId) async {
+    if (!_isInitialized || client == null) return;
+    try {
+      final now = DateTime.now().toIso8601String();
+      await client!
+          .from('offices')
+          .update({
+            'is_deleted': true,
+            'updated_at': now,
+          })
+          .eq('id', officeId);
+
+      // Revert any employees assigned to this office back to the default office
+      await client!
+          .from('employees')
+          .update({
+            'assigned_office_id': null,
+            'use_default_office': true,
+            'updated_at': now,
+          })
+          .eq('assigned_office_id', officeId);
+    } catch (e) {
+      debugPrint('Supabase deleteOfficeFromSupabase error: $e');
+    }
+  }
+
   /// Fetch User Profile by Firebase UID / ID / Email
   Future<UserEntity?> fetchUserByFirebaseUid(String identifier) async {
     if (!_isInitialized || client == null) return null;

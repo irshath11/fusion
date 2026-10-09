@@ -391,6 +391,19 @@ class LocalDatabaseService {
   void deleteOffice(String officeId) {
     _offices.removeWhere((o) => o.id == officeId);
     _persistOffices();
+    bool employeesModified = false;
+    for (int i = 0; i < _employees.length; i++) {
+      if (_employees[i].assignedOfficeId == officeId) {
+        _employees[i] = _employees[i].copyWith(
+          useDefaultOffice: true,
+          clearAssignedOffice: true,
+        );
+        employeesModified = true;
+      }
+    }
+    if (employeesModified) {
+      _persistEmployees();
+    }
   }
 
   void _persistOffices() {

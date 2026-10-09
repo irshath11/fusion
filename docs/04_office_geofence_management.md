@@ -31,6 +31,12 @@ $$d = R \cdot \Delta \sigma$$
    - **Static Offices (`offices` table)**: Permanent company headquarters, depots, and regional hubs.
    - **Work Sites (`work_sites` table)**: Client-specific project locations, construction sites, or maintenance depots with custom radius bounds.
 
+5. **Office Station Deletion & Assignment Fallback**:
+   - **Delete Action**: Administrators can delete branch offices directly from the offices list (`OfficeManagementScreen`) or from the office editing modal.
+   - **Protected Main Office Safeguard**: The default Main Office (`isDefault == true`) is protected against deletion, preventing accidental removal of the central organization geofence.
+   - **Automatic Employee Fallback**: Deleting a branch office automatically reverts all assigned employees to the default Main Office (`useDefaultOffice: true`, `assignedOfficeId: null`), preventing orphaned profiles or broken geofence checks.
+   - **Soft-Delete Cloud Synchronization**: Performs atomic soft deletion in Supabase (`is_deleted: true`) and clears references in `employees` table, preserving historical attendance audit logs.
+
 ---
 
 ## 2. Technical Implementation & Data Structures
@@ -68,8 +74,9 @@ class OfficeEntity {
 
 | File Path | Description |
 | :--- | :--- |
-| [`lib/features/admin/domain/office_entity.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/domain/office_entity.dart) | Office station domain model. |
-| [`lib/features/admin/presentation/admin_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/admin_cubit.dart) | Cubit managing office station and work site CRUD operations in local Hive storage & Supabase cloud tables. |
-| [`lib/features/admin/presentation/office_management_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/office_management_screen.dart) | Admin UI for creating/editing office stations with GPS location picker and geofence radius adjustment. |
-| [`lib/features/admin/presentation/work_site_management_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/work_site_management_screen.dart) | Admin UI for creating/editing client work sites and project locations. |
-| [`lib/core/services/location_service.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/services/location_service.dart) | Service handling GPS permission checks, position retrieval, and Haversine distance calculations. |
+| [`lib/features/admin/domain/office_entity.dart`](../lib/features/admin/domain/office_entity.dart) | Office station domain model. |
+| [`lib/features/admin/presentation/admin_cubit.dart`](../lib/features/admin/presentation/admin_cubit.dart) | Cubit managing office station and work site CRUD operations in local Hive storage & Supabase cloud tables. |
+| [`lib/features/admin/presentation/office_management_screen.dart`](../lib/features/admin/presentation/office_management_screen.dart) | Admin UI for creating, editing, and deleting office stations with GPS location picker and geofence radius adjustment. |
+| [`lib/features/admin/presentation/work_site_management_screen.dart`](../lib/features/admin/presentation/work_site_management_screen.dart) | Admin UI for creating/editing client work sites and project locations. |
+| [`lib/core/services/location_service.dart`](../lib/core/services/location_service.dart) | Service handling GPS permission checks, position retrieval, and Haversine distance calculations. |
+

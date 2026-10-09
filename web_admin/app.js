@@ -361,7 +361,7 @@
     document.getElementById('office-count-badge').textContent = `${officesData.length} Offices`;
 
     if (officesData.length === 0) {
-      officeTableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px;">No offices configured. Click Add Office Location to create one.</td></tr>`;
+      officeTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">No offices configured. Click Add Office Location to create one.</td></tr>`;
       return;
     }
 
@@ -372,9 +372,41 @@
         <td><span style="font-family: var(--font-mono);">${o.latitude.toFixed(6)}, ${o.longitude.toFixed(6)}</span></td>
         <td>${o.geofence_radius_meters}m</td>
         <td><span class="badge ${o.is_default ? 'badge-success' : 'badge-neutral'}">${o.is_default ? 'Default HQ' : 'Branch'}</span></td>
+        <td>
+          ${o.is_default 
+            ? '<span style="color: var(--text-muted); font-size: 11px;">Protected (HQ)</span>' 
+            : `<button class="btn btn-sm" style="color: #ef4444; border: 1px solid #ef4444; padding: 3px 8px; font-size: 11px; border-radius: 4px; background: transparent; cursor: pointer;" onclick="deleteOfficeLocation('${o.id}', '${encodeURIComponent(o.name)}')">🗑 Delete</button>`
+          }
+        </td>
       </tr>
     `).join('');
   }
+
+  window.deleteOfficeLocation = async function(officeId, encodedName) {
+    const name = decodeURIComponent(encodedName);
+    if (!confirm(`Are you sure you want to delete office "${name}"?\n\nAny employees assigned to this office branch will automatically revert to using the default Main Office.`)) {
+      return;
+    }
+    try {
+      const now = new Date().toISOString();
+      const { error } = await supabaseClient
+        .from('offices')
+        .update({ is_deleted: true, updated_at: now })
+        .eq('id', officeId);
+      if (error) throw error;
+
+      await supabaseClient
+        .from('employees')
+        .update({ assigned_office_id: null, use_default_office: true, updated_at: now })
+        .eq('assigned_office_id', officeId);
+
+      alert(`Office "${name}" deleted successfully.`);
+      await fetchAllData();
+    } catch (err) {
+      console.error('Error deleting office:', err);
+      alert('Failed to delete office: ' + err.message);
+    }
+  };
 
   function renderSiteTable() {
     if (!siteTableBody) return;

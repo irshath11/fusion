@@ -260,9 +260,10 @@ class AdminCubit extends Cubit<AdminState> {
     return await LocationService.getCurrentLocation();
   }
 
-  void deleteOffice(String id) {
+  Future<void> deleteOffice(String id) async {
     _db.deleteOffice(id);
-    loadDashboardData('Office removed.');
+    await _supabase.deleteOfficeFromSupabase(id);
+    await loadDashboardData('Office removed.');
   }
 
   // Save / Update Work Site

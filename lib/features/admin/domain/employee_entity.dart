@@ -69,6 +69,7 @@ class EmployeeEntity {
     bool? useDefaultOffice,
     String? assignedOfficeId,
     String? assignedOfficeName,
+    bool clearAssignedOffice = false,
     bool? isActive,
     String? photoUrl,
   }) {
@@ -81,8 +82,12 @@ class EmployeeEntity {
       designation: designation ?? this.designation,
       department: department ?? this.department,
       useDefaultOffice: useDefaultOffice ?? this.useDefaultOffice,
-      assignedOfficeId: assignedOfficeId ?? this.assignedOfficeId,
-      assignedOfficeName: assignedOfficeName ?? this.assignedOfficeName,
+      assignedOfficeId: clearAssignedOffice
+          ? null
+          : (assignedOfficeId ?? this.assignedOfficeId),
+      assignedOfficeName: clearAssignedOffice
+          ? null
+          : (assignedOfficeName ?? this.assignedOfficeName),
       isActive: isActive ?? this.isActive,
       photoUrl: photoUrl ?? this.photoUrl,
     );
