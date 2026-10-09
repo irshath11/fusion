@@ -56,10 +56,24 @@ The **Service Report Generator & Digital E-Signatures** feature provides field s
 
 ---
 
-### D. Offline Persistence & Cloud Synchronization
-- **Local Database Storage (`LocalDatabaseService`)**: Saves reports locally in Hive (`serviceReportsBox`), allowing technicians to create, edit, and view past reports with zero internet connection.
-- **Supabase Cloud Synchronization**: Synchronizes reports to the remote Supabase `service_reports` table when connectivity is available.
-- **History & Search Screen (`EmployeeReportsListScreen`)**: Provides technicians with a searchable list of all generated reports with quick PDF reprint and view actions.
+### D. Offline Persistence & Prefix Sequencing Engine
+- **Employee Prefix Sequencing (`currentEmployeePrefix`)**:
+  - Dynamically computes a 2-digit employee prefix (e.g., `E01`, `E02`, `E03`) derived from employee directory indexing or clean name initials.
+- **Strict Sequential Auto-Incrementing (`getNextLocalServiceReportSeq`)**:
+  - Base sequence commences at **2001**.
+  - Automatically scans all existing local reports under the employee prefix to find the highest existing sequence and increments by exactly `+1` (e.g., `SR-E01-2001`, `SR-E01-2002`, `SR-E01-2003`), avoiding number collisions.
+  - Saves the current sequence count in Hive (`sr_seq_$prefix`).
+- **Full Reference Number Generator (`generateNextFullRefNumber`)**:
+  - Assembles the complete standardized corporate reference string: `SR-{prefix}-{sequence}`.
+- **Local Hive Storage Queue (`pending_service_reports_json`)**:
+  - Persists un-synced reports with metadata, JSON payload, and `syncStatus = 'pending'`.
+- **In-Memory Cache Layer (`_cachedServiceReports`)**:
+  - Caches decoded reports in memory for lightning-fast scrolling and instant search in `EmployeeReportsListScreen`.
+- **Cloud Reconciliation Engine (`mergeCloudServiceReports`)**:
+  - Merges freshly fetched cloud records from Supabase into local Hive storage while safeguarding pending offline edits.
+- **Offline Work Site Photo Submissions**:
+  - Technicians can capture and save site work photo bundles locally (`saveWorkPhotoSubmissionLocally`) with titles, GPS locations, remarks, and photo byte arrays.
+  - Background queue monitors pending photo submissions (`getPendingWorkPhotoSubmissions`) and marks them synced upon cloud completion.
 
 ---
 
@@ -96,8 +110,9 @@ CREATE TABLE IF NOT EXISTS public.service_reports (
 
 | File Path | Description |
 | :--- | :--- |
-| [`lib/features/employee/presentation/employee_report_generator_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/employee/presentation/employee_report_generator_screen.dart) | Interactive multi-section form for creating and editing field service reports with AI dictation. |
-| [`lib/features/employee/presentation/employee_reports_list_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/employee/presentation/employee_reports_list_screen.dart) | History directory listing past service reports with search, filtering, and reprint capabilities. |
-| [`lib/core/services/service_report_pdf_service.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/services/service_report_pdf_service.dart) | Engine rendering multi-section enterprise service report PDF documents with embedded e-signatures. |
-| [`lib/core/widgets/e_signature_pad.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/widgets/e_signature_pad.dart) | Digital canvas widget capturing touch-drawn customer and technician signatures. |
-| [`supabase_service_reports_schema.sql`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/supabase_service_reports_schema.sql) | PostgreSQL schema and RLS policies for remote `service_reports` table. |
+| [`lib/features/employee/presentation/employee_report_generator_screen.dart`](../lib/features/employee/presentation/employee_report_generator_screen.dart) | Interactive multi-section form for creating and editing field service reports with AI dictation. |
+| [`lib/features/employee/presentation/employee_reports_list_screen.dart`](../lib/features/employee/presentation/employee_reports_list_screen.dart) | History directory listing past service reports with search, filtering, and reprint capabilities. |
+| [`lib/database/local_database_service.dart`](../lib/database/local_database_service.dart) | Offline service report queue, prefix sequencing (`SR-E01-2001`), cloud merge, and offline work photo submission storage. |
+| [`lib/core/services/service_report_pdf_service.dart`](../lib/core/services/service_report_pdf_service.dart) | Engine rendering multi-section enterprise service report PDF documents with embedded e-signatures. |
+| [`lib/core/widgets/e_signature_pad.dart`](../lib/core/widgets/e_signature_pad.dart) | Digital canvas widget capturing touch-drawn customer and technician signatures. |
+| [`lib/core/utils/photo_attachment_helper.dart`](../lib/core/utils/photo_attachment_helper.dart) | Work photo attachment helper managing compression, local caching, and submission payloads. |

@@ -20,6 +20,9 @@ The **Fusion Attendance & Field Workforce Tracking Application** is a production
 | **Map Rendering** | OpenStreetMap / Flutter Map (`flutter_map`) & Leaflet.js | Interactive live tracking map with geofence radius visualizations (Flutter & Web Admin) |
 | **Image Compression** | `image` (Dart native) | Downscales live camera frames to 480px @ 65% JPEG (99% payload reduction) |
 | **Timesheet & Salary Engine**| Internal (`TimesheetCalculator`, `SalaryCycleHelper`) | 25th-to-24th corporate salary cycles, daily work duration, 8.0h regular caps, and overtime |
+| **Overnight Shift Engine** | Internal (`LocalDatabaseService`) | 24-hour shift continuity across midnight (00:00), 4h cooldown rest window, & 24h auto-resolution |
+| **Service Report Engine** | Internal (`LocalDatabaseService`, `ServiceReportPdfService`) | Sequential prefix auto-increment (`SR-E01-2001`), offline queue, cloud merge, and PDF generator |
+| **Work Photo Management** | Internal (`LocalDatabaseService`, `PhotoAttachmentHelper`) | Offline work site photo submissions, fast in-memory caching, compression, and batch sync |
 | **Digital Signatures** | Internal (`ESignaturePad`) | Touch-drawn vector e-signatures for customers & technicians |
 | **Exporting** | `csv`, `excel`, `pdf`, `printing` | Multi-format reporting, timesheet PDF, & branded service report PDF rendering engine |
 | **Standalone Web Admin**| HTML5, CSS3, JavaScript (ES6+), Supabase JS SDK, Leaflet.js | Lightweight, high-performance web portal for administrative management (`web_admin/`) |
@@ -45,18 +48,19 @@ The **Fusion Attendance & Field Workforce Tracking Application** is a production
                        │             Data Layer                    │
                        │ (LocalDatabaseService, SupabaseService,   │
                        │   SyncEngine, CameraService, DeviceBinding│
-                       │   AiReportService, SalaryCycleHelper)     │
+                       │   AiReportService, SalaryCycleHelper,     │
+                       │   PhotoAttachmentHelper)                  │
                        └───────────────────────────────────────────┘
 ```
 
 ### Key Modules & Directories
-- `lib/core/`: Application constants (`app_colors.dart`, `app_enums.dart`, `app_theme.dart`), reusable UI widgets (`app_button.dart`, `custom_text_field.dart`, `status_badge.dart`, `offline_banner.dart`, `ai_voice_report_bottom_sheet.dart`, `e_signature_pad.dart`), core utilities (`geofence_calculator.dart`, `timesheet_calculator.dart`, `salary_cycle_helper.dart`), and services (`location_service.dart`, `camera_service.dart`, `supabase_service.dart`, `pdf_export_service.dart`, `ai_report_service.dart`, `service_report_pdf_service.dart`).
-- `lib/database/`: Hive local database engine (`local_database_service.dart`) managing offline boxes: `organization`, `currentUser`, `employees`, `offices`, `attendanceRecords`, `pendingSyncRecords`, `serviceReportsBox`, and `usersBox`.
+- `lib/core/`: Application constants (`app_colors.dart`, `app_enums.dart`, `app_theme.dart`), reusable UI widgets (`app_button.dart`, `custom_text_field.dart`, `status_badge.dart`, `offline_banner.dart`, `ai_voice_report_bottom_sheet.dart`, `e_signature_pad.dart`), core utilities (`geofence_calculator.dart`, `timesheet_calculator.dart`, `salary_cycle_helper.dart`, `employee_directory_helper.dart`, `photo_attachment_helper.dart`), and services (`location_service.dart`, `camera_service.dart`, `supabase_service.dart`, `pdf_export_service.dart`, `ai_report_service.dart`, `service_report_pdf_service.dart`).
+- `lib/database/`: Hive local database engine (`local_database_service.dart`) managing offline boxes: `organization`, `currentUser`, `employees`, `offices`, `attendanceRecords`, `pendingSyncRecords`, `pending_service_reports_json`, `work_photo_submissions_json`, and `usersBox`. Features non-blocking startup initialization (`unawaited`), 24h active shift detection across midnight, 4h cooldown rest window, and sequential reference generation (`SR-E01-2001`).
 - `lib/features/`: Feature-sliced business logic:
   - `auth/`: Login, dual-layer authentication cubit, initial password change, and session handling.
   - `setup/`: Organization onboarding, initial geofence configuration, Super Admin provisioning.
   - `admin/`: User management (3-tier RBAC), office station setup, work site management, ownership transfer, live GPS tracking map, executive dashboard.
-  - `employee/`: Employee daily workflow dashboard, dynamic timeline, selfie capture, service report generator (`employee_report_generator_screen.dart`), and past service reports directory.
+  - `employee/`: Employee daily workflow dashboard, dynamic timeline, selfie capture, service report generator (`employee_report_generator_screen.dart`), past service reports directory, and work photo submissions.
   - `attendance/`: 4-step workflow Cubit, multi-site sequential stepper, camera modal, site selection dialog, Haversine geofence validation, emergency duty check-in/out.
   - `timesheet/`: Employee timesheet portal, salary cycle-aware work hour calculations, regular/overtime breakdown, PDF export.
   - `security/`: Hardware device binding service (`device_binding_service.dart`).
@@ -100,7 +104,7 @@ sequenceDiagram
 
 ## 4. Relational Database Schema & Cloud Infrastructure
 
-The Supabase PostgreSQL database schema ([backend/supabase_schema.sql](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/backend/supabase_schema.sql)) consists of **13 relational tables**:
+The Supabase PostgreSQL database schema (`backend/supabase_schema.sql`) consists of **14 relational tables**:
 
 1. `organizations`: Root enterprise entity profile.
 2. `roles`: Standard system roles (`SUPER_ADMIN`, `ADMIN`, `EMPLOYEE`).

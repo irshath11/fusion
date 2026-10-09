@@ -61,6 +61,11 @@ The **Reports & Multi-Format Data Export** feature (`ReportsAnalyticsScreen`) pr
    - Supports master attendance reports, individual employee attendance histories, and individual employee work timesheets.
    - Integrates with native printing/sharing dialogs (`Printing.sharePdf()`).
 
+### D. Enterprise Master Directory & Dynamic Identity Consolidation
+- **Dynamic In-Memory Consolidation (`EmployeeDirectoryHelper`)**: Attendance records in PostgreSQL and Hive persist authentic short names (`'Saleem'`, `'Shabi'`) to ensure 100% backward compatibility for deployed field APKs filtering records locally.
+- **Unified Identity in Reports & Exports**: The analytics engine and `PdfExportService` dynamically query `EmployeeDirectoryHelper` to map short names to canonical full enterprise identities (`Saleem Allapitchai Allapitchai`) on-the-fly.
+- **Master Search & Multi-Alias Matching**: The directory search bar in `ReportsAnalyticsScreen` matches against employee codes (`EMP-001`), short names (`Saleem`), and full names (`Saleem Allapitchai Allapitchai`), presenting unified cards without splitting attendance metrics across duplicate profiles.
+
 ---
 
 ## 2. Technical Implementation & Source Files
@@ -69,9 +74,11 @@ The **Reports & Multi-Format Data Export** feature (`ReportsAnalyticsScreen`) pr
 
 | File Path | Description |
 | :--- | :--- |
-| [`lib/features/admin/presentation/reports_analytics_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/reports_analytics_screen.dart) | Comprehensive 3-tab analytics screen UI (Directory 3-Level drilldown, Cumulative Summary, Site/Client Man-Hours, Cloud Log Sync). |
-| [`lib/core/services/pdf_export_service.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/services/pdf_export_service.dart) | Service constructing multi-page PDF documents for attendance logs and timesheets using `pdf` & `printing`. |
-| [`lib/core/services/excel_csv_export_service.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/services/excel_csv_export_service.dart) | Service generating native Excel (.xlsx) workbooks and formatted CSV files. |
-| [`lib/core/services/supabase_service.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/services/supabase_service.dart) | Supabase client service handling remote attendance record fetching (`fetchAttendanceRecordsFromSupabase()`). |
-| [`lib/database/local_database_service.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/database/local_database_service.dart) | Hive local database service managing local attendance storage and record merging. |
+| [`lib/features/admin/presentation/reports_analytics_screen.dart`](../lib/features/admin/presentation/reports_analytics_screen.dart) | Comprehensive 3-tab analytics screen UI (Directory 3-Level drilldown, Cumulative Summary, Site/Client Man-Hours, Cloud Log Sync). |
+| [`lib/core/utils/employee_directory_helper.dart`](../lib/core/utils/employee_directory_helper.dart) | Enterprise Master Directory utility providing in-memory canonical name resolution and alias mapping. |
+| [`lib/core/services/pdf_export_service.dart`](../lib/core/services/pdf_export_service.dart) | Service constructing multi-page PDF documents for attendance logs and timesheets using `pdf` & `printing`. |
+| [`lib/core/services/excel_csv_export_service.dart`](../lib/core/services/excel_csv_export_service.dart) | Service generating native Excel (.xlsx) workbooks and formatted CSV files. |
+| [`lib/core/services/supabase_service.dart`](../lib/core/services/supabase_service.dart) | Supabase client service handling remote attendance record fetching (`fetchAttendanceRecordsFromSupabase()`). |
+| [`lib/database/local_database_service.dart`](../lib/database/local_database_service.dart) | Hive local database service managing local attendance storage and record merging. |
+
 

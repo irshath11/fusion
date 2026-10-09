@@ -98,6 +98,6 @@ Analyze the user's raw voice/text notes about a field service job and extract JS
 
 | File Path | Description |
 | :--- | :--- |
-| [`lib/core/services/ai_report_service.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/services/ai_report_service.dart) | Gemini AI integration service, speech cleansing, JSON extraction, and heuristic offline parser. |
-| [`lib/core/widgets/ai_voice_report_bottom_sheet.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/widgets/ai_voice_report_bottom_sheet.dart) | Interactive AI Voice Report assistant UI, speech-to-text listener, TTS audio output, and form auto-filler. |
-| [`test/ai_report_service_test.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/test/ai_report_service_test.dart) | Unit test suite verifying Gemini payload formatting, speech cleansing, and heuristic extraction fallbacks. |
+| [`lib/core/services/ai_report_service.dart`](../lib/core/services/ai_report_service.dart) | Gemini AI integration service, speech cleansing, JSON extraction, and heuristic offline parser. |
+| [`lib/core/widgets/ai_voice_report_bottom_sheet.dart`](../lib/core/widgets/ai_voice_report_bottom_sheet.dart) | Interactive AI Voice Report assistant UI, speech-to-text listener, TTS audio output, and form auto-filler. |
+| [`test/ai_report_service_test.dart`](../test/ai_report_service_test.dart) | Unit test suite verifying Gemini payload formatting, speech cleansing, and heuristic extraction fallbacks. |

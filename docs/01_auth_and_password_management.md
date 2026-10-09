@@ -112,9 +112,9 @@ Navigates to Dashboard                  │     AuthError     │
 
 | File Path | Description |
 | :--- | :--- |
-| [`lib/features/auth/domain/user_entity.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/auth/domain/user_entity.dart) | User model, roles, and JSON serialization. |
-| [`lib/features/auth/presentation/auth_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/auth/presentation/auth_cubit.dart) | BLoC controller managing dual-layer login, fallback authentication, session restoration, and password changes. |
-| [`lib/core/widgets/custom_text_field.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/widgets/custom_text_field.dart) | Stateful text input widget with built-in password show/hide visibility toggle buttons. |
-| [`lib/features/auth/presentation/login_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/auth/presentation/login_screen.dart) | Clean, responsive login user interface with email/password validation & password visibility toggles. |
-| [`lib/features/admin/presentation/ownership_transfer_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/ownership_transfer_cubit.dart) | Cubit managing Super Admin re-authentication and atomic RPC organization ownership transfer. |
-| [`lib/features/admin/presentation/ownership_transfer_dialog.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/ownership_transfer_dialog.dart) | Modal dialog for selecting target admin and re-authenticating password with visibility toggles. |
+| [`lib/features/auth/domain/user_entity.dart`](../lib/features/auth/domain/user_entity.dart) | User model, roles, and JSON serialization. |
+| [`lib/features/auth/presentation/auth_cubit.dart`](../lib/features/auth/presentation/auth_cubit.dart) | BLoC controller managing dual-layer login, fallback authentication, session restoration, and password changes. |
+| [`lib/core/widgets/custom_text_field.dart`](../lib/core/widgets/custom_text_field.dart) | Stateful text input widget with built-in password show/hide visibility toggle buttons. |
+| [`lib/features/auth/presentation/login_screen.dart`](../lib/features/auth/presentation/login_screen.dart) | Clean, responsive login user interface with email/password validation & password visibility toggles. |
+| [`lib/features/admin/presentation/ownership_transfer_cubit.dart`](../lib/features/admin/presentation/ownership_transfer_cubit.dart) | Cubit managing Super Admin re-authentication and atomic RPC organization ownership transfer. |
+| [`lib/features/admin/presentation/ownership_transfer_dialog.dart`](../lib/features/admin/presentation/ownership_transfer_dialog.dart) | Modal dialog for selecting target admin and re-authenticating password with visibility toggles. |

@@ -68,8 +68,8 @@ class OfficeEntity {
 
 | File Path | Description |
 | :--- | :--- |
-| [`lib/features/admin/domain/office_entity.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/domain/office_entity.dart) | Office station domain model. |
-| [`lib/features/admin/presentation/admin_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/admin_cubit.dart) | Cubit managing office station and work site CRUD operations in local Hive storage & Supabase cloud tables. |
-| [`lib/features/admin/presentation/office_management_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/office_management_screen.dart) | Admin UI for creating/editing office stations with GPS location picker and geofence radius adjustment. |
-| [`lib/features/admin/presentation/work_site_management_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/work_site_management_screen.dart) | Admin UI for creating/editing client work sites and project locations. |
-| [`lib/core/services/location_service.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/services/location_service.dart) | Service handling GPS permission checks, position retrieval, and Haversine distance calculations. |
+| [`lib/features/admin/domain/office_entity.dart`](../lib/features/admin/domain/office_entity.dart) | Office station domain model. |
+| [`lib/features/admin/presentation/admin_cubit.dart`](../lib/features/admin/presentation/admin_cubit.dart) | Cubit managing office station and work site CRUD operations in local Hive storage & Supabase cloud tables. |
+| [`lib/features/admin/presentation/office_management_screen.dart`](../lib/features/admin/presentation/office_management_screen.dart) | Admin UI for creating/editing office stations with GPS location picker and geofence radius adjustment. |
+| [`lib/features/admin/presentation/work_site_management_screen.dart`](../lib/features/admin/presentation/work_site_management_screen.dart) | Admin UI for creating/editing client work sites and project locations. |
+| [`lib/core/services/location_service.dart`](../lib/core/services/location_service.dart) | Service handling GPS permission checks, position retrieval, and Haversine distance calculations. |

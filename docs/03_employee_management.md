@@ -30,9 +30,14 @@ The **Employee Management** feature empowers Super Admins and Administrators to 
    - **Password Reset**: Admin can trigger password resets for staff members.
    - **Audit Activity Logging**: Records `EMPLOYEE_CREATED`, `EMPLOYEE_UPDATED`, `EMPLOYEE_DISABLED`, `EMPLOYEE_ACTIVATED`, and `EMPLOYEE_DELETED` in `activity_logs`.
 
-5. **Attendance Records Reassignment Engine**:
+3. **Attendance Records Reassignment Engine**:
    - Allows administrators to reassign historical attendance records from one employee ID to another (e.g., when merging accounts, repairing credential mismatches, or transitioning employee profiles).
    - Atomically updates record ownership across local Hive cache (`attendanceBox`) and cloud Supabase tables (`attendance_records`), preserving original audit timestamps and camera verification photos.
+
+6. **Enterprise Master Directory & Backward-Compatible Identity Resolution (`EmployeeDirectoryHelper`)**:
+   - **Master Directory Registry (`masterDirectory`)**: Pre-defines canonical enterprise profiles containing official 3/4-part full names (e.g. *Saleem Allapitchai Allapitchai*, *Shabi Bismillah Bismillah*), official company codes (e.g. `1059`, `N-1004`), departments (`Neo`, `Fusion`), designations, high-resolution badge photos, and recognized aliases (`['saleem']`, `['shabi']`, etc.).
+   - **Backward Compatibility with Deployed Field APKs**: Older mobile builds installed on field technician phones query attendance logs by their local account profile name (e.g., `'Saleem'`, `'Shabi'`). Overwriting database record strings with multi-word full names breaks their timeline. The system intentionally retains authentic mobile account profile names in `attendance_records` and `users`.
+   - **Dynamic Non-Destructive Administrative Consolidation**: The Admin Web Portal, Reports Suite, and PDF generation engines utilize `EmployeeDirectoryHelper.matchesEmployeeIdentity` and `resolveOfficialRecord` to dynamically match short names to canonical full profiles in memory. This delivers a single consolidated row per employee on administrative dashboards and exports official corporate PDFs without mutating raw database strings.
 
 ---
 
@@ -75,7 +80,8 @@ class EmployeeEntity {
 
 | File Path | Description |
 | :--- | :--- |
-| [`lib/features/admin/domain/employee_entity.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/domain/employee_entity.dart) | Domain entity for staff members. |
-| [`lib/features/admin/presentation/user_management_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/user_management_cubit.dart) | Cubit managing multi-role user creation via isolated Firebase secondary auth, Supabase RPC/insertions, and Hive box updates. |
-| [`lib/features/admin/presentation/employee_management_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/employee_management_screen.dart) | Comprehensive UI list view, search bar, active/inactive badges, and bottom-sheet form for adding/editing employees. |
-| [`lib/features/admin/presentation/user_form_dialog.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/user_form_dialog.dart) | User creation and editing modal form with role selection dropdown (`SUPER_ADMIN`, `ADMIN`, `EMPLOYEE`) and password visibility toggles. |
+| [`lib/features/admin/domain/employee_entity.dart`](../lib/features/admin/domain/employee_entity.dart) | Domain entity for staff members. |
+| [`lib/core/utils/employee_directory_helper.dart`](../lib/core/utils/employee_directory_helper.dart) | Master enterprise directory, alias resolution (`matchesEmployeeIdentity`), and photo asset mapping. |
+| [`lib/features/admin/presentation/user_management_cubit.dart`](../lib/features/admin/presentation/user_management_cubit.dart) | Cubit managing multi-role user creation via isolated Firebase secondary auth, Supabase RPC/insertions, and Hive box updates. |
+| [`lib/features/admin/presentation/employee_management_screen.dart`](../lib/features/admin/presentation/employee_management_screen.dart) | Comprehensive UI list view, search bar, active/inactive badges, and bottom-sheet form for adding/editing employees. |
+| [`lib/features/admin/presentation/user_form_dialog.dart`](../lib/features/admin/presentation/user_form_dialog.dart) | User creation and editing modal form with role selection dropdown (`SUPER_ADMIN`, `ADMIN`, `EMPLOYEE`) and password visibility toggles. |

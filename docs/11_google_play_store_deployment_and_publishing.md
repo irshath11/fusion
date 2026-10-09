@@ -10,8 +10,8 @@ This module documents the production release pipeline, Android App Bundle (`.aab
 The application uses an enterprise upload keystore (`upload-keystore.jks`) and environment properties (`key.properties`) for cryptographic release signing.
 
 ### Cryptographic Configuration Files
-- **Keystore File**: [`android/app/upload-keystore.jks`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/android/app/upload-keystore.jks)
-- **Properties File**: [`android/key.properties`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/android/key.properties)
+- **Keystore File**: [`android/app/upload-keystore.jks`](../android/app/upload-keystore.jks)
+- **Properties File**: [`android/key.properties`](../android/key.properties)
 
 ### Keystore Configuration Format (`key.properties`)
 ```properties
@@ -88,7 +88,7 @@ flutter build appbundle --release
 | **App Access Credentials** | `Yes` (Restricted) | Demo Admin & Employee credentials provided for Google Reviewers to inspect dashboard features. |
 | **Content Ratings (IARC)** | `PEGI 3` / `Everyone 3+` | Questionnaire answers: `No` to downloaded rating content, user content sharing, location sharing with strangers, or restricted products. |
 | **Data Safety** | `Yes` (Data Collected & Encrypted) | Discloses **Approximate Location**, **Precise Location**, **Name**, and **Email Address** collected for app functionality & account management. Encrypted in transit via TLS/HTTPS. |
-| **Account Deletion Link** | [`PRIVACY_POLICY.md`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/PRIVACY_POLICY.md) | Public URL (`https://github.com/irshath11/fusion/blob/main/PRIVACY_POLICY.md`) detailing account and data deletion procedures. |
+| **Account Deletion Link** | [`PRIVACY_POLICY.md`](../PRIVACY_POLICY.md) | Public URL (`https://github.com/irshath11/fusion/blob/main/PRIVACY_POLICY.md`) detailing account and data deletion procedures. |
 | **AI Asset Declaration** | `Don't label assets` | Standard UI icons, vector artwork, and screenshots do not require synthetic AI content badges. |
 
 ---
@@ -97,8 +97,8 @@ flutter build appbundle --release
 
 | Asset Type | Specifications | File Location | Description |
 | :--- | :--- | :--- | :--- |
-| **App Icon** | 512 × 512 px PNG/JPEG | [`app_icon_512.jpg`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/app_icon_512.jpg) | High-res vector launcher icon with location pin, clock face, and emerald checkmark. |
-| **Feature Graphic** | 1,024 × 500 px PNG/JPEG (16:9) | [`feature_graphic.jpg`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/feature_graphic.jpg) | Figma-style minimalist SaaS promotional banner showing app branding & mobile screen mockups. |
+| **App Icon** | 512 × 512 px PNG/JPEG | [`app_icon_512.jpg`](../app_icon_512.jpg) | High-res vector launcher icon with location pin, clock face, and emerald checkmark. |
+| **Feature Graphic** | 1,024 × 500 px PNG/JPEG (16:9) | [`feature_graphic.jpg`](../feature_graphic.jpg) | Figma-style minimalist SaaS promotional banner showing app branding & mobile screen mockups. |
 | **Short Description** | Max 80 Characters | N/A | *"Smart employee attendance tracking with geofence verification and live management."* |
 | **Full Description** | Max 4,000 Characters | See `PRIVACY_POLICY.md` & `README.md` | Detailed breakdown of geofenced attendance, selfie photo verification, offline sync, timesheets, & RBAC. |
 

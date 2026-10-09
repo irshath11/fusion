@@ -81,7 +81,7 @@ $$;
 
 | File Path | Description |
 | :--- | :--- |
-| [`lib/features/security/device_binding_service.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/security/device_binding_service.dart) | Device fingerprinting service extracting hardware IDs across Android, iOS, Windows, and Web. |
-| [`lib/features/admin/presentation/ownership_transfer_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/ownership_transfer_cubit.dart) | Cubit managing Super Admin password re-authentication and atomic RPC execution. |
-| [`lib/features/admin/presentation/ownership_transfer_dialog.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/ownership_transfer_dialog.dart) | Modal dialog for selecting target administrator and entering re-authentication credentials with show/hide password toggles. |
-| [`backend/supabase_schema.sql`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/backend/supabase_schema.sql) | SQL schema defining `devices` table and `transfer_organization_ownership` PL/pgSQL function. |
+| [`lib/features/security/device_binding_service.dart`](../lib/features/security/device_binding_service.dart) | Device fingerprinting service extracting hardware IDs across Android, iOS, Windows, and Web. |
+| [`lib/features/admin/presentation/ownership_transfer_cubit.dart`](../lib/features/admin/presentation/ownership_transfer_cubit.dart) | Cubit managing Super Admin password re-authentication and atomic RPC execution. |
+| [`lib/features/admin/presentation/ownership_transfer_dialog.dart`](../lib/features/admin/presentation/ownership_transfer_dialog.dart) | Modal dialog for selecting target administrator and entering re-authentication credentials with show/hide password toggles. |
+| [`backend/supabase_schema.sql`](../backend/supabase_schema.sql) | SQL schema defining `devices` table and `transfer_organization_ownership` PL/pgSQL function. |

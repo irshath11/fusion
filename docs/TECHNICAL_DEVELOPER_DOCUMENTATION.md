@@ -133,12 +133,12 @@ The **Fusion Field Workforce Tracking & Timesheet Management Platform** is an en
 
 ### State Management Approach (BLoC / Cubit)
 The architecture strictly employs `flutter_bloc` using `Cubit` controllers to enforce unidirectional data flow:
-- **`AuthCubit`** ([`auth_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/auth/presentation/auth_cubit.dart)): Manages login states, dual-layer fallback checks, and session restoration.
-- **`AttendanceCubit`** ([`attendance_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/presentation/attendance_cubit.dart)): Controls the 4-step workflow stepper, geofence verification, photo capture, and local record persistence.
-- **`AdminCubit`** ([`admin_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/admin_cubit.dart)): Handles executive stats aggregation, office/site CRUD, and live tracking map updates.
-- **`UserManagementCubit`** ([`user_management_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/user_management_cubit.dart)): Manages 3-tier user accounts, secondary Firebase auth instances, and status toggles.
-- **`OwnershipTransferCubit`** ([`ownership_transfer_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/ownership_transfer_cubit.dart)): Executes Super Admin re-authentication and atomic RPC ownership transfer.
-- **`TimesheetCubit`** ([`timesheet_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/timesheet/presentation/timesheet_cubit.dart)): Controls daily shift aggregation, regular/overtime hours calculation, and PDF downloading.
+- **`AuthCubit`** ([`auth_cubit.dart`](../lib/features/auth/presentation/auth_cubit.dart)): Manages login states, dual-layer fallback checks, and session restoration.
+- **`AttendanceCubit`** ([`attendance_cubit.dart`](../lib/features/attendance/presentation/attendance_cubit.dart)): Controls the 4-step workflow stepper, geofence verification, photo capture, and local record persistence.
+- **`AdminCubit`** ([`admin_cubit.dart`](../lib/features/admin/presentation/admin_cubit.dart)): Handles executive stats aggregation, office/site CRUD, and live tracking map updates.
+- **`UserManagementCubit`** ([`user_management_cubit.dart`](../lib/features/admin/presentation/user_management_cubit.dart)): Manages 3-tier user accounts, secondary Firebase auth instances, and status toggles.
+- **`OwnershipTransferCubit`** ([`ownership_transfer_cubit.dart`](../lib/features/admin/presentation/ownership_transfer_cubit.dart)): Executes Super Admin re-authentication and atomic RPC ownership transfer.
+- **`TimesheetCubit`** ([`timesheet_cubit.dart`](../lib/features/timesheet/presentation/timesheet_cubit.dart)): Controls daily shift aggregation, regular/overtime hours calculation, and PDF downloading.
 
 ---
 
@@ -253,7 +253,7 @@ enum UserRole { superAdmin, admin, employee }
 ## 6. Offline-First Architecture
 
 ### Hive Local Storage Design
-The application initializes 8 isolated Hive key-value boxes in `LocalDatabaseService`:
+The application initializes isolated Hive key-value boxes in `LocalDatabaseService`:
 1. `organizationBox`: Local copy of root organization profile.
 2. `currentUserBox`: Active authenticated user entity.
 3. `employeesBox`: Local directory of all organization employees.
@@ -262,6 +262,19 @@ The application initializes 8 isolated Hive key-value boxes in `LocalDatabaseSer
 6. `workSitesBox`: Client project locations and geofence radii.
 7. `attendanceRecordsBox`: Complete historical attendance logs.
 8. `pendingSyncBox`: Queue of un-synced offline records awaiting cloud transmission.
+9. `pending_service_reports_json`: Local queue of generated field service reports with sync tracking.
+10. `work_photo_submissions_json`: Local storage of offline technician work site photo submissions with in-memory cache.
+11. `generated_reports_history_json`: Local history of generated attendance reports and PDF downloads.
+
+### Non-Blocking Startup Initialization
+On application launch, `LocalDatabaseService.init()` initializes local boxes and checks whether setup has already completed:
+- If setup is already verified locally (`_isSetupCompleted == true`), the remote organization verification query is dispatched asynchronously via `unawaited(checkSetupStatusFromSupabase())`.
+- This ensures zero UI render blocking on app launch and avoids splash-screen stalls caused by poor network connectivity.
+
+### Offline Service Reports & Sequential Prefix Sequencing
+- **Prefix Sequencing (`currentEmployeePrefix`)**: Resolves technician 2-digit prefix code (e.g. `E01`, `E02`).
+- **Strict Sequential Auto-Incrementing (`getNextLocalServiceReportSeq`)**: Commences at base **2001** and scans existing local reports under the prefix to auto-increment sequentially (`+1`) without number gaps or collisions (e.g. `SR-E01-2001`, `SR-E01-2002`).
+- **Cloud Reconciliation (`mergeCloudServiceReports`)**: Synchronizes cloud records to local storage while preserving un-synced local edits.
 
 ### Synchronization Scenarios
 
@@ -292,6 +305,17 @@ The application initializes 8 isolated Hive key-value boxes in `LocalDatabaseSer
 3. **Step 3: `3. Site Check-Out (Leaving Site)` (`SITE_CHECK_OUT`)**: Employee finishes site inspection and checks out from work site.
 4. **Step 4: `4. Office Check-Out (Reach Office)` (`OFFICE_CHECK_OUT`)**: Employee returns to office station and completes shift.
 5. **Final State: `Shift Completed` (`COMPLETED`)**: Enforces state lock until next working day.
+
+### Midnight & Overnight Shift Continuity Engine
+In 24/7 field service environments, technician shifts frequently span across midnight (e.g. 2:00 PM or 8:00 PM start, ending at 2:00 AM or 4:00 AM the following calendar day). `LocalDatabaseService.getTodayAttendanceRecords` provides intelligent session continuity:
+1. **Active Shift Tracking**: Any unclosed session (`officeCheckIn` within the preceding 24 hours without a checkout) is treated as actively in progress regardless of calendar date change. All records from that check-in onwards are returned, keeping the mobile timeline and stepper continuous.
+2. **Overnight Shift Checkout & 4-Hour Cooldown**: When an overnight shift concludes today with `officeCheckOut`, the completed shift summary displays for a 4-hour window (allowing the technician to inspect their shift summary). After 4 hours, the system resets to fresh status for their subsequent workday shift.
+3. **24-Hour Auto-Resolution (`autoResolveExpiredCheckIns`)**: Any session exceeding 24 hours without an `officeCheckOut` is automatically closed at `checkInTime + 8 hours` regular duration, preventing orphaned shifts and accurately capping daily regular hours.
+
+### Enterprise Master Directory & Backward-Compatible Identity Architecture
+- **Master Directory (`EmployeeDirectoryHelper`)**: Maintains canonical corporate records with official 3/4-part full names (*Saleem Allapitchai Allapitchai*, *Shabi Bismillah Bismillah*), official codes, badge photos, departments, and aliases (`['saleem']`, `['shabi']`).
+- **Preservation of Mobile Profile Names**: Deployed field APKs filter attendance logs against the user's mobile profile name (`_currentUser.fullName`). Database records in `attendance_records` and `users` preserve these authentic profile names (e.g., `'Saleem'`, `'Shabi'`) to ensure older APKs never experience empty datewise logs or timelines.
+- **Dynamic Non-Destructive Consolidation**: The Admin Web Portal, Reports Analytics, and PDF services use `EmployeeDirectoryHelper.matchesEmployeeIdentity` in memory to display unified official full names without duplicate rows, completely decoupling presentation from raw database record names.
 
 ---
 
@@ -423,7 +447,7 @@ npx serve -s . -l 3000
 ### Google Play Store Release & Deployment Pipeline
 - **Signing Keystore**: Signed release compilation using `upload-keystore.jks` and `key.properties` loaded in `android/app/build.gradle.kts`.
 - **Android App Bundle (.aab)**: Produced via `flutter build appbundle --release` at `build/app/outputs/bundle/release/app-release.aab`.
-- **Google Play Compliance**: Pre-configured Data Safety declarations (Location, Name, Email collection), IARC Content Rating certificate (`PEGI 3` / `Everyone 3+`), App Access demo credentials, and public Account Deletion link ([`PRIVACY_POLICY.md`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/PRIVACY_POLICY.md)).
+- **Google Play Compliance**: Pre-configured Data Safety declarations (Location, Name, Email collection), IARC Content Rating certificate (`PEGI 3` / `Everyone 3+`), App Access demo credentials, and public Account Deletion link ([`PRIVACY_POLICY.md`](../PRIVACY_POLICY.md)).
 - **Store Listing Visual Assets**: Includes 512x512 vector launcher icon (`app_icon_512.jpg`) and 1024x500 Figma-style Feature Graphic banner (`feature_graphic.jpg`).
 
 ---
