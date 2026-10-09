@@ -972,12 +972,11 @@ class LocalDatabaseService {
 
       officialTargetMap[official.employeeId] = (targetId: targetId, targetName: targetName);
 
-      // Update realUser in _users if found
+      // Update realUser in _users if found (preserving authentic profile fullName)
       if (realUser != null) {
         final uIndex = _users.indexOf(realUser);
         if (uIndex >= 0) {
           _users[uIndex] = realUser.copyWith(
-            fullName: official.fullName,
             employeeCode: official.employeeId,
             designation: (realUser.designation != null && realUser.designation!.isNotEmpty && realUser.designation != 'Staff')
                 ? realUser.designation
