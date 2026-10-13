@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDFBF7"/>
+      <stop offset="50%" stop-color="#FAF7F2"/>
+      <stop offset="100%" stop-color="#F3ECE1"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E2C99D"/>
+      <stop offset="50%" stop-color="#C5A880"/>
+      <stop offset="100%" stop-color="#9E7E50"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bgGrad)"/>
+  
+  <!-- Outer Gold Ornamental Border -->
+  <rect x="40" y="40" width="1120" height="550" rx="16" fill="none" stroke="#C5A880" stroke-width="1.5" stroke-opacity="0.6"/>
+  <rect x="52" y="52" width="1096" height="526" rx="10" fill="none" stroke="#C5A880" stroke-width="0.8" stroke-dasharray="6 4" stroke-opacity="0.4"/>
+
+  <!-- Corner Islamic Star Motifs -->
+  <!-- Top Left -->
+  <polygon points="52,36 58,48 70,48 60,56 64,68 52,60 40,68 44,56 34,48 46,48" fill="#C5A880"/>
+  <!-- Top Right -->
+  <polygon points="1148,36 1154,48 1166,48 1156,56 1160,68 1148,60 1136,68 1140,56 1130,48 1142,48" fill="#C5A880"/>
+  <!-- Bottom Left -->
+  <polygon points="52,562 58,574 70,574 60,582 64,594 52,586 40,594 44,582 34,574 46,574" fill="#C5A880"/>
+  <!-- Bottom Right -->
+  <polygon points="1148,562 1154,574 1166,574 1156,582 1160,594 1148,586 1136,594 1140,582 1130,574 1142,574" fill="#C5A880"/>
+
+  <!-- Bismillah Calligraphy (Text representation) -->
+  <text x="600" y="145" text-anchor="middle" font-family="'Amiri', 'Traditional Arabic', serif" font-size="38" fill="#16382C" direction="rtl">بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</text>
+  <text x="600" y="185" text-anchor="middle" font-family="'DM Sans', sans-serif" font-size="14" letter-spacing="4" fill="#8E6D38" text-transform="uppercase">With the blessings of Allah</text>
+
+  <!-- Bride & Groom Typography -->
+  <text x="600" y="270" text-anchor="middle" font-family="'Cormorant Garamond', serif" font-size="54" font-weight="600" fill="#16382C" letter-spacing="1">S. Thaiyeba Tasleema, <tspan font-family="'DM Sans', sans-serif" font-size="24" fill="#B38E5A">B.E.</tspan></text>
+  <text x="600" y="325" text-anchor="middle" font-family="'Cormorant Garamond', serif" font-size="38" font-style="italic" fill="#C5A880">&amp;</text>
+  <text x="600" y="380" text-anchor="middle" font-family="'Cormorant Garamond', serif" font-size="54" font-weight="600" fill="#16382C" letter-spacing="1">S. Irshath Ahamed, <tspan font-family="'DM Sans', sans-serif" font-size="24" fill="#B38E5A">B.E.</tspan></text>
+  <text x="600" y="415" text-anchor="middle" font-family="'DM Sans', sans-serif" font-size="16" font-style="italic" fill="#4A534D" letter-spacing="1">Senior Software Engineer, Fusion Groups - UAE</text>
+
+  <!-- Divider -->
+  <line x1="450" y1="445" x2="750" y2="445" stroke="#C5A880" stroke-width="1.2"/>
+  <circle cx="600" cy="445" r="4" fill="#C5A880"/>
+
+  <!-- Nikah & Date -->
+  <text x="600" y="485" text-anchor="middle" font-family="'Cormorant Garamond', serif" font-size="28" font-weight="600" letter-spacing="6" fill="#16382C">NIKAH</text>
+  <text x="600" y="520" text-anchor="middle" font-family="'DM Sans', sans-serif" font-size="18" font-weight="500" fill="#8E6D38">Thursday, 24th December 2026 &bull; Hijri 1448 - Rajab 14 &bull; 11:30 AM onwards</text>
+  <text x="600" y="550" text-anchor="middle" font-family="'DM Sans', sans-serif" font-size="15" fill="#4A534D">Prasanna Mahal &bull; Karaikudi</text>
+</svg>

@@ -60,6 +60,12 @@ The **Attendance Workflow & Camera Verification** feature enforces a strict sequ
    - Displays an informational banner notifying users that break durations are automatically excluded from net billable work shift hours without breaking the shift sequence.
    - Supports optional detail notes (e.g., `Quick rest`, `Lunch break`) for administrative auditing.
 
+8. **Midnight & Overnight Shift Continuity Engine**:
+   - **Continuous Shift Session across Midnight (00:00)**: Field shifts that commence in the afternoon/evening (e.g. 2:00 PM or 8:00 PM) and cross midnight remain actively in progress in `getTodayAttendanceRecords`. The mobile stepper and timeline retain all prior steps (`Office Check-In`, `Site Check-In`, breaks) without resetting to an empty state at 00:00.
+   - **Active Shift Detection**: Any `officeCheckIn` occurring within the preceding 24 hours without a subsequent `officeCheckOut` is recognized as an active shift in progress.
+   - **Overnight Shift Checkout & 4-Hour Rest Cooldown Window**: When an overnight shift concludes in the early morning with `officeCheckOut`, the completed shift summary displays for a 4-hour cooldown period. After 4 hours have elapsed, the system automatically resets for the employee's next workday shift.
+   - **24-Hour Automatic Shift Resolution (`autoResolveExpiredCheckIns`)**: Any session left open for over 24 hours without a checkout is automatically closed at `checkInTime + 8 hours`, preventing endless open sessions while capping regular work hours accurately at 8.0 hours.
+
 ---
 
 ## 2. Technical Implementation & Data Structures
@@ -170,10 +176,11 @@ class AttendanceRecord {
 
 | File Path | Description |
 | :--- | :--- |
-| [`lib/features/attendance/domain/attendance_record.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/domain/attendance_record.dart) | Attendance record data model & JSON mapping. |
-| [`lib/features/attendance/presentation/attendance_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/presentation/attendance_cubit.dart) | Cubit executing workflow step validation, geofence checks, record creation, and sync queuing. |
-| [`lib/features/employee/presentation/employee_dashboard_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/employee/presentation/employee_dashboard_screen.dart) | Employee dashboard UI with workflow timeline, capture button, and time badge displays. |
-| [`lib/features/attendance/presentation/site_name_dialog.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/presentation/site_name_dialog.dart) | Modal dialog for site selection dropdown (`RELAAM (AMC)`, `RELAAM (WO)`, `CARRIER`, `MOPA`, `MPM`, `ELV`, `OTHERS (AMC)`, `OTHERS (WO)`). |
-| [`lib/features/attendance/presentation/break_type_dialog.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/presentation/break_type_dialog.dart) | Modal dialog for starting duty breaks and logging optional break details. |
-| [`lib/features/attendance/presentation/camera_capture_modal.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/presentation/camera_capture_modal.dart) | Camera modal dialog handling camera preview, capture, retake, and confirmation. |
-| [`lib/core/services/camera_service.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/services/camera_service.dart) | Image downscaling and JPEG quality compression service. |
+| [`lib/features/attendance/domain/attendance_record.dart`](../lib/features/attendance/domain/attendance_record.dart) | Attendance record data model & JSON mapping. |
+| [`lib/database/local_database_service.dart`](../lib/database/local_database_service.dart) | Shift session continuity (`getTodayAttendanceRecords`), workflow step computation, and 24h auto-resolution (`autoResolveExpiredCheckIns`). |
+| [`lib/features/attendance/presentation/attendance_cubit.dart`](../lib/features/attendance/presentation/attendance_cubit.dart) | Cubit executing workflow step validation, geofence checks, record creation, and sync queuing. |
+| [`lib/features/employee/presentation/employee_dashboard_screen.dart`](../lib/features/employee/presentation/employee_dashboard_screen.dart) | Employee dashboard UI with continuous workflow timeline, capture button, and time badge displays. |
+| [`lib/features/attendance/presentation/site_name_dialog.dart`](../lib/features/attendance/presentation/site_name_dialog.dart) | Modal dialog for site selection dropdown (`RELAAM (AMC)`, `RELAAM (WO)`, `CARRIER`, `MOPA`, `MPM`, `ELV`, `OTHERS (AMC)`, `OTHERS (WO)`). |
+| [`lib/features/attendance/presentation/break_type_dialog.dart`](../lib/features/attendance/presentation/break_type_dialog.dart) | Modal dialog for starting duty breaks and logging optional break details. |
+| [`lib/features/attendance/presentation/camera_capture_modal.dart`](../lib/features/attendance/presentation/camera_capture_modal.dart) | Camera modal dialog handling camera preview, capture, retake, and confirmation. |
+| [`lib/core/services/camera_service.dart`](../lib/core/services/camera_service.dart) | Image downscaling and JPEG quality compression service. |

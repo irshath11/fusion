@@ -31,6 +31,21 @@ The **Offline Storage & Background Sync Engine** provides local persistence, off
    - Updates local record `syncStatus` from `SyncStatus.pending` to `SyncStatus.synced`.
    - Clears uploaded items from the pending sync queue upon verified cloud confirmation.
 
+4. **Offline Service Reports Storage & Sequential Prefix Sequencing**:
+   - **Local Queue (`pending_service_reports_json`)**: Manages offline client service sheets directly in Hive storage, allowing full report generation, editing, and previewing without internet.
+   - **Sequential Prefix Tracking (`currentEmployeePrefix`, `sr_seq_$prefix`)**: Generates prefix codes (e.g. `E01`, `E02`) and tracks sequential reference numbers starting at `2001` (`SR-E01-2001`, `SR-E01-2002`).
+   - **In-Memory Caching (`_cachedServiceReports`)**: In-memory caching layer guarantees instantaneous list rendering and zero UI latency during scroll.
+   - **Cloud Reconciliation (`mergeCloudServiceReports`)**: Intelligently reconciles local pending reports with remote Supabase records upon reconnection without overwriting offline edits.
+
+5. **Offline Work Site Photo Submissions Management**:
+   - **Local Storage (`work_photo_submissions_json`)**: Persists technician field work photo batches locally with metadata (work title, location, employee, remarks, base64/URL photos).
+   - **In-Memory Cache (`_cachedWorkPhotoSubmissions`)**: Provides sub-millisecond retrieval performance for UI galleries.
+   - **Batch Sync Tracking**: Monitors pending uploads via `getPendingWorkPhotoSubmissions()` and marks items synced via `markWorkPhotoSubmissionSynced()`.
+
+6. **Non-Blocking Background Startup Initialization**:
+   - On application launch, if organization setup has previously succeeded locally, the cloud organization status check is dispatched asynchronously via `unawaited(checkSetupStatusFromSupabase())`.
+   - Prevents network timeouts from blocking the UI thread or delaying the splash/login screen render.
+
 ---
 
 ## 2. Technical Implementation Architecture
@@ -72,6 +87,6 @@ The **Offline Storage & Background Sync Engine** provides local persistence, off
 
 | File Path | Description |
 | :--- | :--- |
-| [`lib/database/local_database_service.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/database/local_database_service.dart) | Core Hive database initialization, box accessors, and CRUD helper methods. |
-| [`lib/features/sync/data/sync_engine.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/sync/data/sync_engine.dart) | Connectivity monitoring, background queue processor, and Supabase synchronization logic. |
-| [`lib/core/widgets/offline_banner.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/widgets/offline_banner.dart) | UI banner displaying pending offline counts and manual sync triggers. |
+| [`lib/database/local_database_service.dart`](../lib/database/local_database_service.dart) | Core Hive database initialization, non-blocking setup check, offline service reports, work photos, and CRUD helper methods. |
+| [`lib/features/sync/data/sync_engine.dart`](../lib/features/sync/data/sync_engine.dart) | Connectivity monitoring, background queue processor, and Supabase synchronization logic. |
+| [`lib/core/widgets/offline_banner.dart`](../lib/core/widgets/offline_banner.dart) | UI banner displaying pending offline counts and manual sync triggers. |

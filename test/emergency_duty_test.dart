@@ -6,7 +6,8 @@ import 'package:attendance_app/features/attendance/domain/attendance_record.dart
 void main() {
   group('Emergency Duty Calculation Tests', () {
     test('Calculates Emergency Duty hours as 100% overtime hours', () {
-      final baseDate = DateTime(2026, 8, 15, 20, 0); // 08:00 PM Emergency Callout
+      final baseDate =
+          DateTime(2026, 8, 15, 20, 0); // 08:00 PM Emergency Callout
 
       final records = [
         AttendanceRecord(
@@ -54,14 +55,21 @@ void main() {
     test('WorkflowStep extension correctly maps emergency steps', () {
       expect(WorkflowStep.emergencyCheckIn.dbValue, 'EMERGENCY_CHECK_IN');
       expect(WorkflowStep.emergencyCheckOut.dbValue, 'EMERGENCY_CHECK_OUT');
-      expect(WorkflowStep.emergencyCheckIn.displayName, 'Emergency Duty Check-In');
-      expect(WorkflowStep.emergencyCheckOut.displayName, 'Emergency Duty Check-Out');
-      expect(WorkflowStep.emergencyCheckIn.nextStep, WorkflowStep.emergencyCheckOut);
+      expect(
+          WorkflowStep.emergencyCheckIn.displayName, 'Emergency Duty Check-In');
+      expect(WorkflowStep.emergencyCheckOut.displayName,
+          'Emergency Duty Check-Out');
+      expect(WorkflowStep.emergencyCheckIn.nextStep,
+          WorkflowStep.emergencyCheckOut);
       expect(WorkflowStep.emergencyCheckOut.nextStep, WorkflowStep.completed);
-      expect(WorkflowStepExtension.fromString('emergencyCheckIn'), WorkflowStep.emergencyCheckIn);
-      expect(WorkflowStepExtension.fromString('emergencyCheckOut'), WorkflowStep.emergencyCheckOut);
-      expect(WorkflowStepExtension.fromString('EMERGENCY_CHECK_IN'), WorkflowStep.emergencyCheckIn);
-      expect(WorkflowStepExtension.fromString('EMERGENCY_CHECK_OUT'), WorkflowStep.emergencyCheckOut);
+      expect(WorkflowStepExtension.fromString('emergencyCheckIn'),
+          WorkflowStep.emergencyCheckIn);
+      expect(WorkflowStepExtension.fromString('emergencyCheckOut'),
+          WorkflowStep.emergencyCheckOut);
+      expect(WorkflowStepExtension.fromString('EMERGENCY_CHECK_IN'),
+          WorkflowStep.emergencyCheckIn);
+      expect(WorkflowStepExtension.fromString('EMERGENCY_CHECK_OUT'),
+          WorkflowStep.emergencyCheckOut);
     });
 
     test('Combines regular working hours with emergency callout overtime', () {
@@ -118,7 +126,8 @@ void main() {
           employeeId: 'emp-101',
           employeeName: 'Charlie',
           workflowStep: WorkflowStep.emergencyCheckOut,
-          eventTimestamp: workDate.add(const Duration(hours: 15, minutes: 30)), // 11:30 PM
+          eventTimestamp:
+              workDate.add(const Duration(hours: 15, minutes: 30)), // 11:30 PM
           siteName: 'Emergency Generator Failure - Hospital',
           latitude: 25.2048,
           longitude: 55.2708,
@@ -140,7 +149,9 @@ void main() {
       expect(entry.totalHours, 10.5);
     });
 
-    test('Editing an emergency log updates hours, remarks, and sets isEdited flag', () {
+    test(
+        'Editing an emergency log updates hours, remarks, and sets isEdited flag',
+        () {
       final baseDate = DateTime(2026, 8, 15, 20, 0); // 08:00 PM
 
       final originalIn = AttendanceRecord(
@@ -164,7 +175,8 @@ void main() {
         employeeId: 'emp-101',
         employeeName: 'Charlie',
         workflowStep: WorkflowStep.emergencyCheckOut,
-        eventTimestamp: baseDate.add(const Duration(hours: 2)), // 10:00 PM (2 hours)
+        eventTimestamp:
+            baseDate.add(const Duration(hours: 2)), // 10:00 PM (2 hours)
         siteName: 'Substation B',
         latitude: 25.2048,
         longitude: 55.2708,
@@ -176,7 +188,8 @@ void main() {
       );
 
       // Initial timesheet calculation
-      var timesheets = TimesheetCalculator.calculateDailyTimesheets([originalIn, originalOut]);
+      var timesheets = TimesheetCalculator.calculateDailyTimesheets(
+          [originalIn, originalOut]);
       expect(timesheets.first.emergencyDutyHours, 2.0);
       expect(timesheets.first.overtimeHours, 2.0);
       expect(timesheets.first.isEdited, false);
@@ -205,14 +218,17 @@ void main() {
       expect(updatedOut.isEdited, true);
 
       // Recalculate timesheets with edited emergency duty records
-      timesheets = TimesheetCalculator.calculateDailyTimesheets([updatedIn, updatedOut]);
+      timesheets =
+          TimesheetCalculator.calculateDailyTimesheets([updatedIn, updatedOut]);
       expect(timesheets.first.emergencyDutyHours, 3.5);
       expect(timesheets.first.overtimeHours, 3.5);
       expect(timesheets.first.isEdited, true);
       expect(timesheets.first.totalHours, 3.5);
     });
 
-    test('Admin to Employee Datewise Parity: Employee timesheet reflects admin manual OT and remarks', () {
+    test(
+        'Admin to Employee Datewise Parity: Employee timesheet reflects admin manual OT and remarks',
+        () {
       final workDate = DateTime(2026, 8, 17, 8, 0); // Monday standard workday
 
       // Records created by employee
@@ -265,30 +281,40 @@ void main() {
       );
 
       // Admin side calculation (in Admin Reports Level 3 view)
-      final adminViewTimesheets = TimesheetCalculator.calculateDailyTimesheets([inRecord, adminModifiedOut]);
+      final adminViewTimesheets = TimesheetCalculator.calculateDailyTimesheets(
+          [inRecord, adminModifiedOut]);
       expect(adminViewTimesheets.first.regularHours, 8.0);
       expect(adminViewTimesheets.first.overtimeHours, 3.0);
       expect(adminViewTimesheets.first.totalHours, 11.0);
       expect(adminViewTimesheets.first.isEdited, true);
-      expect(adminViewTimesheets.first.remarks, 'Approved 3.0 hours urgent maintenance overtime by Admin');
+      expect(adminViewTimesheets.first.remarks,
+          'Approved 3.0 hours urgent maintenance overtime by Admin');
 
       // 3. Employee side calculation (in EmployeeTimesheetScreen)
-      final employeeViewTimesheets = TimesheetCalculator.calculateDailyTimesheets(
+      final employeeViewTimesheets =
+          TimesheetCalculator.calculateDailyTimesheets(
         [inRecord, adminModifiedOut],
         targetEmployeeId: 'EMP-001',
         targetEmployeeName: 'Sarah Connor',
       );
 
       // Verify 100% exact parity between Admin Report and Employee Timesheet
-      expect(employeeViewTimesheets.first.regularHours, adminViewTimesheets.first.regularHours);
-      expect(employeeViewTimesheets.first.overtimeHours, adminViewTimesheets.first.overtimeHours);
-      expect(employeeViewTimesheets.first.totalHours, adminViewTimesheets.first.totalHours);
-      expect(employeeViewTimesheets.first.isEdited, adminViewTimesheets.first.isEdited);
-      expect(employeeViewTimesheets.first.remarks, adminViewTimesheets.first.remarks);
+      expect(employeeViewTimesheets.first.regularHours,
+          adminViewTimesheets.first.regularHours);
+      expect(employeeViewTimesheets.first.overtimeHours,
+          adminViewTimesheets.first.overtimeHours);
+      expect(employeeViewTimesheets.first.totalHours,
+          adminViewTimesheets.first.totalHours);
+      expect(employeeViewTimesheets.first.isEdited,
+          adminViewTimesheets.first.isEdited);
+      expect(employeeViewTimesheets.first.remarks,
+          adminViewTimesheets.first.remarks);
       expect(employeeViewTimesheets.first.editedBy, 'Admin');
     });
 
-    test('Admin to Employee Datewise Parity: Identity matching by ID, Firebase UID, or Full Name', () {
+    test(
+        'Admin to Employee Datewise Parity: Identity matching by ID, Firebase UID, or Full Name',
+        () {
       final baseDate = DateTime(2026, 8, 17, 19, 0); // 7:00 PM
 
       // Admin creates emergency log with employee DB ID
@@ -315,7 +341,8 @@ void main() {
         employeeId: 'EMP-005',
         employeeName: 'John Matrix',
         workflowStep: WorkflowStep.emergencyCheckOut,
-        eventTimestamp: baseDate.add(const Duration(hours: 4)), // 11:00 PM (4 hours)
+        eventTimestamp:
+            baseDate.add(const Duration(hours: 4)), // 11:00 PM (4 hours)
         siteName: 'Substation Alpha',
         latitude: 25.2048,
         longitude: 55.2708,
@@ -344,4 +371,3 @@ void main() {
     });
   });
 }
-

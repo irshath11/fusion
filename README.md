@@ -106,28 +106,27 @@ Enterprise-grade, offline-first mobile and web application built using **Flutter
 - **Profile & Record Reassignment**: Allows administrators to reassign historical attendance logs between employee profiles during user credential updates, staff transitions, or account merges.
 - **Atomic Local & Cloud Synchronization**: Preserves original audit timestamps, GPS logs, and facial verification photos across Hive and Supabase.
 
----
+### 22. Midnight & Overnight Shift Continuity Engine
+- **Cross-Midnight Shift Preservation**: Shifts crossing 00:00 remain active in `getTodayAttendanceRecords(userId)` within a 24-hour rolling window, ensuring late-night and night-shift personnel are not reset mid-shift.
+- **4-Hour Cooldown Rest Window**: Prevents immediate same-day re-entry after an overnight checkout, granting field technicians an enforced rest period before initiating a new daily shift.
+- **24-Hour Auto-Resolution Daemon**: Automatically resolves unclosed shifts exceeding 24 hours (`autoResolveExpiredCheckIns`), capping regular duty hours at 8.0h and preventing corrupted timeline calculations.
 
-## 💻 Running the Admin Web Application
+### 23. Offline Service Reports Management & Sequential Prefix Tracking
+- **Sequential Employee Reference Formats (`SR-E01-2001`)**: Automatically assigns each field technician a unique prefix (`currentEmployeePrefix`, e.g. `E01`, `E02`) and sequential reference counter starting from `2001` (`SR-E01-2001`, `SR-E01-2002`).
+- **Offline Hive Queue & Instant Caching**: Stores offline submissions in `pending_service_reports_json` with an in-memory hot cache (`_cachedServiceReports`) for latency-free reads and instant UI rendering.
+- **Cloud Reconciliation (`mergeCloudServiceReports`)**: Merges remote Supabase service reports while preventing duplicate entries and preserving local unsynced drafts.
 
-### Option A: Running as a Flutter Web App
-You can run the Flutter Web application directly using Flutter:
-```bash
-# Run in Chrome browser
-flutter run -d chrome
-```
+### 24. Offline Field Work Site Photo Submissions
+- **Offline Photo Attachment Queue**: Field technicians can capture and save site activity photos offline (`saveWorkPhotoSubmissionLocally`, `pending_work_photos_json`).
+- **GPS Metadata & Work Site Tagging**: Each photo record bundles high-accuracy GPS coordinates, physical address geocoding, timestamp, and optional remarks.
+- **In-Memory Cache & Two-Way Sync**: Caches submissions in-memory for instant UI gallery browsing and automatically synchronizes to cloud storage once network connectivity is re-established.
 
-### Option B: Running the Standalone Web Admin Site (`web_admin`)
-A dedicated, ultra-fast web admin portal constructed with HTML5/CSS3/JS, Supabase SDK, and Leaflet Maps is located in `web_admin/`:
-```bash
-cd web_admin
-npm start
-```
-Or serve via any web server / Python server:
-```bash
-npx serve -s . -l 3000
-```
-Open `http://localhost:3000` in your browser.
+### 25. Enterprise Master Directory & Backward-Compatible Mobile Identity Architecture
+- **100% Backward Compatibility for Deployed APKs**: Preserves authentic registered names (`'Saleem'`, `'Shabi'`) in database tables (`attendance_records`, `users`) so older mobile APKs in the field filter exact match strings without timeline disruption.
+- **Dynamic In-Memory Consolidation (`EmployeeDirectoryHelper`)**: Seamlessly maps short names to full enterprise identities (`Saleem Allapitchai Allapitchai`) on-the-fly in the Admin Web Portal, Directory search, analytics, and PDF exports without destructive database mutations.
+
+### 26. Non-Blocking Background Startup Initialization
+- **Rapid App Boot**: Initial setup and cloud health status checks are decoupled using non-blocking asynchronous execution (`unawaited(checkSetupStatusFromSupabase())`), avoiding UI freezes during app cold starts on slow or offline cellular networks.
 
 ---
 
@@ -157,7 +156,7 @@ Open `http://localhost:3000` in your browser.
 ## 📁 Project Architecture & Folder Structure
 
 ```
-attendance_app/
+fusion/
 ├── backend/
 │   └── supabase_schema.sql         # Supabase PostgreSQL schema, UUID FKs, RLS Policies, Ownership Transfer RPC
 ├── web_admin/                      # Standalone Enterprise Web Admin Portal
@@ -190,9 +189,9 @@ attendance_app/
 │   │   ├── constants/              # Colors, Themes, Enums (UserRole, WorkflowStep, ActivityLogAction)
 │   │   ├── theme/                  # AppThemePreset, AppThemePalette, ThemeCubit, ThemeSelectorModal
 │   │   ├── services/               # LocationService, CameraService, SupabaseService, ExportServices, AiReportService, ServiceReportPdfService
-│   │   ├── utils/                  # GeofenceCalculator, TimesheetCalculator, SalaryCycleHelper
+│   │   ├── utils/                  # GeofenceCalculator, TimesheetCalculator, SalaryCycleHelper, EmployeeDirectoryHelper
 │   │   └── widgets/                # AppButton, CustomTextField, StatusBadge, OfflineBanner, AppShell, AiVoiceReportBottomSheet, ESignaturePad
-│   ├── database/                   # Hive Local Database Persistence (attendance, sync, service reports)
+│   ├── database/                   # Hive Local Database Persistence (attendance, sync, service reports, work photos)
 │   └── features/                   # Clean Architecture Features
 │       ├── setup/                  # First-Time Wizard Screen & Cubit
 │       ├── auth/                   # Login Screen, Firebase/Supabase Auth & Cubit
@@ -212,7 +211,7 @@ attendance_app/
 
 1. **Clone or navigate to the workspace**:
    ```bash
-   cd C:\Users\srirs\.gemini\antigravity-ide\scratch\attendance_app
+   cd fusion
    ```
 2. **Install Flutter Dependencies**:
    ```bash
@@ -223,4 +222,5 @@ attendance_app/
    flutter run -d chrome
    ```
 4. **Deploy Database**:
-   - Copy `backend/supabase_schema.sql` into your Supabase SQL Editor and execute.
+   - Copy `backend/supabase_schema.sql` and `supabase_service_reports_schema.sql` into your Supabase SQL Editor and execute.
+

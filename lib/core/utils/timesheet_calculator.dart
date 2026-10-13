@@ -105,6 +105,74 @@ class TimesheetCalculator {
     return SalaryCycleMetrics.fromEntries(cycle, dailyEntries);
   }
 
+  /// Groups attendance records by shift session anchor date (yyyy-MM-dd).
+  /// For an overnight shift (e.g. starting at 2:00 PM and ending at 1:00 AM next day),
+  /// all records are anchored to the check-in start date so they remain unified in a single workday shift.
+  static Map<String, List<AttendanceRecord>> groupRecordsByShiftDate(
+    List<AttendanceRecord> records, {
+    bool isSingleEmployee = false,
+  }) {
+    // 1. Separate by employee
+    final Map<String, List<AttendanceRecord>> empRecordsMap = {};
+    for (final record in records) {
+      final empKey = record.employeeId.isNotEmpty
+          ? record.employeeId
+          : (record.employeeName.trim().isNotEmpty
+              ? record.employeeName.trim().toLowerCase()
+              : 'unknown');
+      empRecordsMap.putIfAbsent(empKey, () => []).add(record);
+    }
+
+    final Map<String, List<AttendanceRecord>> groupedMap = {};
+
+    empRecordsMap.forEach((empKey, empRecords) {
+      // Sort ascending by event timestamp
+      empRecords.sort((a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
+
+      DateTime? activeShiftAnchorDate;
+      DateTime? activeShiftStartTime;
+
+      for (final record in empRecords) {
+        final localEv = record.eventTimestamp.toLocal();
+        final recordCalendarDate =
+            DateTime(localEv.year, localEv.month, localEv.day);
+        final recordDateStr =
+            "${localEv.year}-${localEv.month.toString().padLeft(2, '0')}-${localEv.day.toString().padLeft(2, '0')}";
+
+        String anchorDateStr = recordDateStr;
+
+        if (record.workflowStep == WorkflowStep.officeCheckIn) {
+          activeShiftAnchorDate = recordCalendarDate;
+          activeShiftStartTime = record.eventTimestamp;
+          anchorDateStr = recordDateStr;
+        } else if (activeShiftAnchorDate != null && activeShiftStartTime != null) {
+          final elapsed = record.eventTimestamp.difference(activeShiftStartTime);
+          if (elapsed < const Duration(hours: 24)) {
+            final anchorLocal = activeShiftAnchorDate;
+            anchorDateStr =
+                "${anchorLocal.year}-${anchorLocal.month.toString().padLeft(2, '0')}-${anchorLocal.day.toString().padLeft(2, '0')}";
+          } else {
+            // Expired after 24h
+            activeShiftAnchorDate = null;
+            activeShiftStartTime = null;
+            anchorDateStr = recordDateStr;
+          }
+        }
+
+        if (record.workflowStep == WorkflowStep.officeCheckOut) {
+          activeShiftAnchorDate = null;
+          activeShiftStartTime = null;
+        }
+
+        final groupKey =
+            isSingleEmployee ? anchorDateStr : "${empKey}__$anchorDateStr";
+        groupedMap.putIfAbsent(groupKey, () => []).add(record);
+      }
+    });
+
+    return groupedMap;
+  }
+
   /// Calculates daily timesheet entries from raw attendance records for an employee or all employees
   static List<DailyTimesheetEntry> calculateDailyTimesheets(
     List<AttendanceRecord> records, {
@@ -133,20 +201,10 @@ class TimesheetCalculator {
         (targetEmployeeName != null && targetEmployeeName.isNotEmpty);
 
     // Map key: "yyyy-MM-dd" for single employee, or "empKey__yyyy-MM-dd" for workforce
-    final Map<String, List<AttendanceRecord>> groupedMap = {};
-
-    for (final record in filteredRecords) {
-      final localEv = record.eventTimestamp.toLocal();
-      final dateStr =
-          "${localEv.year}-${localEv.month.toString().padLeft(2, '0')}-${localEv.day.toString().padLeft(2, '0')}";
-      final empKey = record.employeeId.isNotEmpty
-          ? record.employeeId
-          : (record.employeeName.trim().isNotEmpty
-              ? record.employeeName.trim().toLowerCase()
-              : 'unknown');
-      final groupKey = isSingleEmployee ? dateStr : "${empKey}__$dateStr";
-      groupedMap.putIfAbsent(groupKey, () => []).add(record);
-    }
+    final Map<String, List<AttendanceRecord>> groupedMap = groupRecordsByShiftDate(
+      filteredRecords,
+      isSingleEmployee: isSingleEmployee,
+    );
 
     final List<DailyTimesheetEntry> entries = [];
 
@@ -159,12 +217,15 @@ class TimesheetCalculator {
       final firstRecord = dayRecords.first;
       final empId = firstRecord.employeeId;
       final empName = firstRecord.employeeName;
-      final firstLocal = firstRecord.eventTimestamp.toLocal();
-      final date = DateTime(
-        firstLocal.year,
-        firstLocal.month,
-        firstLocal.day,
-      );
+      final datePart = dateStr.contains('__') ? dateStr.split('__').last : dateStr;
+      final parts = datePart.split('-');
+      final date = parts.length == 3
+          ? DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]))
+          : DateTime(
+              firstRecord.eventTimestamp.toLocal().year,
+              firstRecord.eventTimestamp.toLocal().month,
+              firstRecord.eventTimestamp.toLocal().day,
+            );
 
       // 1. Office Check-In as primary start time
       final checkInRecordIndex = dayRecords.indexWhere(

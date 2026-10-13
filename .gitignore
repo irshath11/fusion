@@ -47,5 +47,6 @@ app.*.map.json
 # Key signing & secrets
 *.jks
 *.keystore
+*.pem
 /android/key.properties
 

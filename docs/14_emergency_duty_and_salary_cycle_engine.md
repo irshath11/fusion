@@ -86,9 +86,9 @@ enum WorkflowStep {
 
 | File Path | Description |
 | :--- | :--- |
-| [`lib/core/utils/salary_cycle_helper.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/utils/salary_cycle_helper.dart) | Core utility providing salary cycle boundary calculations, formatting, and record filtering. |
-| [`test/salary_cycle_test.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/test/salary_cycle_test.dart) | Comprehensive unit tests verifying 25th-24th date boundary math and edge cases (month roll-overs, leap years). |
-| [`test/emergency_duty_test.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/test/emergency_duty_test.dart) | Unit tests verifying emergency duty log creation, validation, timesheet impact, and admin editing. |
-| [`lib/features/admin/presentation/admin_dashboard_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/admin_dashboard_screen.dart) | Dashboard displaying Active Salary Cycle header and emergency duty actions. |
-| [`lib/features/admin/presentation/reports_analytics_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/reports_analytics_screen.dart) | Reports screen with dynamic salary cycle selector and emergency log audit dialogs. |
-| [`lib/features/timesheet/presentation/employee_timesheet_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/timesheet/presentation/employee_timesheet_screen.dart) | Timesheet screen with cycle selector for payroll-accurate work duration auditing. |
+| [`lib/core/utils/salary_cycle_helper.dart`](../lib/core/utils/salary_cycle_helper.dart) | Core utility providing salary cycle boundary calculations, formatting, and record filtering. |
+| [`test/salary_cycle_test.dart`](../test/salary_cycle_test.dart) | Comprehensive unit tests verifying 25th-24th date boundary math and edge cases (month roll-overs, leap years). |
+| [`test/emergency_duty_test.dart`](../test/emergency_duty_test.dart) | Unit tests verifying emergency duty log creation, validation, timesheet impact, and admin editing. |
+| [`lib/features/admin/presentation/admin_dashboard_screen.dart`](../lib/features/admin/presentation/admin_dashboard_screen.dart) | Dashboard displaying Active Salary Cycle header and emergency duty actions. |
+| [`lib/features/admin/presentation/reports_analytics_screen.dart`](../lib/features/admin/presentation/reports_analytics_screen.dart) | Reports screen with dynamic salary cycle selector and emergency log audit dialogs. |
+| [`lib/features/timesheet/presentation/employee_timesheet_screen.dart`](../lib/features/timesheet/presentation/employee_timesheet_screen.dart) | Timesheet screen with cycle selector for payroll-accurate work duration auditing. |

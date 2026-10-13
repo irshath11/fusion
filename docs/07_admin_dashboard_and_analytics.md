@@ -56,9 +56,9 @@ The **Admin Dashboard, Live GPS Tracking & Analytics** feature provides executiv
 
 | File Path | Description |
 | :--- | :--- |
-| [`lib/features/admin/presentation/admin_dashboard_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/admin_dashboard_screen.dart) | Executive dashboard with metric cards, navigation tabs, quick actions, and attendance feeds. |
-| [`lib/features/admin/presentation/live_tracking_map_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/live_tracking_map_screen.dart) | Interactive OpenStreetMap rendering geofence radii and real-time employee check-in markers. |
-| [`lib/features/admin/presentation/admin_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/admin_cubit.dart) | Cubit fetching records, aggregating stats, and processing filter criteria. |
-| [`web_admin/index.html`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/web_admin/index.html) | HTML5 SPA container for Standalone Web Admin Portal. |
-| [`web_admin/styles.css`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/web_admin/styles.css) | Enterprise Design System styling, dark/light theme tokens, layout grid. |
-| [`web_admin/app.js`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/web_admin/app.js) | JavaScript controller, Supabase JS SDK integration, Leaflet.js map logic, and session storage. |
+| [`lib/features/admin/presentation/admin_dashboard_screen.dart`](../lib/features/admin/presentation/admin_dashboard_screen.dart) | Executive dashboard with metric cards, navigation tabs, quick actions, and attendance feeds. |
+| [`lib/features/admin/presentation/live_tracking_map_screen.dart`](../lib/features/admin/presentation/live_tracking_map_screen.dart) | Interactive OpenStreetMap rendering geofence radii and real-time employee check-in markers. |
+| [`lib/features/admin/presentation/admin_cubit.dart`](../lib/features/admin/presentation/admin_cubit.dart) | Cubit fetching records, aggregating stats, and processing filter criteria. |
+| [`web_admin/index.html`](../web_admin/index.html) | HTML5 SPA container for Standalone Web Admin Portal. |
+| [`web_admin/styles.css`](../web_admin/styles.css) | Enterprise Design System styling, dark/light theme tokens, layout grid. |
+| [`web_admin/app.js`](../web_admin/app.js) | JavaScript controller, Supabase JS SDK integration, Leaflet.js map logic, and session storage. |

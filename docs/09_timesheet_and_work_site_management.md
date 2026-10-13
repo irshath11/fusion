@@ -90,9 +90,9 @@ class DailyTimesheetEntry {
 
 | File Path | Description |
 | :--- | :--- |
-| [`lib/core/utils/timesheet_calculator.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/utils/timesheet_calculator.dart) | Calculation utility aggregating attendance records into daily timesheets, regular/overtime hours, and site visits. |
-| [`lib/features/timesheet/domain/timesheet_entry.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/timesheet/domain/timesheet_entry.dart) | Timesheet entry and site visit domain models. |
-| [`lib/features/timesheet/presentation/timesheet_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/timesheet/presentation/timesheet_cubit.dart) | Cubit fetching attendance records and transforming them into timesheet states. |
-| [`lib/features/timesheet/presentation/employee_timesheet_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/timesheet/presentation/employee_timesheet_screen.dart) | Timesheet UI with KPI cards, shift filter tabs (`All`, `Regular`, `Overtime`), site visit timeline, and PDF export button. |
-| [`lib/features/admin/presentation/work_site_management_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/work_site_management_screen.dart) | Admin UI screen for managing client work sites, GPS coordinates, and geofence radii. |
-| [`lib/features/admin/domain/work_site_entity.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/domain/work_site_entity.dart) | Work site domain model. |
+| [`lib/core/utils/timesheet_calculator.dart`](../lib/core/utils/timesheet_calculator.dart) | Calculation utility aggregating attendance records into daily timesheets, regular/overtime hours, and site visits. |
+| [`lib/features/timesheet/domain/timesheet_entry.dart`](../lib/features/timesheet/domain/timesheet_entry.dart) | Timesheet entry and site visit domain models. |
+| [`lib/features/timesheet/presentation/timesheet_cubit.dart`](../lib/features/timesheet/presentation/timesheet_cubit.dart) | Cubit fetching attendance records and transforming them into timesheet states. |
+| [`lib/features/timesheet/presentation/employee_timesheet_screen.dart`](../lib/features/timesheet/presentation/employee_timesheet_screen.dart) | Timesheet UI with KPI cards, shift filter tabs (`All`, `Regular`, `Overtime`), site visit timeline, and PDF export button. |
+| [`lib/features/admin/presentation/work_site_management_screen.dart`](../lib/features/admin/presentation/work_site_management_screen.dart) | Admin UI screen for managing client work sites, GPS coordinates, and geofence radii. |
+| [`lib/features/admin/domain/work_site_entity.dart`](../lib/features/admin/domain/work_site_entity.dart) | Work site domain model. |

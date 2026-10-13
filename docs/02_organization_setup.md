@@ -65,6 +65,6 @@ class OrganizationEntity {
 
 | File Path | Description |
 | :--- | :--- |
-| [`lib/features/setup/domain/organization_setup.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/setup/domain/organization_setup.dart) | Organization domain model and serialization rules. |
-| [`lib/features/setup/presentation/setup_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/setup/presentation/setup_cubit.dart) | Cubit managing onboarding validation, GPS location retrieval, and cloud provisioning. |
-| [`lib/features/setup/presentation/organization_setup_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/setup/presentation/organization_setup_screen.dart) | Interactive onboarding UI with step-by-step form inputs, password visibility toggles, and location auto-detect. |
+| [`lib/features/setup/domain/organization_setup.dart`](../lib/features/setup/domain/organization_setup.dart) | Organization domain model and serialization rules. |
+| [`lib/features/setup/presentation/setup_cubit.dart`](../lib/features/setup/presentation/setup_cubit.dart) | Cubit managing onboarding validation, GPS location retrieval, and cloud provisioning. |
+| [`lib/features/setup/presentation/organization_setup_screen.dart`](../lib/features/setup/presentation/organization_setup_screen.dart) | Interactive onboarding UI with step-by-step form inputs, password visibility toggles, and location auto-detect. |
