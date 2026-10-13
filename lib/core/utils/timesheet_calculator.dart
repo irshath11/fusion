@@ -4,6 +4,7 @@ import '../../features/attendance/domain/attendance_record.dart';
 import '../../features/timesheet/domain/timesheet_entry.dart';
 import '../constants/app_enums.dart';
 import 'salary_cycle_helper.dart';
+import 'employee_directory_helper.dart';
 
 class TimesheetCalculator {
   /// Standard max regular work hours per day before overtime applies
@@ -108,6 +109,7 @@ class TimesheetCalculator {
   /// Groups attendance records by shift session anchor date (yyyy-MM-dd).
   /// For an overnight shift (e.g. starting at 2:00 PM and ending at 1:00 AM next day),
   /// all records are anchored to the check-in start date so they remain unified in a single workday shift.
+  /// Any Sunday daytime duty or distinct day check-ins remain on their proper calendar date.
   static Map<String, List<AttendanceRecord>> groupRecordsByShiftDate(
     List<AttendanceRecord> records, {
     bool isSingleEmployee = false,
@@ -141,25 +143,50 @@ class TimesheetCalculator {
 
         String anchorDateStr = recordDateStr;
 
-        if (record.workflowStep == WorkflowStep.officeCheckIn) {
+        final bool isExplicitCheckIn =
+            record.workflowStep == WorkflowStep.officeCheckIn ||
+            record.workflowStep == WorkflowStep.emergencyCheckIn;
+
+        if (isExplicitCheckIn) {
           activeShiftAnchorDate = recordCalendarDate;
           activeShiftStartTime = record.eventTimestamp;
           anchorDateStr = recordDateStr;
         } else if (activeShiftAnchorDate != null && activeShiftStartTime != null) {
           final elapsed = record.eventTimestamp.difference(activeShiftStartTime);
-          if (elapsed < const Duration(hours: 24)) {
+          final bool isNextDay = recordCalendarDate.isAfter(activeShiftAnchorDate);
+
+          // An overnight shift continuation onto the next day occurs when:
+          // 1. Elapsed time is within reasonable shift duration (<= 16 hours)
+          // 2. The event on next day is in early morning (<= 06:00 AM) AND is a checkout/break
+          final bool isOvernightContinuation = isNextDay &&
+              elapsed <= const Duration(hours: 16) &&
+              localEv.hour < 6 &&
+              (record.workflowStep == WorkflowStep.officeCheckOut ||
+                  record.workflowStep == WorkflowStep.siteCheckOut ||
+                  record.workflowStep == WorkflowStep.breakStart ||
+                  record.workflowStep == WorkflowStep.breakEnd);
+
+          final bool isSameDayEvent = !isNextDay && elapsed < const Duration(hours: 24);
+
+          if (isSameDayEvent || isOvernightContinuation) {
             final anchorLocal = activeShiftAnchorDate;
             anchorDateStr =
                 "${anchorLocal.year}-${anchorLocal.month.toString().padLeft(2, '0')}-${anchorLocal.day.toString().padLeft(2, '0')}";
           } else {
-            // Expired after 24h
-            activeShiftAnchorDate = null;
-            activeShiftStartTime = null;
+            // Cut off previous shift, start new date bucket
+            activeShiftAnchorDate = recordCalendarDate;
+            activeShiftStartTime = record.eventTimestamp;
             anchorDateStr = recordDateStr;
           }
+        } else {
+          // No active shift currently open (e.g. siteCheckIn starts the day)
+          activeShiftAnchorDate = recordCalendarDate;
+          activeShiftStartTime = record.eventTimestamp;
+          anchorDateStr = recordDateStr;
         }
 
-        if (record.workflowStep == WorkflowStep.officeCheckOut) {
+        if (record.workflowStep == WorkflowStep.officeCheckOut ||
+            record.workflowStep == WorkflowStep.emergencyCheckOut) {
           activeShiftAnchorDate = null;
           activeShiftStartTime = null;
         }
@@ -194,7 +221,13 @@ class TimesheetCalculator {
           targetEmployeeName.isNotEmpty &&
           r.employeeName.trim().toLowerCase() ==
               targetEmployeeName.trim().toLowerCase();
-      return idMatch || nameMatch;
+      final identityMatch = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: r.employeeId,
+        recordEmployeeName: r.employeeName,
+        employeeId: targetEmployeeId,
+        employeeName: targetEmployeeName,
+      );
+      return idMatch || nameMatch || identityMatch;
     }).toList();
 
     final bool isSingleEmployee = (targetEmployeeId != null && targetEmployeeId.isNotEmpty) ||
@@ -465,10 +498,21 @@ class TimesheetCalculator {
       final editedRecords = dayRecords.where((r) => r.isEdited).toList();
       if (editedRecords.isNotEmpty) {
         dayIsEdited = true;
-        for (final r in editedRecords) {
-          if (r.manualOvertimeHours != null) {
-            dayManualOt = r.manualOvertimeHours;
-          }
+        // Prioritize records on the same shift date so trailing overnight records
+        // from the following morning (which carry that next day's admin adjustments)
+        // do not overwrite this shift's admin adjustments.
+        final targetRecords = editedRecords.where((r) {
+          final rDate = r.eventTimestamp.toLocal().toIso8601String().substring(0, 10);
+          return rDate == dateStr;
+        }).toList();
+        final sourceList = targetRecords.isNotEmpty ? targetRecords : editedRecords;
+
+        if (checkInRecord.manualOvertimeHours != null) {
+          dayManualOt = checkInRecord.manualOvertimeHours;
+        }
+
+        for (final r in sourceList) {
+          dayManualOt ??= r.manualOvertimeHours;
           if (r.remarks != null && r.remarks!.trim().isNotEmpty) {
             dayRemarks = r.remarks;
           }
@@ -477,10 +521,18 @@ class TimesheetCalculator {
           }
         }
       } else {
-        for (final r in dayRecords) {
-          if (r.manualOvertimeHours != null) {
-            dayManualOt = r.manualOvertimeHours;
-          }
+        final targetRecords = dayRecords.where((r) {
+          final rDate = r.eventTimestamp.toLocal().toIso8601String().substring(0, 10);
+          return rDate == dateStr;
+        }).toList();
+        final sourceList = targetRecords.isNotEmpty ? targetRecords : dayRecords;
+
+        if (checkInRecord.manualOvertimeHours != null) {
+          dayManualOt = checkInRecord.manualOvertimeHours;
+        }
+
+        for (final r in sourceList) {
+          dayManualOt ??= r.manualOvertimeHours;
           if (r.remarks != null && r.remarks!.trim().isNotEmpty) {
             dayRemarks = r.remarks;
           }

@@ -211,6 +211,196 @@ void main() {
         expect(entry.overtimeHours, 1.0);
       }
     });
+
+    test('Daytime checkout on subsequent day (e.g. 11:24 AM) is not anchored to Day 1 as overnight shift', () {
+      // Day 1 (Friday): CheckIn at 11:44 AM, CheckOut at 07:44 PM (8h shift)
+      // Day 2 (Saturday): App reopened at 11:24 AM, checkout tapped before check-in at 11:26 AM
+      final records = [
+        AttendanceRecord(
+          id: 'day1-in',
+          employeeId: 'emp-kabar',
+          employeeName: 'Kabar Khan',
+          workflowStep: WorkflowStep.officeCheckIn,
+          eventTimestamp: DateTime(2026, 10, 9, 11, 44),
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'HQ',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+        ),
+        AttendanceRecord(
+          id: 'day1-out',
+          employeeId: 'emp-kabar',
+          employeeName: 'Kabar Khan',
+          workflowStep: WorkflowStep.officeCheckOut,
+          eventTimestamp: DateTime(2026, 10, 9, 19, 44),
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'HQ',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+        ),
+        AttendanceRecord(
+          id: 'day2-out-prior',
+          employeeId: 'emp-kabar',
+          employeeName: 'Kabar Khan',
+          workflowStep: WorkflowStep.officeCheckOut,
+          eventTimestamp: DateTime(2026, 10, 10, 11, 24),
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'HQ',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+        ),
+        AttendanceRecord(
+          id: 'day2-in',
+          employeeId: 'emp-kabar',
+          employeeName: 'Kabar Khan',
+          workflowStep: WorkflowStep.officeCheckIn,
+          eventTimestamp: DateTime(2026, 10, 10, 11, 26),
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'HQ',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+        ),
+      ];
+
+      final entries = TimesheetCalculator.calculateDailyTimesheets(records);
+
+      // Day 1 entry must NOT have Day 2 11:24 checkout attached (which would cause 24h gross / 13.6h fake OT)
+      final day1Entry = entries.firstWhere((e) => e.date.day == 9);
+      expect(day1Entry.regularHours, 8.0);
+      expect(day1Entry.overtimeHours, 0.0);
+      expect(day1Entry.checkOutTime, DateTime(2026, 10, 9, 19, 44));
+    });
+
+    test('Overnight checkout record having next-calendar-day admin edit does NOT overwrite shift date manual overtime', () {
+      final records = [
+        // Saturday shift starting at 08:39, admin adjusted to 4.0h OT
+        AttendanceRecord(
+          id: 'sat-in',
+          employeeId: 'emp-sanjay',
+          employeeName: 'Sanjay Kumar',
+          workflowStep: WorkflowStep.officeCheckIn,
+          eventTimestamp: DateTime(2026, 10, 10, 8, 39),
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'HQ',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+          manualOvertimeHours: 4.0,
+          remarks: 'Shift adjusted by admin',
+          isEdited: true,
+        ),
+        AttendanceRecord(
+          id: 'sat-out',
+          employeeId: 'emp-sanjay',
+          employeeName: 'Sanjay Kumar',
+          workflowStep: WorkflowStep.officeCheckOut,
+          eventTimestamp: DateTime(2026, 10, 10, 16, 39),
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'HQ',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+          manualOvertimeHours: 4.0,
+          remarks: 'Shift adjusted by admin',
+          isEdited: true,
+        ),
+        // Saturday night callout at 18:17
+        AttendanceRecord(
+          id: 'sat-night-in',
+          employeeId: 'emp-sanjay',
+          employeeName: 'Sanjay Kumar',
+          workflowStep: WorkflowStep.siteCheckIn,
+          eventTimestamp: DateTime(2026, 10, 10, 18, 17),
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'Site',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+          manualOvertimeHours: 4.0,
+          remarks: 'Shift adjusted by admin',
+          isEdited: true,
+        ),
+        // Checkout at 02:52 AM on Sunday, which received Sunday's admin edit of 8.0h OT
+        AttendanceRecord(
+          id: 'sun-early-out',
+          employeeId: 'emp-sanjay',
+          employeeName: 'Sanjay Kumar',
+          workflowStep: WorkflowStep.siteCheckOut,
+          eventTimestamp: DateTime(2026, 10, 11, 2, 52),
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'Site',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+          manualOvertimeHours: 8.0,
+          remarks: 'Shift adjusted by admin',
+          isEdited: true,
+        ),
+        // Sunday daytime shift, admin adjusted to 8.0h OT
+        AttendanceRecord(
+          id: 'sun-in',
+          employeeId: 'emp-sanjay',
+          employeeName: 'Sanjay Kumar',
+          workflowStep: WorkflowStep.officeCheckIn,
+          eventTimestamp: DateTime(2026, 10, 11, 9, 30),
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'HQ',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+          manualOvertimeHours: 8.0,
+          remarks: 'Shift adjusted by admin',
+          isEdited: true,
+        ),
+        AttendanceRecord(
+          id: 'sun-out',
+          employeeId: 'emp-sanjay',
+          employeeName: 'Sanjay Kumar',
+          workflowStep: WorkflowStep.officeCheckOut,
+          eventTimestamp: DateTime(2026, 10, 11, 21, 9),
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'HQ',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+          manualOvertimeHours: 8.0,
+          remarks: 'Shift adjusted by admin',
+          isEdited: true,
+        ),
+      ];
+
+      final entries = TimesheetCalculator.calculateDailyTimesheets(records);
+      final satEntry = entries.firstWhere((e) => e.date.day == 10);
+      final sunEntry = entries.firstWhere((e) => e.date.day == 11);
+
+      // Saturday must retain 4.0h OT (not overwritten by the 02:52 AM Sunday record having 8.0h)
+      expect(satEntry.overtimeHours, 4.0);
+      expect(sunEntry.overtimeHours, 8.0);
+    });
   });
 
   group('Active Overnight Shift Continuity Tests (LocalDatabaseService)', () {

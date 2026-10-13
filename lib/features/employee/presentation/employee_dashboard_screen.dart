@@ -60,6 +60,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
   Future<void> _syncCloudData() async {
     try {
       await SupabaseService().syncCloudDataToLocal();
+      await _db.sanitizeDuplicateEmployees();
       if (mounted) setState(() {});
     } catch (_) {}
   }

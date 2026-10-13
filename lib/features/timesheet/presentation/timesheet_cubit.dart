@@ -70,6 +70,7 @@ class TimesheetCubit extends Cubit<TimesheetState> {
         final cloudRecords = await SupabaseService().fetchAttendanceRecordsFromSupabase();
         if (cloudRecords.isNotEmpty) {
           _db.saveAttendanceRecordsBatch(cloudRecords);
+          await _db.sanitizeDuplicateEmployees();
           // Refresh timesheet UI if new cloud records were fetched
           _calculateAndEmitTimesheet(empId, currentUser);
         }
@@ -81,11 +82,19 @@ class TimesheetCubit extends Cubit<TimesheetState> {
 
   void _calculateAndEmitTimesheet(String empId, dynamic currentUser) {
     final allRecords = _db.getAttendanceRecords();
+    final String? empName = (currentUser != null &&
+            currentUser.fullName != null &&
+            currentUser.fullName.toString().trim().isNotEmpty)
+        ? currentUser.fullName
+        : (currentUser != null && currentUser.name != null
+            ? currentUser.name
+            : null);
+
     final entries = TimesheetCalculator.calculateDailyTimesheets(
       allRecords,
       targetEmployeeId: empId,
       targetFirebaseUid: currentUser?.firebaseUid,
-      targetEmployeeName: currentUser?.fullName,
+      targetEmployeeName: empName,
     );
 
     double totalReg = 0.0;

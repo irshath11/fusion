@@ -12,16 +12,13 @@ import '../../../core/services/pdf_export_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/utils/timesheet_calculator.dart';
 import '../../../core/utils/salary_cycle_helper.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'admin_cubit.dart';
+import '../../../core/utils/leave_calculator.dart';
+import '../../../core/utils/employee_directory_helper.dart';
 import '../../../core/widgets/app_animated_tab_switcher.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../attendance/domain/attendance_record.dart';
-import 'admin_edit_attendance_dialog.dart';
-import '../../employee/presentation/employee_reports_list_screen.dart';
-import '../../employee/presentation/work_photo_history_screen.dart';
 import '../../timesheet/domain/timesheet_entry.dart';
-
+import 'admin_edit_attendance_dialog.dart';
 
 class ReportsAnalyticsScreen extends StatefulWidget {
   const ReportsAnalyticsScreen({super.key});
@@ -32,41 +29,28 @@ class ReportsAnalyticsScreen extends StatefulWidget {
 
 class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   final LocalDatabaseService _db = LocalDatabaseService();
-  final Map<String, Uint8List> _avatarBase64Cache = {};
-
-  Uint8List? _getOrDecodeAvatar(String photoStr) {
-    if (_avatarBase64Cache.containsKey(photoStr)) {
-      return _avatarBase64Cache[photoStr];
-    }
-    String base64Str = photoStr.contains(',') ? photoStr.split(',').last : photoStr;
-    base64Str = base64Str.replaceAll(RegExp(r'\s+'), '');
-    try {
-      final decoded = base64Decode(base64Str);
-      _avatarBase64Cache[photoStr] = decoded;
-      return decoded;
-    } catch (_) {
-      return null;
-    }
-  }
 
   String? _selectedEmployeeId;
   DateTime? _selectedDate;
   String _searchQuery = '';
   bool _isLoadingCloud = false;
-  bool _isSyncing = false;
   int _activeTab =
-      0; // 0 = Directory, 1 = Cumulative Summary, 2 = Site / Client Man-Hours
+      0; // 0 = Directory, 1 = Cumulative Summary, 2 = Leave Record, 3 = Site / Client Man-Hours
   int _employeeRecordFilterTab =
       0; // 0 = With Records, 1 = No Records
   int _empDetailSubTab =
-      0; // 0 = Attendance & Timesheet Logs, 1 = Emergency Duty Details
+      0; // 0 = Attendance & Timesheet Logs, 1 = Emergency Duty Details, 2 = Leave Records
   String _siteDateFilter = 'cycle'; // 'cycle', 'today', 'week', 'month', 'all'
   bool _siteGroupByClient =
       false; // true = Group by Client, false = Specific Site
   final Set<String> _expandedSiteKeys = {};
+  final Set<String> _expandedLeaveEmpIds = {};
+  String _leaveFilterType = 'all'; // 'all', 'with_leaves', 'perfect_attendance'
+  String _empLeaveFilterType = 'all'; // 'all', 'leaves', 'sundays', 'present'
 
   SalaryCycle? _selectedSalaryCycle = SalaryCycle.current();
   SalaryCycle? _cumulativeSalaryCycle = SalaryCycle.current();
+  SalaryCycle? _leaveSalaryCycle = SalaryCycle.current();
   late final List<SalaryCycle> _availableSalaryCycles =
       SalaryCycle.getRecentCycles();
 
@@ -76,56 +60,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     _loadCloudAttendanceRecords();
   }
 
-  Future<void> _syncOfflineData() async {
-    if (_isSyncing) return;
-    setState(() => _isSyncing = true);
-
-    try {
-      final res = await SupabaseService().syncAllOfflineData();
-      final total = res.attendanceSynced + res.reportsSynced;
-
-      if (!mounted) return;
-
-      if (total > 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Successfully uploaded $total offline record(s) to Cloud Database!',
-            ),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('All local records & reports are already synced to Cloud Database.'),
-            backgroundColor: AppColors.primary,
-          ),
-        );
-      }
-      await _loadCloudAttendanceRecords();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Cloud Sync Note: $e. Your report data is safely saved in local storage.'),
-          backgroundColor: Colors.amber.shade800,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isSyncing = false);
-      }
-    }
-  }
-
   Future<void> _loadCloudAttendanceRecords() async {
     setState(() => _isLoadingCloud = true);
     try {
-      await SupabaseService().syncCloudDataToLocal();
       final cloudRecords =
           await SupabaseService().fetchAttendanceRecordsFromSupabase();
       if (cloudRecords.isNotEmpty) {
+        _db.clearAttendanceCache();
         _db.saveAttendanceRecordsBatch(cloudRecords);
       }
 
@@ -140,8 +81,24 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       final cloudEmployees =
           await SupabaseService().fetchEmployeesFromSupabase(orgId);
       if (cloudEmployees.isNotEmpty) {
-        _db.setEmployees(cloudEmployees);
+        final currentLocal = _db.getEmployees();
+        final Map<String, EmployeeEntity> merged = {};
+        for (final ce in cloudEmployees) {
+          merged[ce.id] = ce;
+        }
+        for (final le in currentLocal) {
+          if (!merged.containsKey(le.id) &&
+              !merged.values.any((e) =>
+                  (le.email.isNotEmpty && e.email.toLowerCase() == le.email.toLowerCase()) ||
+                  (le.name.isNotEmpty && e.name.toLowerCase() == le.name.toLowerCase()))) {
+            merged[le.id] = le;
+          }
+        }
+        _db.setEmployees(merged.values.toList());
       }
+
+      // Consolidate any duplicate/phantom 'Anand' records into Anandh Veeramani
+      await _db.sanitizeDuplicateEmployees();
     } catch (e) {
       debugPrint('Cloud attendance fetch error: $e');
     } finally {
@@ -202,6 +159,16 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         }
         if (name.isNotEmpty &&
             e.name.trim().toLowerCase() == name.trim().toLowerCase()) {
+          return entry.key;
+        }
+        if (EmployeeDirectoryHelper.matchesEmployeeIdentity(
+          recordEmployeeId: id,
+          recordEmployeeName: name,
+          employeeId: e.id,
+          employeeCode: e.employeeCode,
+          employeeName: e.name,
+          employeeEmail: e.email,
+        )) {
           return entry.key;
         }
       }
@@ -298,26 +265,85 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           e.id == idKey ||
           (e.employeeCode.isNotEmpty &&
               e.employeeCode.toLowerCase() == idKey.toLowerCase()) ||
-          (e.name.trim().toLowerCase() == nameKey && nameKey.isNotEmpty));
+          (e.name.trim().toLowerCase() == nameKey && nameKey.isNotEmpty) ||
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: idKey,
+            recordEmployeeName: r.employeeName,
+            employeeId: e.id,
+            employeeCode: e.employeeCode,
+            employeeName: e.name,
+            employeeEmail: e.email,
+          ));
 
       if (!alreadyExists && r.employeeName.trim().isNotEmpty) {
-        final code = resolveBestCode(null, r.employeeName, r.employeeId);
+        final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+          code: r.employeeId,
+          name: r.employeeName,
+          id: r.employeeId,
+        );
+        if (official != null) {
+          final alreadyInMap = employeeMap.values.any((e) =>
+              e.name.trim().toLowerCase() == official.fullName.toLowerCase() ||
+              (e.employeeCode.isNotEmpty && e.employeeCode.toUpperCase() == official.employeeId.toUpperCase()));
+          if (alreadyInMap) continue;
+        }
+
+        final code = official?.employeeId ?? resolveBestCode(null, r.employeeName, r.employeeId);
+        final name = official?.fullName ?? r.employeeName;
         employeeMap[idKey.isNotEmpty ? idKey : nameKey] = EmployeeEntity(
           id: r.employeeId,
           employeeCode: code,
-          name: r.employeeName,
+          name: name,
           mobileNumber: '',
-          email: '',
-          designation: 'Field Staff',
-          department: 'Operations',
+          email: official?.email ?? '',
+          designation: official?.designation ?? 'Field Staff',
+          department: official?.department ?? 'Operations',
         );
       }
     }
 
-    final list = employeeMap.values.toList();
-    list.sort((a, b) =>
-        a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
+    final list = employeeMap.values.where((e) {
+      final eName = e.name.trim().toLowerCase();
+
+      // Check if e resolves to an official record
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: e.employeeCode,
+        name: e.name,
+        email: e.email,
+        id: e.id,
+      );
+      if (official != null) {
+        final hasCanonicalFull = employeeMap.values.any((other) =>
+            other != e && other.name.trim().toLowerCase() == official.fullName.toLowerCase());
+        if (hasCanonicalFull && eName != official.fullName.toLowerCase()) {
+          return false;
+        }
+      }
+
+      final isSyntheticDuplicate = e.id.startsWith('emp-') &&
+          employeeMap.values.any((other) =>
+              other != e &&
+              (other.employeeCode == e.employeeCode ||
+               other.name.trim().toLowerCase() == eName));
+
+      if (isSyntheticDuplicate) {
+        return false;
+      }
+      return true;
+    }).toList();
+    list.sort((a, b) => a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
     return list;
+  }
+
+  bool _recordMatchesEmployee(AttendanceRecord r, EmployeeEntity emp) {
+    return EmployeeDirectoryHelper.matchesEmployeeIdentity(
+      recordEmployeeId: r.employeeId,
+      recordEmployeeName: r.employeeName,
+      employeeId: emp.id,
+      employeeCode: emp.employeeCode,
+      employeeName: emp.name,
+      employeeEmail: emp.email,
+    );
   }
 
   EmployeeEntity _resolveEmployee(String? employeeId) {
@@ -334,17 +360,28 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
     final all = _getSynthesizedEmployees();
     final cleanId = employeeId.trim().toLowerCase();
-    final match = all.where((e) =>
-        e.id.toLowerCase() == cleanId ||
-        e.employeeCode.toLowerCase() == cleanId ||
-        e.name.toLowerCase().trim() == cleanId ||
-        e.email.toLowerCase().trim() == cleanId);
-    if (match.isNotEmpty) return match.first;
 
-    final idMatch = all.where((e) =>
-        (cleanId.length >= 8 && e.id.toLowerCase().startsWith(cleanId)) ||
-        (cleanId.length >= 8 && cleanId.startsWith(e.id.toLowerCase())));
-    if (idMatch.isNotEmpty) return idMatch.first;
+    // Match by EmployeeDirectoryHelper
+    for (final e in all) {
+      if (EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: employeeId,
+        recordEmployeeName: employeeId,
+        employeeId: e.id,
+        employeeCode: e.employeeCode,
+        employeeName: e.name,
+        employeeEmail: e.email,
+      )) {
+        return e;
+      }
+    }
+
+    // Exact matches by ID, code, name, or email
+    final exactMatch = all.where((e) =>
+        (e.id.isNotEmpty && e.id.toLowerCase() == cleanId) ||
+        (e.employeeCode.isNotEmpty && e.employeeCode.toLowerCase() == cleanId) ||
+        (e.name.isNotEmpty && e.name.toLowerCase().trim() == cleanId) ||
+        (e.email.isNotEmpty && e.email.toLowerCase().trim() == cleanId));
+    if (exactMatch.isNotEmpty) return exactMatch.first;
 
     return EmployeeEntity(
       id: employeeId,
@@ -359,67 +396,21 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<AdminCubit, AdminState>(
-      builder: (context, state) {
-        if (_selectedEmployeeId != null && _selectedDate != null) {
-          return _buildLevel3DateDetailView();
-        } else if (_selectedEmployeeId != null) {
-          return _buildLevel2DateListView();
-        } else {
-          return _buildLevel1EmployeeListView(state);
-        }
-      },
-    );
+    if (_selectedEmployeeId != null && _selectedDate != null) {
+      return _buildLevel3DateDetailView();
+    } else if (_selectedEmployeeId != null) {
+      return _buildLevel2DateListView();
+    } else {
+      return _buildLevel1EmployeeListView();
+    }
   }
 
   // ==========================================
   // LEVEL 1: EMPLOYEE LIST VIEW
   // ==========================================
-  Widget _buildLevel1EmployeeListView([AdminState? state]) {
-    final dbEmployees = (state is AdminDataLoaded && state.employees.isNotEmpty)
-        ? state.employees
-        : _db.getEmployees();
+  Widget _buildLevel1EmployeeListView() {
     final allRecords = _db.getAttendanceRecords();
-
-    // Synthesize employee list from both DB & Attendance Records
-    final Map<String, EmployeeEntity> employeeMap = {};
-    for (final e in dbEmployees) {
-      final key = e.id.isNotEmpty
-          ? e.id
-          : (e.email.trim().isNotEmpty
-              ? e.email.trim().toLowerCase()
-              : e.name.trim().toLowerCase());
-      employeeMap[key] = e;
-    }
-
-    for (final r in allRecords) {
-      final nameKey = r.employeeName.trim().toLowerCase();
-      final idKey = r.employeeId;
-
-      bool alreadyExists = employeeMap.containsKey(idKey) ||
-          employeeMap.values.any((e) =>
-              e.id == idKey ||
-              (e.name.trim().toLowerCase() == nameKey && nameKey.isNotEmpty));
-
-      if (!alreadyExists) {
-        final shortId = r.employeeId.length >= 4
-            ? r.employeeId.substring(0, 4).toUpperCase()
-            : r.employeeId.toUpperCase();
-        employeeMap[idKey] = EmployeeEntity(
-          id: r.employeeId,
-          employeeCode: 'EMP-$shortId',
-          name: r.employeeName,
-          mobileNumber: '',
-          email: '',
-          designation: 'Field Staff',
-          department: 'Operations',
-        );
-      }
-    }
-
-    final allEmployees = employeeMap.values.toList();
-    allEmployees.sort((a, b) =>
-        a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
+    final allEmployees = _getSynthesizedEmployees();
 
     final filteredEmployees = allEmployees.where((e) {
       final q = _searchQuery.trim().toLowerCase();
@@ -429,6 +420,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           e.department.toLowerCase().contains(q);
     }).toList();
 
+    // Segregate filtered employees into With Records vs No Records
     final employeesWithRecords = <MapEntry<EmployeeEntity, int>>[];
     final employeesWithoutRecords = <EmployeeEntity>[];
 
@@ -436,10 +428,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       final empRecords = allRecords
           .where((r) => _recordMatchesEmployee(r, emp))
           .toList();
-      final datesCount = TimesheetCalculator.groupRecordsByShiftDate(
-        empRecords,
-        isSingleEmployee: true,
-      ).keys.length;
+      final datesCount = empRecords
+          .map((r) =>
+              DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()))
+          .toSet()
+          .length;
 
       if (datesCount > 0) {
         employeesWithRecords.add(MapEntry(emp, datesCount));
@@ -483,8 +476,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildSyncButton(),
-                  const SizedBox(width: 6),
                   IconButton(
                     icon: _isLoadingCloud
                         ? SizedBox(
@@ -509,12 +500,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Tab Bar Switcher (Directory vs Cumulative Record vs Site Man-Hours)
+          // Tab Bar Switcher (Directory vs Cumulative Record vs Leave Record vs Site Man-Hours)
           AppAnimatedTabSwitcher(
             selectedIndex: _activeTab,
             tabs: const [
               TabItemData(label: 'Directory', icon: Icons.people_alt_rounded),
               TabItemData(label: 'Cumulative', icon: Icons.analytics_rounded),
+              TabItemData(
+                  label: 'Leave Record', icon: Icons.event_busy_rounded),
               TabItemData(
                   label: 'Site Hours', icon: Icons.location_city_rounded),
             ],
@@ -642,7 +635,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               const SizedBox(height: 12),
                               Text(
                                 'No Employees with Attendance Records',
-                                textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
@@ -654,8 +646,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               const SizedBox(height: 4),
                               Text(
                                 _searchQuery.isNotEmpty
-                                    ? 'No matching active employee records found for "$_searchQuery".'
-                                    : 'There are currently no attendance entries recorded for any employee.',
+                                    ? 'No matching employees with records found for "$_searchQuery".'
+                                    : 'None of the registered employees have attendance records logged yet.',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: isDark
@@ -766,15 +758,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                       alpha: isDark ? 0.22 : 0.12),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
-                                child: Wrap(
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  spacing: 4,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     const Icon(
                                       Icons.check_circle_outline_rounded,
                                       size: 13,
                                       color: Colors.green,
                                     ),
+                                    const SizedBox(width: 4),
                                     Text(
                                       '$datesCount Attendance Date(s) Logged',
                                       style: const TextStyle(
@@ -835,7 +827,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               const SizedBox(height: 12),
                               Text(
                                 'All Employees Have Attendance Records',
-                                textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
@@ -950,8 +941,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                       ? palette.textSecondaryDark
                                       : Colors.grey.shade600,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
                               ),
                               const SizedBox(height: 5),
                               Container(
@@ -962,15 +951,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                       alpha: isDark ? 0.22 : 0.12),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
-                                child: const Wrap(
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  spacing: 4,
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
                                       Icons.history_toggle_off_rounded,
                                       size: 13,
                                       color: Colors.orange,
                                     ),
+                                    SizedBox(width: 4),
                                     Text(
                                       'No Attendance Recorded',
                                       style: TextStyle(
@@ -997,13 +986,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               style: TextButton.styleFrom(
                                 foregroundColor: activePrimary,
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                visualDensity: VisualDensity.compact,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    horizontal: 8, vertical: 4),
                               ),
                             ),
                             const Icon(Icons.arrow_forward_ios_rounded,
-                                size: 14, color: AppColors.textSecondaryLight),
+                                size: 16, color: AppColors.textSecondaryLight),
                           ],
                         ),
                         onTap: () {
@@ -1019,6 +1006,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             ],
           ] else if (_activeTab == 1) ...[
             _buildCumulativeSummaryView(filteredEmployees, allRecords),
+          ] else if (_activeTab == 2) ...[
+            _buildLeaveRecordsView(filteredEmployees, allRecords),
           ] else ...[
             _buildSiteManHoursView(allRecords),
           ],
@@ -1067,21 +1056,268 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       );
     }
   }
+
+  Widget _buildMisattributedLogsBanner(EmployeeEntity currentEmp, List<AttendanceRecord> records) {
+    final users = _db.getUsers();
+    final suspiciousRecords = <AttendanceRecord>[];
+    String? detectedOwnerName;
+    String? detectedOwnerId;
+
+    for (final r in records) {
+      if (r.deviceId.startsWith('device-hw-')) {
+        final rawUid = r.deviceId.substring('device-hw-'.length);
+        final match = users.where((u) => u.id == rawUid || (u.firebaseUid.isNotEmpty && u.firebaseUid == rawUid));
+        if (match.isNotEmpty &&
+            match.first.fullName.trim().toLowerCase() != currentEmp.name.trim().toLowerCase()) {
+          suspiciousRecords.add(r);
+          detectedOwnerName ??= match.first.fullName;
+          detectedOwnerId ??= match.first.id;
+        }
+      }
+    }
+
+    if (suspiciousRecords.isEmpty || detectedOwnerName == null || detectedOwnerId == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.amber.shade700),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Misattributed Logs Detected',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Colors.amber.shade900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${suspiciousRecords.length} log(s) appear to have been captured from $detectedOwnerName\'s account instead of ${currentEmp.name}.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.amber.shade900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          ElevatedButton.icon(
+            onPressed: () async {
+              final count = await _db.reassignEmployeeAttendanceRecords(
+                fromEmployeeId: currentEmp.id,
+                fromEmployeeName: currentEmp.name,
+                toEmployeeId: detectedOwnerId!,
+                toEmployeeName: detectedOwnerName!,
+              );
+              if (mounted) {
+                setState(() {});
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Successfully transferred $count log(s) to $detectedOwnerName!'),
+                    backgroundColor: AppColors.success,
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+            label: Text('Transfer to $detectedOwnerName'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.amber.shade800,
+              foregroundColor: Colors.white,
+              elevation: 2,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showReassignRecordsDialog(EmployeeEntity sourceEmp, List<AttendanceRecord> records) async {
+    final allEmployees = _getSynthesizedEmployees()
+        .where((e) => e.id != sourceEmp.id && e.name.trim().toLowerCase() != sourceEmp.name.trim().toLowerCase())
+        .toList();
+
+    if (allEmployees.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No other employee available to reassign records to.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    String targetEmpId = allEmployees.first.id;
+    String? selectedDateStr;
+
+    final Set<String> dateStrs = {};
+    for (final r in records) {
+      dateStrs.add(DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()));
+    }
+    final sortedDates = dateStrs.toList()..sort((a, b) => b.compareTo(a));
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final palette = AppTheme.currentColors;
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            backgroundColor: isDark ? palette.surfaceDark : Colors.white,
+            title: Row(
+              children: [
+                Icon(Icons.swap_horiz_rounded, color: Colors.indigo.shade700),
+                const SizedBox(width: 10),
+                const Text('Reassign Attendance Logs', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Reassign attendance logs from ${sourceEmp.name} to another employee:',
+                  style: const TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 14),
+                const Text('Target Employee', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade400),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: targetEmpId,
+                      isExpanded: true,
+                      items: allEmployees.map((e) {
+                        return DropdownMenuItem<String>(
+                          value: e.id,
+                          child: Text('${e.name} (${e.employeeCode})'),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) setDlgState(() => targetEmpId = val);
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text('Date Scope', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade400),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String?>(
+                      value: selectedDateStr,
+                      isExpanded: true,
+                      items: [
+                        DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('All Dates (All ${records.length} records)'),
+                        ),
+                        ...sortedDates.map((d) {
+                          DateTime parsed = DateTime.parse(d);
+                          return DropdownMenuItem<String?>(
+                            value: d,
+                            child: Text(DateFormat('dd MMM yyyy (EEEE)').format(parsed)),
+                          );
+                        }),
+                      ],
+                      onChanged: (val) => setDlgState(() => selectedDateStr = val),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo.shade700, foregroundColor: Colors.white),
+                child: const Text('Confirm & Reassign'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final targetEmp = allEmployees.firstWhere((e) => e.id == targetEmpId);
+      final count = await _db.reassignEmployeeAttendanceRecords(
+        fromEmployeeId: sourceEmp.id,
+        fromEmployeeName: sourceEmp.name,
+        toEmployeeId: targetEmp.id,
+        toEmployeeName: targetEmp.name,
+        specificDate: selectedDateStr != null ? DateTime.parse(selectedDateStr!) : null,
+      );
+
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Successfully reassigned $count record(s) to ${targetEmp.name}!'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildLevel2DateListView() {
     final emp = _resolveEmployee(_selectedEmployeeId);
 
-    final allEmpRecords = _db.getAttendanceRecords().where((r) {
-      return _recordMatchesEmployee(r, emp);
-    }).toList();
+    final allEmpRecords = _db
+        .getAttendanceRecords()
+        .where((r) => _recordMatchesEmployee(r, emp))
+        .toList();
 
     // Filter to selected Salary Cycle (25th to 24th)
     final empRecords = _selectedSalaryCycle != null
         ? _selectedSalaryCycle!.filterRecords(allEmpRecords)
         : allEmpRecords;
 
-    // Group records by shift anchor date (yyyy-MM-dd)
-    final Map<String, List<AttendanceRecord>> groupedByDate =
-        TimesheetCalculator.groupRecordsByShiftDate(empRecords, isSingleEmployee: true);
+    final empLeaveSummary = LeaveCalculator.calculateEmployeeLeave(
+      emp,
+      allEmpRecords,
+      _selectedSalaryCycle ?? SalaryCycle.current(),
+    );
+
+    // Group records by date (yyyy-MM-dd)
+    final Map<String, List<AttendanceRecord>> groupedByDate = {};
+    for (final r in empRecords) {
+      final dateKey = DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal());
+      groupedByDate.putIfAbsent(dateKey, () => []).add(r);
+    }
 
     final sortedDateKeys = groupedByDate.keys.toList()
       ..sort((a, b) => b.compareTo(a));
@@ -1114,11 +1350,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   setState(() {
                     _selectedEmployeeId = null;
                     _selectedDate = null;
-                    _empDetailSubTab = 0;
                   });
                 },
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1129,126 +1364,75 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                           .textTheme
                           .titleLarge
                           ?.copyWith(fontWeight: FontWeight.bold),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                     Text(
-                      '${emp.employeeCode} • ${emp.department}',
+                      '${emp.employeeCode} • ${emp.department} • Work Timesheet',
                       style: TextStyle(
                           fontSize: 12,
                           color: isDark
                               ? AppColors.textSecondaryDark
                               : AppColors.textSecondaryLight),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 6),
               ElevatedButton.icon(
-                onPressed: () => _exportPdfForEmployee(emp, empRecords),
-                icon: const Icon(Icons.download_rounded, size: 14),
-                label: const Text('Export Timesheet',
+                onPressed: () => _addNewDateEntryLogForEmployee(emp),
+                icon: const Icon(Icons.post_add_rounded, size: 16),
+                label: const Text('+ Add Date Log',
                     style:
-                        TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: activePrimary,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              ElevatedButton.icon(
+                onPressed: () => _exportPdfForEmployee(emp, empRecords),
+                icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
+                label: const Text('Download PDF',
+                    style:
+                        TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red.shade700,
                   foregroundColor: Colors.white,
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-              )
+              ),
+              const SizedBox(width: 6),
+              ElevatedButton.icon(
+                onPressed: () => _showReassignRecordsDialog(emp, empRecords),
+                icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+                label: const Text('Reassign Logs',
+                    style:
+                        TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.indigo.shade700,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
 
-          // Individual Employee Reports Navigation Bar (PDF Report Page & Work Image Page)
-          Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: isDark ? palette.surfaceDark : Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isDark ? palette.cardBorderDark : Colors.grey.shade200,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (ctx) => EmployeeReportsListScreen(
-                            initialSearchQuery: emp.name,
-                          ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 15),
-                    label: const Text('PDF Report Page',
-                        style: TextStyle(
-                            fontSize: 11, fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade700,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 10),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (ctx) => WorkPhotoHistoryScreen(
-                            initialSearchQuery: emp.name,
-                          ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.photo_library_rounded, size: 15),
-                    label: const Text('Work Image Page',
-                        style: TextStyle(
-                            fontSize: 11, fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: activePrimary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 10),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
+          // Misattributed logs detection banner
+          _buildMisattributedLogsBanner(emp, empRecords),
 
           // Salary Cycle Filter Selector for Employee Timesheet (25th - 24th)
           Container(
@@ -1286,10 +1470,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 6,
-                        runSpacing: 2,
+                      Row(
                         children: [
                           Text(
                             'Salary Cycle Filter',
@@ -1301,6 +1482,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                   : palette.textSecondaryLight,
                             ),
                           ),
+                          const SizedBox(width: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 5, vertical: 1),
@@ -1346,7 +1528,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                             const DropdownMenuItem<String>(
                               value: 'all',
                               child: Text(
-                                'All Recorded History (Full)',
+                                'All Recorded Logs (Full History)',
                                 style: TextStyle(fontSize: 13),
                               ),
                             ),
@@ -1373,42 +1555,12 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             ),
           ),
 
-          // Sub-Tab Navigation Bar: Attendance & Timesheet Logs vs Emergency Duty Details
-          AppAnimatedTabSwitcher(
-            selectedIndex: _empDetailSubTab,
-            tabs: const [
-              TabItemData(
-                label: 'Attendance & Timesheet Logs',
-                icon: Icons.calendar_month_rounded,
-              ),
-              TabItemData(
-                label: 'Emergency Duty Details',
-                icon: Icons.warning_amber_rounded,
-              ),
-            ],
-            onTabChanged: (index) {
-              setState(() => _empDetailSubTab = index);
-            },
-          ),
-          const SizedBox(height: 12),
-
-          if (_empDetailSubTab == 1)
-            _buildEmergencyDutyDetailsView(
-              emp,
-              empRecords,
-              timesheets,
-              totalOtHours,
-              isDark,
-              palette,
-              activePrimary,
-            )
-          else ...[
-            // Executive Timesheet Summary Cards
-            Row(
+          // Executive Timesheet Summary Cards
+          Row(
             children: [
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: isDark
                         ? palette.surfaceDark
@@ -1422,40 +1574,31 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   ),
                   child: Column(
                     children: [
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text('Regular',
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: activePrimary,
-                                fontWeight: FontWeight.bold)),
-                      ),
+                      Text('Regular',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: activePrimary,
+                              fontWeight: FontWeight.bold)),
                       const SizedBox(height: 2),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text('${totalRegHours.toStringAsFixed(1)} hrs',
-                            style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: activePrimary)),
-                      ),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text('Max 8.0h/day',
-                            style: TextStyle(
-                                fontSize: 10,
-                                color: isDark
-                                    ? palette.textSecondaryDark
-                                    : palette.textSecondaryLight)),
-                      ),
+                      Text('${totalRegHours.toStringAsFixed(1)} hrs',
+                          style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: activePrimary)),
+                      Text('Max 8.0h/day',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: isDark
+                                  ? palette.textSecondaryDark
+                                  : palette.textSecondaryLight)),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: isDark
                         ? AppColors.surfaceDark
@@ -1469,44 +1612,35 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   ),
                   child: Column(
                     children: [
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text('Overtime (OT)',
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: isDark
-                                    ? Colors.orange.shade300
-                                    : Colors.orange.shade900,
-                                fontWeight: FontWeight.bold)),
-                      ),
+                      Text('Overtime (OT)',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: isDark
+                                  ? Colors.orange.shade300
+                                  : Colors.orange.shade900,
+                              fontWeight: FontWeight.bold)),
                       const SizedBox(height: 2),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text('${totalOtHours.toStringAsFixed(1)} hrs',
-                            style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: isDark
-                                    ? Colors.orange.shade300
-                                    : Colors.orange.shade900)),
-                      ),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text('Beyond 10.0h/day',
-                            style: TextStyle(
-                                fontSize: 10,
-                                color: isDark
-                                    ? AppColors.textSecondaryDark
-                                    : AppColors.textSecondaryLight)),
-                      ),
+                      Text('${totalOtHours.toStringAsFixed(1)} hrs',
+                          style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: isDark
+                                  ? Colors.orange.shade300
+                                  : Colors.orange.shade900)),
+                      Text('Beyond 10.0h/day',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight)),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: isDark
                         ? AppColors.surfaceDark
@@ -1520,33 +1654,66 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   ),
                   child: Column(
                     children: [
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: const Text('Combined',
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: AppColors.success,
-                                fontWeight: FontWeight.bold)),
-                      ),
+                      const Text('Combined',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.success,
+                              fontWeight: FontWeight.bold)),
                       const SizedBox(height: 2),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                            '${(totalRegHours + totalOtHours).toStringAsFixed(1)} hrs',
-                            style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.success)),
-                      ),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text('${sortedDateKeys.length} Days Worked',
-                            style: TextStyle(
-                                fontSize: 10,
-                                color: isDark
-                                    ? AppColors.textSecondaryDark
-                                    : AppColors.textSecondaryLight)),
-                      ),
+                      Text(
+                          '${(totalRegHours + totalOtHours).toStringAsFixed(1)} hrs',
+                          style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.success)),
+                      Text('${sortedDateKeys.length} Days Worked',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? palette.surfaceDark
+                        : Colors.purple.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.purple.shade800
+                          : Colors.purple.shade200,
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Text('Leaves & Offs',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: isDark
+                                  ? Colors.purple.shade300
+                                  : Colors.purple.shade900,
+                              fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 2),
+                      Text('${empLeaveSummary.leaveDays} Leaves',
+                          style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: isDark
+                                  ? Colors.purple.shade300
+                                  : Colors.purple.shade900)),
+                      Text('${empLeaveSummary.sundayWeeklyOffs} Sundays Off',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: isDark
+                                  ? palette.textSecondaryDark
+                                  : palette.textSecondaryLight)),
                     ],
                   ),
                 ),
@@ -1587,29 +1754,23 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Expanded(
-                        child: Row(
-                          children: [
-                            Icon(Icons.location_city_rounded,
-                                color: activePrimary, size: 18),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                'Site / Client Man-Hours Spent',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  color: isDark
-                                      ? palette.textPrimaryDark
-                                      : palette.textPrimaryLight,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                      Row(
+                        children: [
+                          Icon(Icons.location_city_rounded,
+                              color: activePrimary, size: 18),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Site / Client Man-Hours Spent',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: isDark
+                                  ? palette.textPrimaryDark
+                                  : palette.textPrimaryLight,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 2),
@@ -1721,187 +1882,172 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           }(),
           const Divider(height: 20),
 
-          if (sortedDateKeys.isEmpty)
-            Card(
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14)),
-              child: Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: Center(
-                  child: Column(
-                    children: [
-                      const Icon(Icons.event_busy_rounded,
-                          size: 48, color: Colors.grey),
-                      const SizedBox(height: 12),
-                      Text(
-                        'No attendance logs recorded for ${emp.name} yet.',
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                    ],
+          const SizedBox(height: 4),
+          // Sub-Tab Navigation Bar: Attendance & Timesheet Logs vs Emergency Duty Details vs Leave Records
+          AppAnimatedTabSwitcher(
+            selectedIndex: _empDetailSubTab,
+            tabs: const [
+              TabItemData(
+                label: 'Attendance & Timesheet Logs',
+                icon: Icons.calendar_month_rounded,
+              ),
+              TabItemData(
+                label: 'Emergency Duty Details',
+                icon: Icons.warning_amber_rounded,
+              ),
+              TabItemData(
+                label: 'Leave Records',
+                icon: Icons.event_busy_rounded,
+              ),
+            ],
+            onTabChanged: (index) {
+              setState(() {
+                _empDetailSubTab = index;
+              });
+            },
+          ),
+          const SizedBox(height: 12),
+
+          if (_empDetailSubTab == 1)
+            _buildEmergencyDutyDetailsView(
+              emp,
+              empRecords,
+              timesheets,
+              totalOtHours,
+              isDark,
+              palette,
+              activePrimary,
+            )
+          else if (_empDetailSubTab == 2)
+            _buildEmployeeLeaveRecordsSubTab(
+              emp,
+              empLeaveSummary,
+              isDark,
+              palette,
+              activePrimary,
+            )
+          else ...[
+            if (sortedDateKeys.isEmpty)
+              Card(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        const Icon(Icons.event_busy_rounded,
+                            size: 48, color: Colors.grey),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No attendance logs recorded for ${emp.name} yet.',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: () => _addNewDateEntryLogForEmployee(emp),
+                          icon: const Icon(Icons.post_add_rounded, size: 18),
+                          label: const Text('Create New Date Entry Log',
+                              style: TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: activePrimary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            )
-          else
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: sortedDateKeys.length,
-              itemBuilder: (context, index) {
-                final dateKey = sortedDateKeys[index];
-                final dateRecords = groupedByDate[dateKey]!;
-                dateRecords.sort(
-                    (a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
+              )
+            else
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: sortedDateKeys.length,
+                itemBuilder: (context, index) {
+                  final dateKey = sortedDateKeys[index];
+                  final dateRecords = groupedByDate[dateKey]!;
+                  dateRecords.sort(
+                      (a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
 
-                final parsedDate = DateTime.parse(dateKey);
-                final formattedDateStr =
-                    DateFormat('EEEE, dd MMMM yyyy').format(parsedDate);
+                  final parsedDate = DateTime.parse(dateKey);
+                  final formattedDateStr =
+                      DateFormat('EEEE, dd MMMM yyyy').format(parsedDate);
 
-                final allValidGeofence =
-                    dateRecords.every((r) => r.isGeofenceValid);
-                final firstTime = DateFormat('hh:mm a')
-                    .format(dateRecords.first.eventTimestamp.toLocal());
+                  final allValidGeofence =
+                      dateRecords.every((r) => r.isGeofenceValid);
+                  final firstTime = DateFormat('hh:mm a')
+                      .format(dateRecords.first.eventTimestamp.toLocal());
 
-                final siteOutRecs = dateRecords
-                    .where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
-                final officeOutRecs = dateRecords.where(
-                    (r) => r.workflowStep == WorkflowStep.officeCheckOut);
-                final endRecordTime = officeOutRecs.isNotEmpty
-                    ? officeOutRecs.last.eventTimestamp
-                    : (siteOutRecs.isNotEmpty
-                        ? siteOutRecs.last.eventTimestamp
-                        : dateRecords.last.eventTimestamp);
-                final lastTime = DateFormat('hh:mm a').format(endRecordTime.toLocal());
+                  final siteOutRecs = dateRecords
+                      .where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
+                  final officeOutRecs = dateRecords.where(
+                      (r) => r.workflowStep == WorkflowStep.officeCheckOut);
+                  final endRecordTime = officeOutRecs.isNotEmpty
+                      ? officeOutRecs.last.eventTimestamp
+                      : (siteOutRecs.isNotEmpty
+                          ? siteOutRecs.last.eventTimestamp
+                          : dateRecords.last.eventTimestamp);
+                  final lastTime = DateFormat('hh:mm a').format(endRecordTime.toLocal());
 
-                final siteCheckIns = dateRecords.where((r) =>
-                    r.workflowStep == WorkflowStep.siteCheckIn ||
-                    (r.siteName != null && r.siteName!.trim().isNotEmpty));
-                final siteNamesStr = siteCheckIns.isNotEmpty
-                    ? siteCheckIns
-                        .map((r) => TimesheetCalculator.resolveSiteName(r))
-                        .toSet()
-                        .join(', ')
-                    : null;
+                  final siteCheckIns = dateRecords.where((r) =>
+                      r.workflowStep == WorkflowStep.siteCheckIn ||
+                      (r.siteName != null && r.siteName!.trim().isNotEmpty));
+                  final siteNamesStr = siteCheckIns.isNotEmpty
+                      ? siteCheckIns
+                          .map((r) => TimesheetCalculator.resolveSiteName(r))
+                          .toSet()
+                          .join(', ')
+                      : null;
 
-                final dayTimesheets =
-                    TimesheetCalculator.calculateDailyTimesheets(dateRecords);
-                final dayEntry =
-                    dayTimesheets.isNotEmpty ? dayTimesheets.first : null;
-                final dayReg = dayEntry?.regularHours ?? 0.0;
-                final dayOt = dayEntry?.overtimeHours ?? 0.0;
-                final dayBreakMin = dayEntry?.breakDuration.inMinutes ?? 0;
+                  final dayTimesheets =
+                      TimesheetCalculator.calculateDailyTimesheets(dateRecords);
+                  final dayEntry =
+                      dayTimesheets.isNotEmpty ? dayTimesheets.first : null;
+                  final dayReg = dayEntry?.regularHours ?? 0.0;
+                  final dayOt = dayEntry?.overtimeHours ?? 0.0;
+                  final dayBreakMin = dayEntry?.breakDuration.inMinutes ?? 0;
 
-                final dateSiteSummaries =
-                    TimesheetCalculator.calculateSiteManHours(dateRecords);
-
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                  elevation: 1.5,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: () {
-                      setState(() {
-                        _selectedDate = parsedDate;
-                      });
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(14.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    elevation: 1.5,
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      leading: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: activePrimary.withValues(
+                              alpha: isDark ? 0.2 : 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.calendar_month_rounded,
+                            color: activePrimary),
+                      ),
+                      title: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: activePrimary.withValues(
-                                      alpha: isDark ? 0.2 : 0.12),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(Icons.calendar_month_rounded,
-                                    color: activePrimary, size: 18),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      formattedDateStr,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold, fontSize: 14),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '$firstTime - $lastTime (${dateRecords.length} Step Logs)',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: isDark
-                                            ? AppColors.textSecondaryDark
-                                            : Colors.grey.shade700,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              ElevatedButton.icon(
-                                onPressed: () async {
-                                  final ok =
-                                      await AdminEditAttendanceDialog.show(
-                                    context,
-                                    employeeId: emp.id,
-                                    employeeName: emp.name,
-                                    date: parsedDate,
-                                    initialCheckIn: dayEntry?.checkInTime,
-                                    initialCheckOut: dayEntry?.checkOutTime,
-                                    initialOtHours:
-                                        dayEntry?.manualOvertimeHours ??
-                                            dayEntry?.overtimeHours,
-                                    initialRemarks: dayEntry?.remarks,
-                                  );
-                                  if (ok == true && mounted) {
-                                    setState(() {});
-                                  }
-                                },
-                                icon: const Icon(Icons.edit_calendar_rounded,
-                                    size: 14),
-                                label: const Text('Adjust',
-                                    style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold)),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: activePrimary,
-                                  foregroundColor: Colors.white,
-                                  elevation: 1,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 6),
-                                  minimumSize: Size.zero,
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                              ),
-                            ],
+                          Expanded(
+                            child: Text(
+                              formattedDateStr,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 15),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          const SizedBox(height: 10),
-
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 4,
+                          Row(
                             children: [
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 7, vertical: 2.5),
+                                    horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: activePrimary.withValues(
                                       alpha: isDark ? 0.2 : 0.12),
@@ -1915,10 +2061,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                       color: activePrimary),
                                 ),
                               ),
-                              if (dayOt > 0)
+                              if (dayOt > 0) ...[
+                                const SizedBox(width: 4),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 7, vertical: 2.5),
+                                      horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
                                     color: isDark
                                         ? Colors.orange.withValues(alpha: 0.2)
@@ -1939,18 +2086,19 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                             : Colors.orange.shade900),
                                   ),
                                 ),
-                              if (dayBreakMin > 0)
+                              ],
+                              if (dayBreakMin > 0) ...[
+                                const SizedBox(width: 4),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 7, vertical: 2.5),
+                                      horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
                                     color: isDark
                                         ? Colors.amber.withValues(alpha: 0.2)
                                         : Colors.amber.shade100,
                                     borderRadius: BorderRadius.circular(6),
                                     border: isDark
-                                        ? Border.all(
-                                            color: Colors.amber.shade800)
+                                        ? Border.all(color: Colors.amber.shade800)
                                         : null,
                                   ),
                                   child: Text(
@@ -1963,174 +2111,214 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                             : Colors.amber.shade900),
                                   ),
                                 ),
+                              ],
                             ],
-                          ),
-
-                          if (dateSiteSummaries.isNotEmpty ||
-                              siteNamesStr != null) ...[
-                            const SizedBox(height: 6),
-                            if (dateSiteSummaries.isEmpty &&
-                                siteNamesStr != null)
-                              Row(
-                                children: [
-                                  Icon(Icons.place_rounded,
-                                      size: 14, color: activePrimary),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Text(
-                                      'Sites: $siteNamesStr',
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: activePrimary),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                          )
+                        ],
+                      ),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 6.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.schedule_rounded,
+                                    size: 14,
+                                    color: isDark
+                                        ? AppColors.textSecondaryDark
+                                        : Colors.grey.shade600),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '$firstTime - $lastTime (${dateRecords.length} Step Logs)',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDark
+                                        ? AppColors.textSecondaryDark
+                                        : Colors.grey.shade700,
                                   ),
-                                ],
-                              )
-                            else
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 4,
-                                children: dateSiteSummaries.map((s) {
-                                  final col = _getClientColor(s.siteName);
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 7, vertical: 2.5),
-                                    decoration: BoxDecoration(
-                                      color: col.withValues(
-                                          alpha: isDark ? 0.18 : 0.1),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(
-                                          color: col.withValues(
-                                              alpha: isDark ? 0.4 : 0.25)),
-                                    ),
+                                ),
+                              ],
+                            ),
+                            // Date-Specific Site Hours Chips
+                            () {
+                              final dateSiteSummaries =
+                                  TimesheetCalculator.calculateSiteManHours(
+                                      dateRecords);
+                              if (dateSiteSummaries.isEmpty) {
+                                if (siteNamesStr != null) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 3.0),
                                     child: Row(
-                                      mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.location_city_rounded,
-                                            size: 12, color: col),
+                                        Icon(Icons.place_rounded,
+                                            size: 14, color: activePrimary),
                                         const SizedBox(width: 4),
-                                        Text(
-                                          '${s.siteName}: ',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            color: isDark
-                                                ? AppColors.textPrimaryDark
-                                                : Colors.grey.shade800,
-                                          ),
-                                        ),
-                                        Text(
-                                          '${s.totalHours.toStringAsFixed(1)}h',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: col,
+                                        Expanded(
+                                          child: Text(
+                                            'Sites: $siteNamesStr',
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: activePrimary),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
                                       ],
                                     ),
                                   );
-                                }).toList(),
-                              ),
-                          ],
+                                }
+                                return const SizedBox.shrink();
+                              }
 
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 4,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2.5),
-                                decoration: BoxDecoration(
-                                  color: (allValidGeofence
-                                          ? AppColors.success
-                                          : AppColors.error)
-                                      .withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(6),
+                              return Padding(
+                                padding:
+                                    const EdgeInsets.only(top: 5.0, bottom: 2.0),
+                                child: Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  children: dateSiteSummaries.map((s) {
+                                    final col = _getClientColor(s.siteName);
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 7, vertical: 2.5),
+                                      decoration: BoxDecoration(
+                                        color: col.withValues(
+                                            alpha: isDark ? 0.18 : 0.1),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                            color: col.withValues(
+                                                alpha: isDark ? 0.4 : 0.25)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.location_city_rounded,
+                                              size: 12, color: col),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '${s.siteName}: ',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: isDark
+                                                  ? AppColors.textPrimaryDark
+                                                  : Colors.grey.shade800,
+                                            ),
+                                          ),
+                                          Text(
+                                            '${s.totalHours.toStringAsFixed(1)}h',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: col,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
                                 ),
-                                child: Text(
-                                  allValidGeofence
-                                      ? 'VALID GEOFENCE'
-                                      : 'GEOFENCE VIOLATION',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: allValidGeofence
-                                        ? AppColors.success
-                                        : AppColors.error,
-                                  ),
-                                ),
-                              ),
-                              if (dayEntry != null && dayEntry.isEdited)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2.5),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        Colors.purple.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(
-                                        color: Colors.purple
-                                            .withValues(alpha: 0.3)),
-                                  ),
-                                  child: const Text(
-                                    'ADMIN MODIFIED',
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.purple,
-                                    ),
-                                  ),
-                                ),
-                              Text(
-                                '${dateRecords.where((r) => r.photoBase64.isNotEmpty).length} Photo(s)',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: isDark
-                                        ? AppColors.textSecondaryDark
-                                        : Colors.grey),
-                              ),
-                            ],
-                          ),
-
-                          if (dayEntry != null &&
-                              dayEntry.remarks != null &&
-                              dayEntry.remarks!.trim().isNotEmpty) ...[
-                            const SizedBox(height: 6),
+                              );
+                            }(),
+                            const SizedBox(height: 4),
                             Row(
                               children: [
-                                Icon(Icons.note_alt_rounded,
-                                    size: 13, color: Colors.purple.shade400),
-                                const SizedBox(width: 4),
-                                Expanded(
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: (allValidGeofence
+                                            ? AppColors.success
+                                            : AppColors.error)
+                                        .withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
                                   child: Text(
-                                    'Remarks: ${dayEntry.remarks}',
+                                    allValidGeofence
+                                        ? 'VALID GEOFENCE'
+                                        : 'GEOFENCE VIOLATION',
                                     style: TextStyle(
-                                      fontSize: 11,
-                                      fontStyle: FontStyle.italic,
-                                      color: isDark
-                                          ? AppColors.textSecondaryDark
-                                          : Colors.grey.shade800,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: allValidGeofence
+                                          ? AppColors.success
+                                          : AppColors.error,
                                     ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
+                                if (dayEntry != null && dayEntry.isEdited) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.purple.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                          color: Colors.purple.withValues(alpha: 0.3)),
+                                    ),
+                                    child: const Text(
+                                      'ADMIN MODIFIED',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.purple,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${dateRecords.where((r) => r.photoBase64.isNotEmpty).length} Photo(s)',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: isDark
+                                          ? AppColors.textSecondaryDark
+                                          : Colors.grey),
+                                )
                               ],
                             ),
+                            if (dayEntry != null &&
+                                dayEntry.remarks != null &&
+                                dayEntry.remarks!.trim().isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(Icons.note_alt_rounded,
+                                      size: 13, color: Colors.purple.shade400),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      'Remarks: ${dayEntry.remarks}',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontStyle: FontStyle.italic,
+                                        color: isDark
+                                            ? AppColors.textSecondaryDark
+                                            : Colors.grey.shade800,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
+                      trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                      onTap: () {
+                        setState(() {
+                          _selectedDate = parsedDate;
+                        });
+                      },
                     ),
-                  ),
-                );
-              },
-            ),
+                  );
+                },
+              ),
           ],
         ],
       ),
@@ -2324,16 +2512,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                       ),
                       child: Column(
                         children: [
-                          FittedBox(
+                          const FittedBox(
                             fit: BoxFit.scaleDown,
                             child: Text(
                               'Other OT',
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
-                                color: isDark
-                                    ? Colors.orange.shade300
-                                    : Colors.orange.shade900,
+                                color: Colors.orange,
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -2371,24 +2557,24 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                       decoration: BoxDecoration(
                         color: isDark
                             ? AppColors.surfaceDark
-                            : AppColors.success.withValues(alpha: 0.1),
+                            : activePrimary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
                           color: isDark
-                              ? AppColors.cardBorderDark
-                              : AppColors.success.withValues(alpha: 0.3),
+                              ? palette.cardBorderDark
+                              : activePrimary.withValues(alpha: 0.3),
                         ),
                       ),
                       child: Column(
                         children: [
-                          const FittedBox(
+                          FittedBox(
                             fit: BoxFit.scaleDown,
                             child: Text(
                               'Total OT',
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.success,
+                                color: activePrimary,
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -2398,10 +2584,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                             fit: BoxFit.scaleDown,
                             child: Text(
                               '${totalOtHours.toStringAsFixed(1)} hrs',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.success,
+                                color: activePrimary,
                               ),
                             ),
                           ),
@@ -2418,7 +2604,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : Colors.grey.shade700,
                   ),
                 ),
               ),
@@ -2436,7 +2624,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: isDark ? palette.textPrimaryDark : palette.textPrimaryLight,
+                  color: isDark
+                      ? palette.textPrimaryDark
+                      : palette.textPrimaryLight,
                 ),
               ),
             ),
@@ -2513,9 +2703,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   ? DateFormat('hh:mm a')
                       .format(outRec.eventTimestamp.toLocal())
                   : 'In Progress';
-
-              final siteName = TimesheetCalculator.resolveSiteName(inRec);
-              final address = TimesheetCalculator.resolveFullAddress(inRec);
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -2634,11 +2821,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      if (inRec.photoBase64.trim().isNotEmpty ||
-                          (outRec != null && outRec.photoBase64.trim().isNotEmpty)) ...[
+                      if (inRec.photoBase64.isNotEmpty ||
+                          (outRec != null && outRec.photoBase64.isNotEmpty)) ...[
                         Row(
                           children: [
-                            if (inRec.photoBase64.trim().isNotEmpty)
+                            if (inRec.photoBase64.isNotEmpty)
                               GestureDetector(
                                 onTap: () => _showFullImageDialog(inRec),
                                 child: Container(
@@ -2652,11 +2839,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                   child: _buildPhotoWidget(inRec.photoBase64),
                                 ),
                               ),
-                            if (inRec.photoBase64.trim().isNotEmpty &&
+                            if (inRec.photoBase64.isNotEmpty &&
                                 outRec != null &&
-                                outRec.photoBase64.trim().isNotEmpty)
+                                outRec.photoBase64.isNotEmpty)
                               const SizedBox(width: 10),
-                            if (outRec != null && outRec.photoBase64.trim().isNotEmpty)
+                            if (outRec != null && outRec.photoBase64.isNotEmpty)
                               GestureDetector(
                                 onTap: () => _showFullImageDialog(outRec),
                                 child: Container(
@@ -2674,7 +2861,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         ),
                         const SizedBox(height: 8),
                       ],
-                      if (address.isNotEmpty || siteName.isNotEmpty) ...[
+                      if (inRec.address.isNotEmpty) ...[
                         Row(
                           children: [
                             const Icon(Icons.location_on_rounded,
@@ -2682,9 +2869,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                             const SizedBox(width: 4),
                             Expanded(
                               child: Text(
-                                siteName.isNotEmpty && siteName != address
-                                    ? '$siteName • $address'
-                                    : (address.isNotEmpty ? address : siteName),
+                                inRec.address,
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: isDark
@@ -2699,7 +2884,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         ),
                       ],
                       if (inRec.remarks != null &&
-                          inRec.remarks!.trim().isNotEmpty) ...[
+                          inRec.remarks!.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Row(
                           children: [
@@ -2731,6 +2916,499 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     );
   }
 
+  Widget _buildEmployeeLeaveRecordsSubTab(
+    EmployeeEntity emp,
+    EmployeeLeaveSummary summary,
+    bool isDark,
+    dynamic palette,
+    Color activePrimary,
+  ) {
+    List<DailyLeaveRecord> displayedRecords = summary.dailyRecords;
+    if (_empLeaveFilterType == 'leaves') {
+      displayedRecords = summary.leaveDaysOnly;
+    } else if (_empLeaveFilterType == 'sundays') {
+      displayedRecords = summary.sundayOffsOnly;
+    } else if (_empLeaveFilterType == 'present') {
+      displayedRecords = summary.workedDaysOnly;
+    }
+
+    final sortedList = List<DailyLeaveRecord>.from(displayedRecords)
+      ..sort((a, b) => b.date.compareTo(a.date));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Policy Banner
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.purple.withValues(alpha: isDark ? 0.15 : 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark ? Colors.purple.shade700 : Colors.purple.shade200,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.beach_access_rounded,
+                  color:
+                      isDark ? Colors.purple.shade300 : Colors.purple.shade800,
+                  size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Leave Policy: Sunday is the Only Day of Leave in a Week',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: isDark
+                            ? Colors.purple.shade200
+                            : Colors.purple.shade900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Monday through Saturday are scheduled working days. Unworked working days are accounted as Leaves / Absences. Working on Sunday is counted as Sunday Duty.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark
+                            ? palette.textSecondaryDark
+                            : Colors.purple.shade900.withValues(alpha: 0.8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Metrics Breakdown Row
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _buildEmpDetailLeaveMetric(
+              label: 'Working Days',
+              value: '${summary.elapsedWorkingDays} Days',
+              subtitle: 'Mon–Sat Scheduled',
+              color: activePrimary,
+              icon: Icons.calendar_today_rounded,
+              isDark: isDark,
+              palette: palette,
+            ),
+            _buildEmpDetailLeaveMetric(
+              label: 'Days Worked',
+              value: '${summary.daysWorked} Days',
+              subtitle:
+                  '${summary.workingDaysPresent} Mon–Sat + ${summary.sundayDutyDays} Sun',
+              color: Colors.green.shade700,
+              icon: Icons.check_circle_rounded,
+              isDark: isDark,
+              palette: palette,
+            ),
+            _buildEmpDetailLeaveMetric(
+              label: 'Leaves Taken',
+              value: '${summary.leaveDays} Days',
+              subtitle: summary.leaveDays == 0
+                  ? 'Perfect Attendance'
+                  : 'Working Days Missed',
+              color: summary.leaveDays > 0
+                  ? Colors.red.shade700
+                  : Colors.green.shade700,
+              icon: Icons.event_busy_rounded,
+              isDark: isDark,
+              palette: palette,
+            ),
+            _buildEmpDetailLeaveMetric(
+              label: 'Sunday Offs',
+              value: '${summary.sundayWeeklyOffs} Days',
+              subtitle: 'Weekly Leave Days',
+              color: Colors.purple.shade700,
+              icon: Icons.weekend_rounded,
+              isDark: isDark,
+              palette: palette,
+            ),
+            _buildEmpDetailLeaveMetric(
+              label: 'Attendance Rate',
+              value: '${summary.attendancePercentage.toStringAsFixed(1)}%',
+              subtitle: 'On Working Days',
+              color: Colors.indigo.shade700,
+              icon: Icons.pie_chart_rounded,
+              isDark: isDark,
+              palette: palette,
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+
+        // Filter Chips Row
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _buildFilterChoiceChip(
+                label: 'All Days (${summary.dailyRecords.length})',
+                isSelected: _empLeaveFilterType == 'all',
+                onSelected: () => setState(() => _empLeaveFilterType = 'all'),
+                activePrimary: activePrimary,
+                isDark: isDark,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChoiceChip(
+                label: 'Leaves Only (${summary.leaveDays})',
+                isSelected: _empLeaveFilterType == 'leaves',
+                onSelected: () =>
+                    setState(() => _empLeaveFilterType = 'leaves'),
+                activePrimary: Colors.red.shade700,
+                isDark: isDark,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChoiceChip(
+                label: 'Sunday Offs (${summary.sundayWeeklyOffs})',
+                isSelected: _empLeaveFilterType == 'sundays',
+                onSelected: () =>
+                    setState(() => _empLeaveFilterType = 'sundays'),
+                activePrimary: Colors.purple.shade700,
+                isDark: isDark,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChoiceChip(
+                label: 'Worked Days (${summary.daysWorked})',
+                isSelected: _empLeaveFilterType == 'present',
+                onSelected: () =>
+                    setState(() => _empLeaveFilterType = 'present'),
+                activePrimary: Colors.green.shade700,
+                isDark: isDark,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // List of Day Records
+        if (sortedList.isEmpty)
+          Card(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Center(
+                child: Text(
+                  'No records matching the selected filter.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark
+                        ? palette.textSecondaryDark
+                        : Colors.grey.shade600,
+                  ),
+                ),
+              ),
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: sortedList.length,
+            itemBuilder: (context, index) {
+              final d = sortedList[index];
+              return _buildDailyLeaveRecordCard(
+                  d, isDark, palette, activePrimary);
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildDailyLeaveRecordCard(
+    DailyLeaveRecord d,
+    bool isDark,
+    dynamic palette,
+    Color activePrimary,
+  ) {
+    Color statusColor;
+    IconData statusIcon;
+    String statusTitle;
+    String statusSubtitle;
+
+    switch (d.type) {
+      case LeaveDayType.present:
+        statusColor = Colors.green;
+        statusIcon = Icons.check_circle_rounded;
+        statusTitle = 'Present (${d.totalHours.toStringAsFixed(1)}h)';
+        statusSubtitle =
+            'Regular: ${d.regularHours.toStringAsFixed(1)}h • OT: ${d.overtimeHours.toStringAsFixed(1)}h';
+        break;
+      case LeaveDayType.leaveAbsent:
+        statusColor = Colors.red.shade700;
+        statusIcon = Icons.cancel_rounded;
+        statusTitle = 'Leave / Absent';
+        statusSubtitle = 'Working day missed • No attendance logged';
+        break;
+      case LeaveDayType.sundayWeeklyOff:
+        statusColor = Colors.purple.shade700;
+        statusIcon = Icons.weekend_rounded;
+        statusTitle = 'Sunday (Weekly Off)';
+        statusSubtitle = 'Designated weekly leave day • Scheduled rest day';
+        break;
+      case LeaveDayType.sundayDuty:
+        statusColor = Colors.orange.shade800;
+        statusIcon = Icons.stars_rounded;
+        statusTitle = 'Sunday Duty (${d.totalHours.toStringAsFixed(1)}h)';
+        statusSubtitle = 'Worked on weekly off • OT / Sunday duty';
+        break;
+      case LeaveDayType.futureDay:
+        statusColor = Colors.grey;
+        statusIcon = Icons.schedule_rounded;
+        statusTitle = 'Upcoming Day';
+        statusSubtitle = 'Scheduled day in current cycle';
+        break;
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      elevation: 0.8,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isDark
+              ? palette.cardBorderDark
+              : statusColor.withValues(alpha: 0.25),
+          width: 1,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: isDark ? 0.2 : 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(statusIcon, color: statusColor, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        d.fullDisplay,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: isDark
+                              ? palette.textPrimaryDark
+                              : palette.textPrimaryLight,
+                        ),
+                      ),
+                      if (d.isSunday) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Sunday',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: isDark
+                                  ? Colors.purple.shade300
+                                  : Colors.purple.shade800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    statusSubtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark
+                          ? palette.textSecondaryDark
+                          : Colors.grey.shade700,
+                    ),
+                  ),
+                  if (d.remarks != null && d.remarks!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Note: ${d.remarks!}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontStyle: FontStyle.italic,
+                        color: activePrimary,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: isDark ? 0.22 : 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                statusTitle,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: statusColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChoiceChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onSelected,
+    required Color activePrimary,
+    required bool isDark,
+  }) {
+    return InkWell(
+      onTap: onSelected,
+      borderRadius: BorderRadius.circular(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? activePrimary
+              : (isDark ? Colors.grey.shade800 : Colors.grey.shade100),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? activePrimary
+                : (isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected
+                ? Colors.white
+                : (isDark ? Colors.grey.shade300 : Colors.grey.shade800),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMiniBadge({
+    required String label,
+    required Color color,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: isDark ? 0.2 : 0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmpDetailLeaveMetric({
+    required String label,
+    required String value,
+    required String subtitle,
+    required Color color,
+    required IconData icon,
+    required bool isDark,
+    required dynamic palette,
+  }) {
+    return Container(
+      width: 140,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isDark ? palette.surfaceDark : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color:
+              isDark ? palette.cardBorderDark : color.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                    color: isDark
+                        ? palette.textSecondaryDark
+                        : palette.textSecondaryLight,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 9.5,
+              color: isDark
+                  ? palette.textSecondaryDark
+                  : palette.textSecondaryLight,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _deleteEmergencySession(
       AttendanceRecord inRec, AttendanceRecord? outRec) async {
     final confirm = await showDialog<bool>(
@@ -2752,10 +3430,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     );
     if (confirm == true) {
       _db.deleteAttendanceRecord(inRec.id);
-      SupabaseService().deleteAttendanceRecordFromSupabase(inRec.id);
       if (outRec != null) {
         _db.deleteAttendanceRecord(outRec.id);
-        SupabaseService().deleteAttendanceRecordFromSupabase(outRec.id);
       }
       setState(() {});
       if (mounted) {
@@ -3178,8 +3854,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     );
 
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final dbEmployees = _db.getEmployees();
-    final allEmployees = dbEmployees.isNotEmpty ? dbEmployees : [emp];
+    final allEmployees = _getSynthesizedEmployees();
     String selectedEmpId = emp.id;
     String selectedEmpName = emp.name;
 
@@ -3560,7 +4235,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     } else if (!isCompletedSession && outRec != null) {
                       // Converted from completed to active callout: remove outRec
                       _db.deleteAttendanceRecord(outRec.id);
-                      SupabaseService().deleteAttendanceRecordFromSupabase(outRec.id);
                     }
 
                     // Push to Supabase Cloud asynchronously
@@ -3603,14 +4277,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
     final selectedDateStr = DateFormat('yyyy-MM-dd').format(_selectedDate!);
 
-    final allEmpRecords = _db.getAttendanceRecords().where((r) {
-      return _recordMatchesEmployee(r, emp);
+    final dateRecords = _db.getAttendanceRecords().where((r) {
+      final matchesUser = _recordMatchesEmployee(r, emp);
+      final matchesDate =
+          DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()) == selectedDateStr;
+      return matchesUser && matchesDate;
     }).toList();
 
-    final groupedByDate =
-        TimesheetCalculator.groupRecordsByShiftDate(allEmpRecords, isSingleEmployee: true);
-    final dateRecords =
-        List<AttendanceRecord>.from(groupedByDate[selectedDateStr] ?? []);
     dateRecords.sort((a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
 
     final formattedDateTitle =
@@ -3651,7 +4324,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   });
                 },
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -3662,23 +4335,18 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                           .textTheme
                           .titleMedium
                           ?.copyWith(fontWeight: FontWeight.bold),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                     Text(
                       formattedDateTitle,
                       style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 12,
                           color: isDark
                               ? palette.textSecondaryDark
                               : palette.textSecondaryLight),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 6),
               ElevatedButton.icon(
                 onPressed: () async {
                   final tEntry = dayTimesheets.isNotEmpty ? dayTimesheets.first : null;
@@ -3696,19 +4364,18 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     setState(() {});
                   }
                 },
-                icon: const Icon(Icons.edit_calendar_rounded, size: 14),
-                label: const Text('Adjust',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                icon: const Icon(Icons.edit_calendar_rounded, size: 18),
+                label: const Text('Adjust Shift & OT',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: activePrimary,
                   foregroundColor: Colors.white,
-                  elevation: 2,
+                  elevation: 3,
+                  shadowColor: activePrimary.withValues(alpha: 0.4),
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
               ),
@@ -3753,50 +4420,41 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     Expanded(
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 4, vertical: 8),
+                            horizontal: 8, vertical: 8),
                         decoration: BoxDecoration(
                           color: activePrimary.withValues(
                               alpha: isDark ? 0.2 : 0.12),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text('Regular',
-                                  style: TextStyle(
-                                      fontSize: 10,
-                                      color: activePrimary,
-                                      fontWeight: FontWeight.w600)),
-                            ),
+                            Text('Regular',
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    color: activePrimary,
+                                    fontWeight: FontWeight.w600)),
                             const SizedBox(height: 2),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text('${regHrs.toStringAsFixed(1)}h',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                      color: activePrimary)),
-                            ),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text('Max 8.0h',
-                                  style: TextStyle(
-                                      fontSize: 8.5,
-                                      color: isDark
-                                          ? palette.textSecondaryDark
-                                          : Colors.grey)),
-                            ),
+                            Text('${regHrs.toStringAsFixed(1)}h',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: activePrimary)),
+                            Text('Max 8.0h',
+                                style: TextStyle(
+                                    fontSize: 8.5,
+                                    color: isDark
+                                        ? palette.textSecondaryDark
+                                        : Colors.grey)),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 4, vertical: 8),
+                            horizontal: 8, vertical: 8),
                         decoration: BoxDecoration(
                           color: otHrs > 0
                               ? (isDark
@@ -3811,56 +4469,47 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               : null,
                         ),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text('Overtime',
-                                  style: TextStyle(
-                                      fontSize: 10,
-                                      color: otHrs > 0
-                                          ? (isDark
-                                              ? Colors.orange.shade300
-                                              : Colors.orange.shade900)
-                                          : (isDark
-                                              ? AppColors.textSecondaryDark
-                                              : Colors.grey.shade700),
-                                      fontWeight: FontWeight.w600)),
-                            ),
+                            Text('Overtime',
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    color: otHrs > 0
+                                        ? (isDark
+                                            ? Colors.orange.shade300
+                                            : Colors.orange.shade900)
+                                        : (isDark
+                                            ? AppColors.textSecondaryDark
+                                            : Colors.grey.shade700),
+                                    fontWeight: FontWeight.w600)),
                             const SizedBox(height: 2),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text('+${otHrs.toStringAsFixed(1)}h',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                      color: otHrs > 0
-                                          ? (isDark
-                                              ? Colors.orange.shade300
-                                              : Colors.orange.shade900)
-                                          : (isDark
-                                              ? AppColors.textSecondaryDark
-                                              : Colors.grey.shade700))),
-                            ),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text('Beyond 10h',
-                                  style: TextStyle(
-                                      fontSize: 8.5,
-                                      color: isDark
-                                          ? AppColors.textSecondaryDark
-                                          : Colors.grey)),
-                            ),
+                            Text('+${otHrs.toStringAsFixed(1)}h',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: otHrs > 0
+                                        ? (isDark
+                                            ? Colors.orange.shade300
+                                            : Colors.orange.shade900)
+                                        : (isDark
+                                            ? AppColors.textSecondaryDark
+                                            : Colors.grey.shade700))),
+                            Text('Beyond 10.0h',
+                                style: TextStyle(
+                                    fontSize: 8.5,
+                                    color: isDark
+                                        ? AppColors.textSecondaryDark
+                                        : Colors.grey)),
                           ],
                         ),
                       ),
                     ),
                     if (breakMin > 0) ...[
-                      const SizedBox(width: 4),
+                      const SizedBox(width: 6),
                       Expanded(
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 8),
+                              horizontal: 8, vertical: 8),
                           decoration: BoxDecoration(
                             color: isDark
                                 ? Colors.amber.withValues(alpha: 0.2)
@@ -3873,82 +4522,64 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                             ),
                           ),
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text('Break',
-                                    style: TextStyle(
-                                        fontSize: 10,
-                                        color: isDark
-                                            ? Colors.amber.shade300
-                                            : Colors.amber.shade900,
-                                        fontWeight: FontWeight.w600)),
-                              ),
+                              Text('Break',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      color: isDark
+                                          ? Colors.amber.shade300
+                                          : Colors.amber.shade900,
+                                      fontWeight: FontWeight.w600)),
                               const SizedBox(height: 2),
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text('${breakMin}m',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                        color: isDark
-                                            ? Colors.amber.shade300
-                                            : Colors.amber.shade900)),
-                              ),
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text('Excluded',
-                                    style: TextStyle(
-                                        fontSize: 8.5,
-                                        color: isDark
-                                            ? AppColors.textSecondaryDark
-                                            : Colors.grey)),
-                              ),
+                              Text('${breakMin}m',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: isDark
+                                          ? Colors.amber.shade300
+                                          : Colors.amber.shade900)),
+                              Text('Excluded',
+                                  style: TextStyle(
+                                      fontSize: 8.5,
+                                      color: isDark
+                                          ? AppColors.textSecondaryDark
+                                          : Colors.grey)),
                             ],
                           ),
                         ),
                       ),
                     ],
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 4, vertical: 8),
+                            horizontal: 8, vertical: 8),
                         decoration: BoxDecoration(
                           color: AppColors.success
                               .withValues(alpha: isDark ? 0.2 : 0.1),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: const Text('Net Time',
-                                  style: TextStyle(
-                                      fontSize: 10,
-                                      color: AppColors.success,
-                                      fontWeight: FontWeight.w600)),
-                            ),
+                            const Text('Net Time',
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    color: AppColors.success,
+                                    fontWeight: FontWeight.w600)),
                             const SizedBox(height: 2),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text('${totalHrs.toStringAsFixed(1)}h',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                      color: AppColors.success)),
-                            ),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text('Reg + OT',
-                                  style: TextStyle(
-                                      fontSize: 8.5,
-                                      color: isDark
-                                          ? AppColors.textSecondaryDark
-                                          : Colors.grey)),
-                            ),
+                            Text('${totalHrs.toStringAsFixed(1)}h',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: AppColors.success)),
+                            Text('Reg + OT',
+                                style: TextStyle(
+                                    fontSize: 8.5,
+                                    color: isDark
+                                        ? AppColors.textSecondaryDark
+                                        : Colors.grey)),
                           ],
                         ),
                       ),
@@ -3991,37 +4622,31 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Expanded(
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: activePrimary.withValues(
-                                    alpha: isDark ? 0.2 : 0.12),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(Icons.location_city_rounded,
-                                  color: activePrimary, size: 16),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: activePrimary.withValues(
+                                  alpha: isDark ? 0.2 : 0.12),
+                              shape: BoxShape.circle,
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Site-Wise Hours Spent on this Date',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  color: isDark
-                                      ? palette.textPrimaryDark
-                                      : palette.textPrimaryLight,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                            child: Icon(Icons.location_city_rounded,
+                                color: activePrimary, size: 16),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Site-Wise Hours Spent on this Date',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: isDark
+                                  ? palette.textPrimaryDark
+                                  : palette.textPrimaryLight,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 2.5),
@@ -4230,49 +4855,43 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: _getStepColor(r.workflowStep)
-                                          .withValues(alpha: 0.15),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      _getStepIcon(r.workflowStep),
-                                      color: _getStepColor(r.workflowStep),
-                                      size: 20,
-                                    ),
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: _getStepColor(r.workflowStep)
+                                        .withValues(alpha: 0.15),
+                                    shape: BoxShape.circle,
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          r.workflowStep.displayName,
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 14),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        Text(
-                                          timeStr,
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              color: isDark
-                                                  ? AppColors.textSecondaryDark
-                                                  : AppColors.textSecondaryLight),
-                                        ),
-                                      ],
-                                    ),
+                                  child: Icon(
+                                    _getStepIcon(r.workflowStep),
+                                    color: _getStepColor(r.workflowStep),
+                                    size: 20,
                                   ),
-                                ],
-                              ),
+                                ),
+                                const SizedBox(width: 10),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      r.workflowStep.displayName,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14),
+                                    ),
+                                    Text(
+                                      timeStr,
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: isDark
+                                              ? AppColors.textSecondaryDark
+                                              : AppColors.textSecondaryLight),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 10, vertical: 4),
@@ -4374,51 +4993,41 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
                                       Icon(Icons.camera_alt_rounded,
                                           size: 16, color: activePrimary),
                                       const SizedBox(width: 6),
-                                      Expanded(
-                                        child: Text(
-                                          'Verified Live Camera Snapshot',
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
-                                              color: activePrimary),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
+                                      Text(
+                                        'Verified Live Camera Snapshot',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: activePrimary),
                                       ),
-                                      const SizedBox(width: 8),
-                                      Flexible(
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: activePrimary.withValues(
-                                                alpha: isDark ? 0.2 : 0.1),
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(Icons.place_rounded,
-                                                  size: 12, color: activePrimary),
-                                              const SizedBox(width: 3),
-                                              Flexible(
-                                                child: Text(
-                                                  siteNameText,
-                                                  style: TextStyle(
-                                                      fontSize: 10,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: activePrimary),
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
+                                      const Spacer(),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: activePrimary.withValues(
+                                              alpha: isDark ? 0.2 : 0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.place_rounded,
+                                                size: 12, color: activePrimary),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              siteNameText,
+                                              style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: activePrimary),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ],
@@ -4583,71 +5192,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   // ==========================================
   // HELPER WIDGETS & METHODS
   // ==========================================
-  Widget _buildSyncButton() {
-    final pendingAttendance = _db.getAllPendingSyncRecords().length;
-    final pendingReports = _db.getPendingLocalServiceReports().length;
-    final totalPending = pendingAttendance + pendingReports;
-
-    if (_isSyncing) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-            ),
-            SizedBox(width: 8),
-            Text(
-              'Syncing...',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (totalPending > 0) {
-      return ElevatedButton.icon(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.amber.shade800,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          elevation: 2,
-        ),
-        onPressed: _syncOfflineData,
-        icon: const Icon(Icons.cloud_upload_rounded, size: 16),
-        label: Text(
-          'Sync to DB ($totalPending)',
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-        ),
-      );
-    }
-
-    return OutlinedButton.icon(
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.success,
-        side: const BorderSide(color: AppColors.success),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-      onPressed: _syncOfflineData,
-      icon: const Icon(Icons.cloud_done_rounded, size: 16),
-      label: const Text(
-        'Synced to DB',
-        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
-
   Widget _buildPhotoWidget(String photoBase64) {
     final cleanPhoto = photoBase64.trim();
     if (cleanPhoto.isEmpty) {
@@ -4691,16 +5235,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         return Image.file(File(cleanPhoto), fit: BoxFit.cover);
       }
 
-      final decodedBytes = _getOrDecodeAvatar(cleanPhoto);
-      if (decodedBytes != null) {
-        return Image.memory(decodedBytes, fit: BoxFit.cover);
+      String base64Str = cleanPhoto;
+      if (base64Str.contains(',')) {
+        base64Str = base64Str.split(',').last;
       }
-      return Container(
-        color: Colors.blueGrey.shade800,
-        child: const Center(
-          child: Icon(Icons.person_pin, size: 65, color: Colors.white70),
-        ),
-      );
+      base64Str = base64Str.replaceAll(RegExp(r'\s+'), '');
+
+      final decodedBytes = base64Decode(base64Str);
+      return Image.memory(decodedBytes, fit: BoxFit.cover);
     } catch (_) {
       return Container(
         color: Colors.blueGrey.shade800,
@@ -4827,17 +5369,12 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         employee: emp,
         records: records,
         salaryCyclePeriod: _selectedSalaryCycle?.shortPeriodLabel,
+        salaryCycle: _selectedSalaryCycle,
       );
-      await _db.saveGeneratedReportLocally({
-        'title': '${emp.name} Attendance Report',
-        'type': 'PDF',
-        'recordCount': records.length,
-        'filterDetails': 'Employee: ${emp.name} (${emp.employeeCode})',
-      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${emp.name} PDF report saved & ready for download!'),
+            content: Text('${emp.name} PDF report ready for download/saving!'),
             backgroundColor: AppColors.primary,
           ),
         );
@@ -4858,22 +5395,21 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   Future<void> _exportCumulativePdf(
       List<EmployeeEntity> employees, List<AttendanceRecord> records) async {
     try {
+      final recordsToExport = _cumulativeSalaryCycle != null
+          ? _cumulativeSalaryCycle!.filterRecords(records)
+          : records;
+
       await PdfExportService.downloadCumulativePdfFile(
         organizationName: _db.organization?.name ?? 'Fusion Enterprise',
         employees: employees,
-        records: records,
+        records: recordsToExport,
         salaryCyclePeriod: _cumulativeSalaryCycle?.shortPeriodLabel,
+        salaryCycle: _cumulativeSalaryCycle,
       );
-      await _db.saveGeneratedReportLocally({
-        'title': 'Cumulative Attendance Report',
-        'type': 'PDF',
-        'recordCount': records.length,
-        'filterDetails': '${employees.length} Employees, ${records.length} Logs',
-      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Cumulative PDF report saved & ready for download!'),
+            content: Text('Cumulative PDF report ready for download/saving!'),
             backgroundColor: AppColors.primary,
           ),
         );
@@ -4889,21 +5425,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         );
       }
     }
-  }
-
-  bool _recordMatchesEmployee(AttendanceRecord r, EmployeeEntity emp) {
-    final rEmpId = r.employeeId.trim().toLowerCase();
-    final rEmpName = r.employeeName.trim().toLowerCase();
-    final eId = emp.id.trim().toLowerCase();
-    final eName = emp.name.trim().toLowerCase();
-    final eCode = emp.employeeCode.trim().toLowerCase();
-
-    if (eId.isNotEmpty && rEmpId == eId) return true;
-    if (eName.isNotEmpty && rEmpName == eName) return true;
-    if (eCode.isNotEmpty && (rEmpId == eCode || rEmpId == 'emp-$eCode')) return true;
-    if (eId.length >= 8 && rEmpId.length >= 8 && (rEmpId.startsWith(eId) || eId.startsWith(rEmpId))) return true;
-
-    return false;
   }
 
   // ==========================================
@@ -4940,6 +5461,12 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       grandReg += regHours;
       grandOt += otHours;
 
+      final empLeave = LeaveCalculator.calculateEmployeeLeave(
+        emp,
+        recordsToUse,
+        _cumulativeSalaryCycle ?? SalaryCycle.current(),
+      );
+
       summaries.add(
         _EmpCumulativeData(
           employee: emp,
@@ -4948,14 +5475,12 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           emergencyDutyHours: emgHours,
           combinedHours: regHours + otHours,
           daysWorked: timesheets.length,
+          leaveDays: empLeave.leaveDays,
+          sundayOffs: empLeave.sundayWeeklyOffs,
+          sundayDuties: empLeave.sundayDutyDays,
         ),
       );
     }
-
-    summaries.sort((a, b) => a.employee.name
-        .trim()
-        .toLowerCase()
-        .compareTo(b.employee.name.trim().toLowerCase()));
 
     final grandCombined = grandReg + grandOt;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -5003,10 +5528,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 6,
-                      runSpacing: 2,
+                    Row(
                       children: [
                         Text(
                           'Workforce Salary Cycle Filter',
@@ -5018,6 +5540,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 : palette.textSecondaryLight,
                           ),
                         ),
+                        const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 5, vertical: 1),
@@ -5144,19 +5667,17 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   ElevatedButton.icon(
                     onPressed: () =>
                         _exportCumulativePdf(employees, allRecords),
-                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 14),
+                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
                     label: const Text('Download PDF',
                         style: TextStyle(
-                            fontSize: 11, fontWeight: FontWeight.bold)),
+                            fontSize: 12, fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red.shade700,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 6),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          horizontal: 24, vertical: 12),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                     ),
                   ),
@@ -5274,21 +5795,59 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               ],
                             ),
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: activePrimary.withValues(
-                                  alpha: isDark ? 0.2 : 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '${item.daysWorked} Days',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: activePrimary),
-                            ),
+                          Wrap(
+                            spacing: 4,
+                            runSpacing: 4,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: activePrimary.withValues(
+                                      alpha: isDark ? 0.2 : 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '${item.daysWorked}d Worked',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: activePrimary),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: (item.leaveDays > 0 ? Colors.red : Colors.green).withValues(
+                                      alpha: isDark ? 0.2 : 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '${item.leaveDays} Leaves',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: item.leaveDays > 0 ? Colors.red : Colors.green),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.purple.withValues(
+                                      alpha: isDark ? 0.2 : 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '${item.sundayOffs} Sun Off',
+                                  style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.purple),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -5642,6 +6201,682 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   }
 
   // ==========================================
+  // LEVEL 1 TAB 2: LEAVE RECORDS LEDGER
+  // ==========================================
+  Future<void> _exportWorkforceLeavePdf(
+      List<EmployeeEntity> employees, List<AttendanceRecord> records) async {
+    try {
+      final activeCycle = _leaveSalaryCycle ?? SalaryCycle.current();
+      final recordsToExport = activeCycle.filterRecords(records);
+
+      await PdfExportService.downloadLeaveReportPdfFile(
+        organizationName: _db.organization?.name ?? 'Fusion Enterprise',
+        employees: employees,
+        records: recordsToExport,
+        cycle: activeCycle,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Workforce Leave Report PDF ready for download!'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error downloading Leave PDF: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not generate Leave PDF: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildLeaveRecordsView(
+    List<EmployeeEntity> employees,
+    List<AttendanceRecord> allRecords,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = AppTheme.currentColors;
+    final activePrimary =
+        palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
+
+    final activeCycle = _leaveSalaryCycle ?? SalaryCycle.current();
+    final recordsToUse = activeCycle.filterRecords(allRecords);
+
+    final summaries = LeaveCalculator.calculateWorkforceLeaveSummaries(
+      employees,
+      recordsToUse,
+      activeCycle,
+    );
+    final metrics =
+        LeaveCalculator.calculateWorkforceMetrics(summaries, activeCycle);
+
+    final withLeaves = summaries.where((s) => s.leaveDays > 0).toList();
+    final perfectAttendance =
+        summaries.where((s) => s.leaveDays == 0).toList();
+
+    List<EmployeeLeaveSummary> displayedSummaries = summaries;
+    if (_leaveFilterType == 'with_leaves') {
+      displayedSummaries = withLeaves;
+    } else if (_leaveFilterType == 'perfect_attendance') {
+      displayedSummaries = perfectAttendance;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Leave Salary Cycle Filter Dropdown (25th - 24th Cutoff)
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: isDark ? palette.surfaceDark : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark
+                  ? palette.cardBorderDark
+                  : activePrimary.withValues(alpha: 0.25),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: activePrimary.withValues(alpha: isDark ? 0.08 : 0.04),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: activePrimary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.date_range_rounded,
+                    color: activePrimary, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Leave Record Salary Cycle Filter',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: isDark
+                                ? palette.textSecondaryDark
+                                : palette.textSecondaryLight,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: palette.success.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '25th - 24th Cutoff',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: palette.success,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _leaveSalaryCycle?.id ?? 'all',
+                        isDense: true,
+                        isExpanded: true,
+                        icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                            size: 20),
+                        items: [
+                          ..._availableSalaryCycles.map((c) {
+                            final isCur =
+                                c.id == SalaryCycle.current().id;
+                            return DropdownMenuItem<String>(
+                              value: c.id,
+                              child: Text(
+                                '${c.salaryMonthName} (${c.shortPeriodLabel})${isCur ? " • Current Cycle" : ""}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isCur
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            );
+                          }),
+                          const DropdownMenuItem<String>(
+                            value: 'all',
+                            child: Text(
+                              'All Recorded Cycles (Full History)',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          setState(() {
+                            if (val == null || val == 'all') {
+                              _leaveSalaryCycle = null;
+                            } else {
+                              _leaveSalaryCycle =
+                                  _availableSalaryCycles.firstWhere(
+                                (c) => c.id == val,
+                                orElse: () => SalaryCycle.current(),
+                              );
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Policy Banner Container
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isDark
+                ? palette.surfaceDark
+                : Colors.purple.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color:
+                  isDark ? Colors.purple.shade700 : Colors.purple.shade200,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color:
+                      Colors.purple.withValues(alpha: isDark ? 0.25 : 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.beach_access_rounded,
+                    color: isDark
+                        ? Colors.purple.shade300
+                        : Colors.purple.shade800,
+                    size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Official Leave Policy: Sunday is the Only Day of Leave in a Week',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: isDark
+                            ? Colors.purple.shade200
+                            : Colors.purple.shade900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Workforce schedule runs 6 days a week (Monday through Saturday). Every Sunday is an official weekly leave day. Any working day with no attendance logged is treated as an employee leave / absence.',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: isDark
+                            ? palette.textSecondaryDark
+                            : Colors.purple.shade900.withValues(alpha: 0.8),
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Executive Workforce Leave KPI Cards
+        Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isDark ? palette.surfaceDark : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color:
+                  isDark ? palette.cardBorderDark : Colors.grey.shade200,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.analytics_rounded,
+                          color: activePrimary, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Workforce Leave & Attendance Summary',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: isDark
+                              ? palette.textPrimaryDark
+                              : palette.textPrimaryLight,
+                        ),
+                      ),
+                    ],
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () =>
+                        _exportWorkforceLeavePdf(employees, allRecords),
+                    icon:
+                        const Icon(Icons.picture_as_pdf_rounded, size: 16),
+                    label: const Text('Download PDF',
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildSummaryMetricBadge(
+                      label: 'Staff Count',
+                      value: '${metrics.totalEmployees}',
+                      color: activePrimary,
+                      icon: Icons.people_rounded,
+                      isDark: isDark,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildSummaryMetricBadge(
+                      label: 'Days Worked',
+                      value: '${metrics.totalWorkforceDaysWorked}d',
+                      color: Colors.green.shade700,
+                      icon: Icons.check_circle_rounded,
+                      isDark: isDark,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildSummaryMetricBadge(
+                      label: 'Leaves Taken',
+                      value: '${metrics.totalWorkforceLeavesTaken}d',
+                      color: metrics.totalWorkforceLeavesTaken > 0
+                          ? Colors.red.shade700
+                          : Colors.green.shade700,
+                      icon: Icons.event_busy_rounded,
+                      isDark: isDark,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildSummaryMetricBadge(
+                      label: 'Sunday Offs',
+                      value: '${metrics.totalWorkforceSundayOffs}d',
+                      color: Colors.purple.shade700,
+                      icon: Icons.weekend_rounded,
+                      isDark: isDark,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildSummaryMetricBadge(
+                      label: 'Avg Attendance',
+                      value:
+                          '${metrics.averageAttendanceRate.toStringAsFixed(1)}%',
+                      color: Colors.indigo.shade700,
+                      icon: Icons.pie_chart_rounded,
+                      isDark: isDark,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        // Filter Chips for Workforce View
+        Row(
+          children: [
+            _buildFilterChoiceChip(
+              label: 'All Staff (${summaries.length})',
+              isSelected: _leaveFilterType == 'all',
+              onSelected: () => setState(() => _leaveFilterType = 'all'),
+              activePrimary: activePrimary,
+              isDark: isDark,
+            ),
+            const SizedBox(width: 8),
+            _buildFilterChoiceChip(
+              label: 'With Leaves (${withLeaves.length})',
+              isSelected: _leaveFilterType == 'with_leaves',
+              onSelected: () =>
+                  setState(() => _leaveFilterType = 'with_leaves'),
+              activePrimary: Colors.red.shade700,
+              isDark: isDark,
+            ),
+            const SizedBox(width: 8),
+            _buildFilterChoiceChip(
+              label: 'Perfect Attendance (${perfectAttendance.length})',
+              isSelected: _leaveFilterType == 'perfect_attendance',
+              onSelected: () =>
+                  setState(() => _leaveFilterType = 'perfect_attendance'),
+              activePrimary: Colors.green.shade700,
+              isDark: isDark,
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // Employee Leave Cards List
+        if (displayedSummaries.isEmpty)
+          Card(
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14)),
+            child: const Padding(
+              padding: EdgeInsets.all(32),
+              child:
+                  Center(child: Text('No employees matching this filter.')),
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: displayedSummaries.length,
+            itemBuilder: (context, index) {
+              final item = displayedSummaries[index];
+              final emp = item.employee;
+              final isExpanded = _expandedLeaveEmpIds.contains(emp.id);
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(
+                    color: isDark
+                        ? palette.cardBorderDark
+                        : Colors.grey.shade200,
+                  ),
+                ),
+                elevation: 1,
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header Row: Avatar, Name, Code, Badges
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 20,
+                            backgroundColor: activePrimary,
+                            child: Text(
+                              emp.name.isNotEmpty
+                                  ? emp.name.substring(0, 1).toUpperCase()
+                                  : 'E',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  emp.name,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  '${emp.employeeCode} • ${emp.department}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isDark
+                                        ? palette.textSecondaryDark
+                                        : palette.textSecondaryLight,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () {
+                              setState(() {
+                                if (isExpanded) {
+                                  _expandedLeaveEmpIds.remove(emp.id);
+                                } else {
+                                  _expandedLeaveEmpIds.add(emp.id);
+                                }
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.all(6),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    isExpanded ? 'Hide Dates' : 'Leave Dates',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: activePrimary,
+                                    ),
+                                  ),
+                                  Icon(
+                                    isExpanded
+                                        ? Icons.keyboard_arrow_up_rounded
+                                        : Icons.keyboard_arrow_down_rounded,
+                                    color: activePrimary,
+                                    size: 18,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Metrics Badges Bar
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          _buildMiniBadge(
+                            label: '${item.daysWorked} Worked',
+                            color: Colors.green,
+                            isDark: isDark,
+                          ),
+                          _buildMiniBadge(
+                            label: '${item.leaveDays} Leaves Taken',
+                            color: item.leaveDays > 0
+                                ? Colors.red
+                                : Colors.green,
+                            isDark: isDark,
+                          ),
+                          _buildMiniBadge(
+                            label: '${item.sundayWeeklyOffs} Sundays Off',
+                            color: Colors.purple,
+                            isDark: isDark,
+                          ),
+                          if (item.sundayDutyDays > 0)
+                            _buildMiniBadge(
+                              label: '${item.sundayDutyDays} Sunday Duty',
+                              color: Colors.orange,
+                              isDark: isDark,
+                            ),
+                          _buildMiniBadge(
+                            label:
+                                '${item.attendancePercentage.toStringAsFixed(0)}% Attendance',
+                            color: Colors.indigo,
+                            isDark: isDark,
+                          ),
+                        ],
+                      ),
+
+                      // Expanded Day-by-Day Leaves Table
+                      if (isExpanded) ...[
+                        const SizedBox(height: 12),
+                        const Divider(height: 1),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Detailed Leave & Weekly Off Record for ${emp.name}:',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: isDark
+                                ? palette.textPrimaryDark
+                                : palette.textPrimaryLight,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        if (item.leaveDaysOnly.isEmpty)
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.check_circle_rounded,
+                                    color: Colors.green, size: 16),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Zero leaves taken on scheduled working days. Excellent attendance!',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green),
+                                ),
+                              ],
+                            ),
+                          )
+                        else ...[
+                          Text(
+                            'Leaves / Absences on Scheduled Working Days:',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.red.shade700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: item.leaveDaysOnly.map((leave) {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.red
+                                      .withValues(alpha: isDark ? 0.2 : 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                      color: Colors.red.shade300, width: 0.5),
+                                ),
+                                child: Text(
+                                  '${leave.shortDayOfWeek}, ${leave.displayDate}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red.shade800,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        Text(
+                          'Sundays (Weekly Offs): ${item.sundayOffsOnly.map((s) => s.displayDate).join(", ")}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark
+                                ? palette.textSecondaryDark
+                                : Colors.purple.shade800,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _selectedEmployeeId = emp.id;
+                                _empDetailSubTab =
+                                    2; // Jump directly to Leave Records sub-tab
+                              });
+                            },
+                            icon: const Icon(Icons.open_in_new_rounded,
+                                size: 14),
+                            label: const Text(
+                                'Open Full Employee Leave Ledger',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  // ==========================================
   // LEVEL 1 TAB 3: SITE / CLIENT MAN-HOURS VIEW
   // ==========================================
   Widget _buildSiteManHoursView(List<AttendanceRecord> allRecords) {
@@ -5757,19 +6992,17 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                       endDate: endDate,
                       groupByClient: _siteGroupByClient,
                     ),
-                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 14),
+                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
                     label: const Text('Download PDF',
                         style: TextStyle(
-                            fontSize: 11, fontWeight: FontWeight.bold)),
+                            fontSize: 12, fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red.shade700,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 6),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          horizontal: 24, vertical: 12),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                     ),
                   ),
@@ -6433,6 +7666,9 @@ class _EmpCumulativeData {
   final double emergencyDutyHours;
   final double combinedHours;
   final int daysWorked;
+  final int leaveDays;
+  final int sundayOffs;
+  final int sundayDuties;
 
   _EmpCumulativeData({
     required this.employee,
@@ -6441,5 +7677,8 @@ class _EmpCumulativeData {
     this.emergencyDutyHours = 0.0,
     required this.combinedHours,
     required this.daysWorked,
+    this.leaveDays = 0,
+    this.sundayOffs = 0,
+    this.sundayDuties = 0,
   });
 }

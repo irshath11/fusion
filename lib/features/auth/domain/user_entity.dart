@@ -17,6 +17,7 @@ class UserEntity {
   final bool useDefaultOffice;
   final String? assignedOfficeId;
   final String? assignedOfficeName;
+  final String? photoUrl;
 
   UserEntity({
     required this.id,
@@ -35,6 +36,7 @@ class UserEntity {
     this.useDefaultOffice = true,
     this.assignedOfficeId,
     this.assignedOfficeName,
+    this.photoUrl,
   });
 
   /// Convenience getter for name
@@ -57,6 +59,8 @@ class UserEntity {
         'use_default_office': useDefaultOffice,
         'assigned_office_id': assignedOfficeId,
         'assigned_office_name': assignedOfficeName,
+        'photoUrl': photoUrl,
+        'photo_url': photoUrl,
       };
 
   factory UserEntity.fromJson(Map<String, dynamic> json) => UserEntity(
@@ -78,6 +82,7 @@ class UserEntity {
             json['use_default_office'] ?? json['useDefaultOffice'] ?? true,
         assignedOfficeId: json['assigned_office_id'] ?? json['assignedOfficeId'],
         assignedOfficeName: json['assigned_office_name'] ?? json['assignedOfficeName'],
+        photoUrl: json['photoUrl'] ?? json['photo_url'],
       );
 
   UserEntity copyWith({
@@ -97,6 +102,7 @@ class UserEntity {
     bool? useDefaultOffice,
     String? assignedOfficeId,
     String? assignedOfficeName,
+    String? photoUrl,
   }) {
     return UserEntity(
       id: id ?? this.id,
@@ -115,6 +121,7 @@ class UserEntity {
       useDefaultOffice: useDefaultOffice ?? this.useDefaultOffice,
       assignedOfficeId: assignedOfficeId ?? this.assignedOfficeId,
       assignedOfficeName: assignedOfficeName ?? this.assignedOfficeName,
+      photoUrl: photoUrl ?? this.photoUrl,
     );
   }
 }

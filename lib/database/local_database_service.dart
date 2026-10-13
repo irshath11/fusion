@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -11,6 +10,7 @@ import '../features/admin/domain/employee_entity.dart';
 import '../features/admin/domain/office_entity.dart';
 import '../features/admin/domain/work_site_entity.dart';
 import '../features/attendance/domain/attendance_record.dart';
+import '../core/utils/employee_directory_helper.dart';
 
 class LocalDatabaseService {
   static final LocalDatabaseService _instance =
@@ -77,10 +77,8 @@ class LocalDatabaseService {
                 e.id == emp.id ||
                 (e.email.isNotEmpty &&
                     emp.email.isNotEmpty &&
-                    e.email.trim().toLowerCase() ==
-                        emp.email.trim().toLowerCase()) ||
-                (e.name.trim().toLowerCase() == emp.name.trim().toLowerCase() &&
-                    emp.name.trim().isNotEmpty));
+                    e.email.trim().toLowerCase() == emp.email.trim().toLowerCase()) ||
+                (e.name.trim().toLowerCase() == emp.name.trim().toLowerCase() && emp.name.trim().isNotEmpty));
             if (index >= 0) {
               _employees[index] = emp;
             } else {
@@ -113,24 +111,24 @@ class LocalDatabaseService {
         } catch (_) {}
       }
 
-      final savedAttendanceJson = _settingsBox?.get('attendance_records_json');
-      if (savedAttendanceJson != null &&
-          savedAttendanceJson.toString().isNotEmpty) {
-        try {
-          final List<dynamic> decoded = jsonDecode(savedAttendanceJson);
-          _attendanceRecords.clear();
-          for (final item in decoded) {
-            _attendanceRecords.add(AttendanceRecord.fromJson(item));
-          }
-        } catch (_) {}
+      if (kIsWeb) {
+        clearAttendanceCache();
+      } else {
+        final savedAttendanceJson = _settingsBox?.get('attendance_records_json');
+        if (savedAttendanceJson != null &&
+            savedAttendanceJson.toString().isNotEmpty) {
+          try {
+            final List<dynamic> decoded = jsonDecode(savedAttendanceJson);
+            _attendanceRecords.clear();
+            for (final item in decoded) {
+              _attendanceRecords.add(AttendanceRecord.fromJson(item));
+            }
+          } catch (_) {}
+        }
       }
 
-      // Non-blocking background setup check if already completed locally
-      if (_isSetupCompleted) {
-        unawaited(checkSetupStatusFromSupabase());
-      } else {
-        await checkSetupStatusFromSupabase();
-      }
+      // Check live setup status against Supabase table 'organizations'
+      await checkSetupStatusFromSupabase();
     } catch (e) {
       debugPrint('Hive database initialization warning: $e');
     }
@@ -138,13 +136,14 @@ class LocalDatabaseService {
     // Purge any previously seeded sample data
     _employees.removeWhere((e) => e.id == 'emp-001' || e.id == 'emp-002');
     _workSites.removeWhere((w) => w.id == 'site-musaffah-001');
-    _offices.removeWhere(
-        (o) => o.id == 'office-musaffah-m12-001' || o.id == 'office-main-001');
-    _attendanceRecords.removeWhere(
-        (r) => r.id.startsWith('rec-001-') || r.id.startsWith('rec-002-'));
+    _offices.removeWhere((o) => o.id == 'office-musaffah-m12-001' || o.id == 'office-main-001');
+    _attendanceRecords.removeWhere((r) => r.id.startsWith('rec-001-') || r.id.startsWith('rec-002-'));
 
     // Automatically resolve any dangling check-ins older than 24 hours
     autoResolveExpiredCheckIns();
+
+    // Sanitize phantom/duplicate employee records strictly for Anandh, Rafi, and Azharudeen
+    sanitizeDuplicateEmployees();
 
     _persistOffices();
     _persistEmployees();
@@ -212,51 +211,115 @@ class LocalDatabaseService {
   List<UserEntity> getUsers() {
     final Map<String, UserEntity> uniqueMap = {};
     for (final u in _users) {
-      final key = u.email.trim().isNotEmpty
-          ? u.email.trim().toLowerCase()
-          : (u.fullName.trim().isNotEmpty
-              ? u.fullName.trim().toLowerCase()
-              : u.id);
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: u.employeeCode,
+        name: u.fullName,
+        email: u.email,
+        id: u.id,
+      );
+      final key = official != null
+          ? official.employeeId.toUpperCase()
+          : (u.email.trim().isNotEmpty
+              ? u.email.trim().toLowerCase()
+              : (u.fullName.trim().isNotEmpty ? u.fullName.trim().toLowerCase() : u.id));
       uniqueMap[key] = u;
     }
     for (final e in _employees) {
-      final key = e.email.trim().isNotEmpty
-          ? e.email.trim().toLowerCase()
-          : (e.name.trim().isNotEmpty ? e.name.trim().toLowerCase() : e.id);
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: e.employeeCode,
+        name: e.name,
+        email: e.email,
+        id: e.id,
+      );
+      final key = official != null
+          ? official.employeeId.toUpperCase()
+          : (e.email.trim().isNotEmpty
+              ? e.email.trim().toLowerCase()
+              : (e.name.trim().isNotEmpty ? e.name.trim().toLowerCase() : e.id));
       if (!uniqueMap.containsKey(key)) {
         uniqueMap[key] = UserEntity(
           id: e.id,
           firebaseUid: e.id,
           email: e.email,
-          fullName: e.name,
+          fullName: official != null ? official.fullName : e.name,
           phoneNumber: e.mobileNumber,
+          employeeCode: official != null ? official.employeeId : e.employeeCode,
+          designation: official != null ? official.designation : e.designation,
+          department: official != null ? official.department : e.department,
           role: UserRole.employee,
-          organizationId:
-              _organization?.id ?? '00000000-0000-0000-0000-000000000001',
+          organizationId: _organization?.id ?? '00000000-0000-0000-0000-000000000001',
           isActive: e.isActive,
           useDefaultOffice: e.useDefaultOffice,
           assignedOfficeId: e.assignedOfficeId,
           assignedOfficeName: e.assignedOfficeName,
+          photoUrl: official != null ? official.photoAsset : e.photoUrl,
+        );
+      } else {
+        final existing = uniqueMap[key]!;
+        uniqueMap[key] = existing.copyWith(
+          fullName: official != null ? official.fullName : existing.fullName,
+          employeeCode: official != null
+              ? official.employeeId
+              : ((existing.employeeCode != null && existing.employeeCode!.isNotEmpty && existing.employeeCode != 'EMP-000')
+                  ? existing.employeeCode
+                  : e.employeeCode),
+          designation: official != null
+              ? official.designation
+              : ((existing.designation != null && existing.designation!.isNotEmpty)
+                  ? existing.designation
+                  : e.designation),
+          department: official != null
+              ? official.department
+              : ((existing.department != null && existing.department!.isNotEmpty)
+                  ? existing.department
+                  : e.department),
+          photoUrl: official != null ? official.photoAsset : (existing.photoUrl ?? e.photoUrl),
         );
       }
     }
     if (_currentUser != null) {
-      final key = _currentUser!.email.trim().isNotEmpty
-          ? _currentUser!.email.trim().toLowerCase()
-          : (_currentUser!.fullName.trim().isNotEmpty
-              ? _currentUser!.fullName.trim().toLowerCase()
-              : _currentUser!.id);
-      if (!uniqueMap.containsKey(key) ||
-          _currentUser!.role == UserRole.superAdmin ||
-          _currentUser!.role == UserRole.admin) {
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: _currentUser!.employeeCode,
+        name: _currentUser!.fullName,
+        email: _currentUser!.email,
+        id: _currentUser!.id,
+      );
+      final key = official != null
+          ? official.employeeId.toUpperCase()
+          : (_currentUser!.email.trim().isNotEmpty
+              ? _currentUser!.email.trim().toLowerCase()
+              : (_currentUser!.fullName.trim().isNotEmpty ? _currentUser!.fullName.trim().toLowerCase() : _currentUser!.id));
+      if (!uniqueMap.containsKey(key) || _currentUser!.role == UserRole.superAdmin || _currentUser!.role == UserRole.admin) {
         uniqueMap[key] = _currentUser!;
       }
     }
-    final result = uniqueMap.values.toList();
-    result.sort((a, b) => a.fullName
-        .trim()
-        .toLowerCase()
-        .compareTo(b.fullName.trim().toLowerCase()));
+
+    final result = uniqueMap.values.map((u) {
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: u.employeeCode,
+        name: u.fullName,
+        email: u.email,
+        id: u.id,
+      );
+      if (official != null) {
+        return u.copyWith(
+          fullName: official.fullName,
+          employeeCode: official.employeeId,
+          photoUrl: (u.photoUrl != null && u.photoUrl!.isNotEmpty)
+              ? u.photoUrl
+              : official.photoAsset,
+          designation: (u.designation != null && u.designation!.isNotEmpty && u.designation != 'Staff')
+              ? u.designation
+              : official.designation,
+          department: (u.department != null && u.department!.isNotEmpty && u.department != 'Operations')
+              ? u.department
+              : official.department,
+        );
+      }
+      return u;
+    }).toList();
+
+    result.sort((a, b) => a.fullName.trim().toLowerCase().compareTo(b.fullName.trim().toLowerCase()));
     return List.unmodifiable(result);
   }
 
@@ -328,6 +391,19 @@ class LocalDatabaseService {
   void deleteOffice(String officeId) {
     _offices.removeWhere((o) => o.id == officeId);
     _persistOffices();
+    bool employeesModified = false;
+    for (int i = 0; i < _employees.length; i++) {
+      if (_employees[i].assignedOfficeId == officeId) {
+        _employees[i] = _employees[i].copyWith(
+          useDefaultOffice: true,
+          clearAssignedOffice: true,
+        );
+        employeesModified = true;
+      }
+    }
+    if (employeesModified) {
+      _persistEmployees();
+    }
   }
 
   void _persistOffices() {
@@ -343,44 +419,105 @@ class LocalDatabaseService {
   List<EmployeeEntity> getEmployees() {
     final Map<String, EmployeeEntity> uniqueMap = {};
     for (final e in _employees) {
-      final String key = e.email.trim().isNotEmpty
-          ? e.email.trim().toLowerCase()
-          : (e.name.trim().isNotEmpty ? e.name.trim().toLowerCase() : e.id);
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: e.employeeCode,
+        name: e.name,
+        email: e.email,
+        id: e.id,
+      );
+      final String key = official != null
+          ? official.employeeId.toUpperCase()
+          : (e.email.trim().isNotEmpty
+              ? e.email.trim().toLowerCase()
+              : (e.name.trim().isNotEmpty ? e.name.trim().toLowerCase() : e.id));
 
       if (!uniqueMap.containsKey(key)) {
-        uniqueMap[key] = e;
+        uniqueMap[key] = official != null
+            ? e.copyWith(
+                name: official.fullName,
+                employeeCode: official.employeeId,
+                photoUrl: official.photoAsset,
+                designation: (e.designation.isNotEmpty && e.designation != 'Staff' && e.designation != 'Team Member')
+                    ? e.designation
+                    : official.designation,
+                department: (e.department.isNotEmpty && e.department != 'Operations')
+                    ? e.department
+                    : official.department,
+              )
+            : e;
       } else {
         final existing = uniqueMap[key]!;
         uniqueMap[key] = EmployeeEntity(
           id: existing.id.length > e.id.length ? existing.id : e.id,
-          employeeCode: existing.employeeCode.startsWith('EMP-') &&
-                  existing.employeeCode != 'EMP-000'
-              ? existing.employeeCode
-              : e.employeeCode,
-          name: existing.name.isNotEmpty ? existing.name : e.name,
-          mobileNumber: existing.mobileNumber.isNotEmpty
-              ? existing.mobileNumber
-              : e.mobileNumber,
+          employeeCode: official != null
+              ? official.employeeId
+              : (existing.employeeCode.startsWith('EMP-') && existing.employeeCode != 'EMP-000'
+                  ? existing.employeeCode
+                  : e.employeeCode),
+          name: official != null
+              ? official.fullName
+              : (existing.name.isNotEmpty ? existing.name : e.name),
+          mobileNumber: existing.mobileNumber.isNotEmpty ? existing.mobileNumber : e.mobileNumber,
           email: existing.email.isNotEmpty ? existing.email : e.email,
-          designation: existing.designation != 'Team Member'
-              ? existing.designation
-              : e.designation,
-          department: existing.department != 'Operations'
-              ? existing.department
-              : e.department,
+          designation: official != null
+              ? official.designation
+              : (existing.designation != 'Team Member' ? existing.designation : e.designation),
+          department: official != null
+              ? official.department
+              : (existing.department != 'Operations' ? existing.department : e.department),
           useDefaultOffice: existing.useDefaultOffice,
           assignedOfficeId: existing.assignedOfficeId ?? e.assignedOfficeId,
-          assignedOfficeName:
-              existing.assignedOfficeName ?? e.assignedOfficeName,
+          assignedOfficeName: existing.assignedOfficeName ?? e.assignedOfficeName,
           isActive: existing.isActive && e.isActive,
+          photoUrl: official != null
+              ? official.photoAsset
+              : ((existing.photoUrl != null && existing.photoUrl!.trim().isNotEmpty)
+                  ? existing.photoUrl
+                  : e.photoUrl),
         );
       }
     }
-    final result = uniqueMap.values.toList();
-    result.sort((a, b) =>
-        a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
-    return List.unmodifiable(result);
+    final list = uniqueMap.values.map((e) {
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: e.employeeCode,
+        name: e.name,
+        email: e.email,
+        id: e.id,
+      );
+      if (official != null) {
+        return e.copyWith(
+          name: official.fullName,
+          employeeCode: official.employeeId,
+          photoUrl: (e.photoUrl != null && e.photoUrl!.trim().isNotEmpty)
+              ? e.photoUrl
+              : official.photoAsset,
+          designation: (e.designation.isNotEmpty && e.designation != 'Staff' && e.designation != 'Team Member')
+              ? e.designation
+              : official.designation,
+          department: (e.department.isNotEmpty && e.department != 'Operations')
+              ? e.department
+              : official.department,
+        );
+      }
+      if (e.photoUrl == null || e.photoUrl!.trim().isEmpty) {
+        final photo = EmployeeDirectoryHelper.resolvePhoto(
+          employeeCode: e.employeeCode,
+          fullName: e.name,
+          email: e.email,
+          id: e.id,
+        );
+        if (photo != null) {
+          return e.copyWith(photoUrl: photo);
+        }
+      }
+      return e;
+    }).toList();
+    list.sort((a, b) => a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
+    return List.unmodifiable(list);
   }
+
+  /// No-op: prevents injecting synthetic directory employees into local database
+  void seedMasterEmployeeDirectory() {}
 
   void setEmployees(List<EmployeeEntity> employees) {
     _employees.clear();
@@ -393,10 +530,8 @@ class LocalDatabaseService {
         e.id == employee.id ||
         (e.email.isNotEmpty &&
             employee.email.isNotEmpty &&
-            e.email.trim().toLowerCase() ==
-                employee.email.trim().toLowerCase()) ||
-        (e.name.trim().toLowerCase() == employee.name.trim().toLowerCase() &&
-            e.name.trim().isNotEmpty));
+            e.email.trim().toLowerCase() == employee.email.trim().toLowerCase()) ||
+        (e.name.trim().toLowerCase() == employee.name.trim().toLowerCase() && e.name.trim().isNotEmpty));
     if (index >= 0) {
       _employees[index] = employee;
     } else {
@@ -470,7 +605,7 @@ class LocalDatabaseService {
 
   void clearAttendanceCache() {
     _attendanceRecords.clear();
-    _persistAttendanceRecords();
+    _settingsBox?.delete('attendance_records_json');
   }
 
   void saveAttendanceRecord(AttendanceRecord record, {bool persist = true}) {
@@ -485,25 +620,19 @@ class LocalDatabaseService {
                 r.employeeName.trim().toLowerCase() ==
                     record.employeeName.trim().toLowerCase());
         final stepMatch = r.workflowStep == record.workflowStep;
-        final timeMatch = r.eventTimestamp
-                .isAtSameMomentAs(record.eventTimestamp) ||
-            r.eventTimestamp.difference(record.eventTimestamp).inSeconds.abs() <
-                5;
+        final timeMatch = r.eventTimestamp.isAtSameMomentAs(record.eventTimestamp) ||
+            r.eventTimestamp.difference(record.eventTimestamp).inSeconds.abs() < 5;
         return empMatch && stepMatch && timeMatch;
       });
     }
 
     if (index >= 0) {
       final existing = _attendanceRecords[index];
-      if (existing.isEdited &&
-          record.manualOvertimeHours == null &&
-          existing.manualOvertimeHours != null) {
+      if (existing.isEdited && record.manualOvertimeHours == null && existing.manualOvertimeHours != null) {
         _attendanceRecords[index] = record.copyWith(
           manualOvertimeHours: existing.manualOvertimeHours,
           overrideManualOvertimeHours: true,
-          remarks: (existing.remarks != null && existing.remarks!.isNotEmpty)
-              ? existing.remarks
-              : record.remarks,
+          remarks: (existing.remarks != null && existing.remarks!.isNotEmpty) ? existing.remarks : record.remarks,
           isEdited: true,
           editedBy: existing.editedBy,
         );
@@ -546,23 +675,56 @@ class LocalDatabaseService {
     double? manualOvertimeHours,
     String? remarks,
     String? adminName,
+    String? originalEmployeeId,
+    String? originalEmployeeName,
   }) async {
     final localDate = date.toLocal();
     final dateStr =
         "${localDate.year}-${localDate.month.toString().padLeft(2, '0')}-${localDate.day.toString().padLeft(2, '0')}";
 
-    // Filter existing records for this employee on this date
+    final searchEmpId = (originalEmployeeId != null && originalEmployeeId.trim().isNotEmpty)
+        ? originalEmployeeId.trim()
+        : employeeId;
+    final searchEmpName = (originalEmployeeName != null && originalEmployeeName.trim().isNotEmpty)
+        ? originalEmployeeName.trim()
+        : employeeName;
+
+    // Filter existing records for this employee (or original employee) on this date
     final dayRecords = _attendanceRecords.where((r) {
-      final isEmp = r.employeeId == employeeId ||
+      final isEmp = r.employeeId == searchEmpId ||
+          r.employeeId == employeeId ||
           (r.employeeName.trim().isNotEmpty &&
-              employeeName.trim().isNotEmpty &&
-              r.employeeName.trim().toLowerCase() ==
-                  employeeName.trim().toLowerCase());
+              (r.employeeName.trim().toLowerCase() == searchEmpName.trim().toLowerCase() ||
+               r.employeeName.trim().toLowerCase() == employeeName.trim().toLowerCase())) ||
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: r.employeeId,
+            recordEmployeeName: r.employeeName,
+            employeeId: employeeId,
+            employeeName: employeeName,
+          );
       final localEv = r.eventTimestamp.toLocal();
       final rDateStr =
           "${localEv.year}-${localEv.month.toString().padLeft(2, '0')}-${localEv.day.toString().padLeft(2, '0')}";
       return isEmp && rDateStr == dateStr;
     }).toList();
+
+    // If reassigning to another employee, update any other records on this date to the new employee identity
+    final isReassigning = searchEmpId != employeeId ||
+        (searchEmpName.isNotEmpty && searchEmpName.toLowerCase() != employeeName.toLowerCase());
+    if (isReassigning) {
+      for (final r in dayRecords) {
+        if (r.employeeId != employeeId || r.employeeName != employeeName) {
+          final reassigned = r.copyWith(
+            employeeId: employeeId,
+            employeeName: employeeName,
+            isEdited: true,
+            editedBy: adminName ?? 'Administrator',
+            syncStatus: SyncStatus.pending,
+          );
+          updateAttendanceRecord(reassigned);
+        }
+      }
+    }
 
     final List<AttendanceRecord> updatedOrCreated = [];
 
@@ -579,6 +741,8 @@ class LocalDatabaseService {
     if (inIndex >= 0) {
       final orig = dayRecords[inIndex];
       final updated = orig.copyWith(
+        employeeId: employeeId,
+        employeeName: employeeName,
         eventTimestamp: checkInTime,
         manualOvertimeHours: manualOvertimeHours,
         overrideManualOvertimeHours: true,
@@ -627,6 +791,8 @@ class LocalDatabaseService {
     if (outIndex >= 0) {
       final orig = dayRecords[outIndex];
       final updated = orig.copyWith(
+        employeeId: employeeId,
+        employeeName: employeeName,
         eventTimestamp: checkOutTime,
         manualOvertimeHours: manualOvertimeHours,
         overrideManualOvertimeHours: true,
@@ -667,6 +833,8 @@ class LocalDatabaseService {
       if (i != inIndex && i != outIndex) {
         final orig = dayRecords[i];
         final updated = orig.copyWith(
+          employeeId: employeeId,
+          employeeName: employeeName,
           manualOvertimeHours: manualOvertimeHours,
           overrideManualOvertimeHours: true,
           remarks: remarks,
@@ -683,8 +851,7 @@ class LocalDatabaseService {
 
     // Trigger Cloud DB sync
     try {
-      final cloudOk = await SupabaseService()
-          .saveAdminAttendanceOverride(records: updatedOrCreated);
+      final cloudOk = await SupabaseService().saveAdminAttendanceOverride(records: updatedOrCreated);
       if (cloudOk) {
         for (final rec in updatedOrCreated) {
           updateAttendanceRecord(rec.copyWith(syncStatus: SyncStatus.synced));
@@ -695,6 +862,274 @@ class LocalDatabaseService {
       debugPrint('Cloud sync note during admin override: $e');
       return false;
     }
+  }
+
+  /// Reassigns attendance records from one employee to another (e.g. fixing logs captured on another account)
+  Future<int> reassignEmployeeAttendanceRecords({
+    required String fromEmployeeId,
+    required String fromEmployeeName,
+    required String toEmployeeId,
+    required String toEmployeeName,
+    DateTime? specificDate,
+  }) async {
+    final cleanFromId = fromEmployeeId.trim().toLowerCase();
+    final cleanFromName = fromEmployeeName.trim().toLowerCase();
+    int count = 0;
+    final List<AttendanceRecord> updatedRecords = [];
+
+    for (int i = 0; i < _attendanceRecords.length; i++) {
+      final r = _attendanceRecords[i];
+      final rId = r.employeeId.trim().toLowerCase();
+      final rName = r.employeeName.trim().toLowerCase();
+
+      final matchesFrom = (cleanFromId.isNotEmpty && rId == cleanFromId) ||
+          (cleanFromName.isNotEmpty && rName == cleanFromName);
+
+      if (!matchesFrom) continue;
+
+      if (specificDate != null) {
+        final rDate = r.eventTimestamp.toLocal();
+        final sDate = specificDate.toLocal();
+        if (rDate.year != sDate.year || rDate.month != sDate.month || rDate.day != sDate.day) {
+          continue;
+        }
+      }
+
+      final updated = r.copyWith(
+        employeeId: toEmployeeId,
+        employeeName: toEmployeeName,
+        isEdited: true,
+        editedBy: 'Admin (Reassigned)',
+        syncStatus: SyncStatus.pending,
+      );
+      _attendanceRecords[i] = updated;
+      updatedRecords.add(updated);
+      count++;
+    }
+
+    if (count > 0) {
+      _persistAttendanceRecords();
+      try {
+        await SupabaseService().saveAdminAttendanceOverride(records: updatedRecords);
+      } catch (e) {
+        debugPrint('Cloud sync note during reassign: $e');
+      }
+    }
+
+    return count;
+  }
+
+  /// Merges previous short-name duplicate employee records into their official enterprise profile across all staff,
+  /// and consolidates all historical attendance records under the employee's official full name and canonical ID.
+  Future<int> sanitizeDuplicateEmployees() async {
+    int migratedCount = 0;
+    final List<AttendanceRecord> updatedRecords = [];
+
+    // Map each OfficialEmployeeRecord to its target ID and target full name.
+    final Map<String, ({String targetId, String targetName})> officialTargetMap = {};
+
+    for (final official in EmployeeDirectoryHelper.masterDirectory) {
+      // Find authentic user in _users
+      final realUser = _users.where((u) {
+        if (u.email.trim().isNotEmpty && u.email.trim().toLowerCase() == official.email.toLowerCase()) {
+          return true;
+        }
+        if (u.employeeCode != null && u.employeeCode!.trim().isNotEmpty &&
+            u.employeeCode!.trim().toUpperCase() == official.employeeId.toUpperCase()) {
+          return true;
+        }
+        if (u.fullName.trim().toLowerCase() == official.fullName.toLowerCase()) {
+          return true;
+        }
+        for (final alias in official.aliases) {
+          final a = alias.toLowerCase();
+          if (u.fullName.trim().toLowerCase() == a ||
+              (u.employeeCode != null && u.employeeCode!.trim().toLowerCase() == a) ||
+              u.id.toLowerCase() == a) {
+            return true;
+          }
+        }
+        return false;
+      }).firstOrNull;
+
+      // Find existing canonical employee in _employees
+      final canonicalEmp = _employees.where((e) {
+        if (e.email.trim().isNotEmpty && e.email.trim().toLowerCase() == official.email.toLowerCase()) {
+          return true;
+        }
+        if (e.employeeCode.trim().toUpperCase() == official.employeeId.toUpperCase()) {
+          return true;
+        }
+        if (e.name.trim().toLowerCase() == official.fullName.toLowerCase()) {
+          return true;
+        }
+        for (final alias in official.aliases) {
+          final a = alias.toLowerCase();
+          if (e.name.trim().toLowerCase() == a ||
+              e.employeeCode.trim().toLowerCase() == a ||
+              e.id.toLowerCase() == a) {
+            return true;
+          }
+        }
+        return false;
+      }).firstOrNull;
+
+      final String targetId = (realUser != null && realUser.id.isNotEmpty && !realUser.id.startsWith('emp-'))
+          ? realUser.id
+          : (canonicalEmp != null && canonicalEmp.id.isNotEmpty && !canonicalEmp.id.startsWith('emp-')
+              ? canonicalEmp.id
+              : (realUser != null && realUser.id.isNotEmpty
+                  ? realUser.id
+                  : (canonicalEmp != null && canonicalEmp.id.isNotEmpty ? canonicalEmp.id : 'emp-${official.employeeId}')));
+      final String targetName = official.fullName;
+
+      officialTargetMap[official.employeeId] = (targetId: targetId, targetName: targetName);
+
+      // Update realUser in _users if found (preserving authentic profile fullName)
+      if (realUser != null) {
+        final uIndex = _users.indexOf(realUser);
+        if (uIndex >= 0) {
+          _users[uIndex] = realUser.copyWith(
+            employeeCode: official.employeeId,
+            designation: (realUser.designation != null && realUser.designation!.isNotEmpty && realUser.designation != 'Staff')
+                ? realUser.designation
+                : official.designation,
+            department: (realUser.department != null && realUser.department!.isNotEmpty && realUser.department != 'Operations')
+                ? realUser.department
+                : official.department,
+            photoUrl: official.photoAsset,
+          );
+        }
+      }
+    }
+
+    // Consolidate attendance records for all employees
+    for (int i = 0; i < _attendanceRecords.length; i++) {
+      final r = _attendanceRecords[i];
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: r.employeeId,
+        name: r.employeeName,
+        id: r.employeeId,
+      );
+
+      if (official != null) {
+        // NOTE: We do not overwrite attendance records' employeeName with official.fullName.
+        // Employees in the field run older APK versions whose local profile stores
+        // short names (e.g. 'Saleem', 'Shabi'). Overwriting employeeName in the cloud/local DB
+        // breaks their datewise timeline and timesheet calculation on existing APKs.
+        // Consolidation for administrative views and PDF reports is handled dynamically
+        // via EmployeeDirectoryHelper without mutating raw record names.
+      } else {
+        // Revert any records of OTHER employees that were mistakenly tagged with synthetic 'emp-' IDs
+        if (r.employeeId.startsWith('emp-')) {
+          final codePart = r.employeeId.replaceFirst('emp-', '').toUpperCase();
+          final realUser = _users.where((u) =>
+              u.id.isNotEmpty && !u.id.startsWith('emp-') &&
+              (u.employeeCode?.toUpperCase() == codePart ||
+               u.fullName.trim().toLowerCase() == r.employeeName.trim().toLowerCase())).firstOrNull;
+          if (realUser != null && r.employeeId != realUser.id) {
+            final updated = r.copyWith(
+              employeeId: realUser.id,
+              employeeName: realUser.fullName,
+              isEdited: false,
+              editedBy: null,
+              syncStatus: SyncStatus.pending,
+            );
+            _attendanceRecords[i] = updated;
+            updatedRecords.add(updated);
+            migratedCount++;
+          }
+        }
+      }
+    }
+
+    if (updatedRecords.isNotEmpty) {
+      _persistAttendanceRecords();
+      try {
+        await SupabaseService().saveAdminAttendanceOverride(records: updatedRecords);
+      } catch (e) {
+        debugPrint('Cloud sync note during sanitizeDuplicateEmployees: $e');
+      }
+    }
+
+    // Purge phantom and short-name duplicate employees from _employees
+    final originalLen = _employees.length;
+    _employees.removeWhere((e) {
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: e.employeeCode,
+        name: e.name,
+        email: e.email,
+        id: e.id,
+      );
+
+      if (official != null) {
+        final target = officialTargetMap[official.employeeId];
+        if (target != null) {
+          final isShortName = e.name.trim().toLowerCase() != target.targetName.toLowerCase();
+          final isWrongId = e.id != target.targetId;
+          final canonicalExistsInEmployees = _employees.any((other) =>
+              other != e && (other.id == target.targetId || other.name.trim().toLowerCase() == target.targetName.toLowerCase()));
+          final canonicalExistsInUsers = _users.any((u) =>
+              u.id == target.targetId || u.fullName.trim().toLowerCase() == target.targetName.toLowerCase());
+
+          if ((isShortName || isWrongId) && (canonicalExistsInEmployees || canonicalExistsInUsers)) {
+            return true;
+          }
+        }
+      }
+
+      // Remove synthetic seeded employees with id 'emp-' that duplicate existing users or have no attendance records
+      if (e.id.startsWith('emp-')) {
+        final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+          code: e.employeeCode,
+          name: e.name,
+          id: e.id,
+        );
+        final isCanonicalTarget = official != null && officialTargetMap[official.employeeId]?.targetId == e.id;
+        if (!isCanonicalTarget) {
+          final duplicateUser = _users.any((u) =>
+              u.id != e.id && (u.employeeCode?.toUpperCase() == e.employeeCode.toUpperCase() ||
+                               u.fullName.trim().toLowerCase() == e.name.trim().toLowerCase()));
+          final hasNoAttendance = !_attendanceRecords.any((rec) => rec.employeeId == e.id);
+          if (duplicateUser || hasNoAttendance) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    });
+
+    // Update remaining employees with official details
+    for (int i = 0; i < _employees.length; i++) {
+      final e = _employees[i];
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: e.employeeCode,
+        name: e.name,
+        email: e.email,
+        id: e.id,
+      );
+      if (official != null) {
+        _employees[i] = e.copyWith(
+          name: official.fullName,
+          employeeCode: official.employeeId,
+          photoUrl: official.photoAsset,
+          designation: (e.designation.isNotEmpty && e.designation != 'Staff' && e.designation != 'Team Member')
+              ? e.designation
+              : official.designation,
+          department: (e.department.isNotEmpty && e.department != 'Operations')
+              ? e.department
+              : official.department,
+        );
+      }
+    }
+
+    if (_employees.length != originalLen) {
+      _persistEmployees();
+    }
+    _persistUsers();
+
+    return migratedCount;
   }
 
   /// Scans all attendance records for unclosed sessions (officeCheckIn with no subsequent officeCheckOut).
@@ -740,8 +1175,7 @@ class LocalDatabaseService {
 
             if (!hasMatchingCheckOut) {
               // Auto-generate officeCheckOut after 8 hours from check-in time
-              final autoCheckOutTime =
-                  checkInTime.add(const Duration(hours: 8));
+              final autoCheckOutTime = checkInTime.add(const Duration(hours: 8));
 
               // Avoid duplicate if already exists with same timestamp
               final duplicateExists = records.any((r) =>
@@ -758,11 +1192,8 @@ class LocalDatabaseService {
                   latitude: rec.latitude,
                   longitude: rec.longitude,
                   gpsAccuracy: rec.gpsAccuracy,
-                  address:
-                      'Auto Check-Out (24h Exceeded - 8h Regular Shift Capped)',
-                  deviceId: rec.deviceId.isNotEmpty
-                      ? rec.deviceId
-                      : 'device-auto-system',
+                  address: 'Auto Check-Out (24h Exceeded - 8h Regular Shift Capped)',
+                  deviceId: rec.deviceId.isNotEmpty ? rec.deviceId : 'device-auto-system',
                   photoBase64: '',
                   isGeofenceValid: true,
                   officeId: rec.officeId,
@@ -793,51 +1224,84 @@ class LocalDatabaseService {
   List<AttendanceRecord> getTodayAttendanceRecords([String? employeeId]) {
     autoResolveExpiredCheckIns();
 
-    final targetId =
-        employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
-    if (targetId == null || targetId.isEmpty) return [];
-
     final now = DateTime.now().toLocal();
     final today = DateTime(now.year, now.month, now.day);
 
+    final targetId = employeeId?.trim() ?? _currentUser?.id ?? _currentUser?.firebaseUid;
+    if (targetId == null || targetId.isEmpty) return [];
+
+    final cleanTarget = targetId.toLowerCase();
     final empRecords = _attendanceRecords.where((r) {
-      return (r.employeeId == targetId ||
-          (_currentUser != null &&
-              (r.employeeId == _currentUser!.id ||
-                  r.employeeId == _currentUser!.firebaseUid ||
-                  r.employeeName.trim().toLowerCase() ==
-                      _currentUser!.fullName.trim().toLowerCase())));
+      final matchesId = r.employeeId.trim().toLowerCase() == cleanTarget;
+      final matchesName = r.employeeName.trim().toLowerCase() == cleanTarget;
+      final matchesUser = _currentUser != null &&
+          (r.employeeId == _currentUser!.id ||
+              r.employeeId == _currentUser!.firebaseUid ||
+              r.employeeName.trim().toLowerCase() ==
+                  _currentUser!.fullName.trim().toLowerCase());
+      final matchesIdentity = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: r.employeeId,
+        recordEmployeeName: r.employeeName,
+        employeeId: cleanTarget,
+        employeeCode: _currentUser?.employeeCode,
+        employeeName: _currentUser?.fullName,
+        employeeEmail: _currentUser?.email,
+      );
+      return matchesId || matchesName || matchesUser || matchesIdentity;
     }).toList()
       ..sort((a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
 
     if (empRecords.isEmpty) return [];
 
-    // 1. Check if there is an active unclosed regular shift (officeCheckIn within last 24h with no subsequent officeCheckOut)
+    // 1. Check if there is an active unclosed regular shift (checkIn within last 24h with no subsequent officeCheckOut)
     AttendanceRecord? activeCheckIn;
     for (int i = empRecords.length - 1; i >= 0; i--) {
       final rec = empRecords[i];
-      if (rec.workflowStep == WorkflowStep.officeCheckOut) {
+      if (rec.workflowStep == WorkflowStep.officeCheckOut ||
+          rec.workflowStep == WorkflowStep.emergencyCheckOut) {
         break;
       }
-      if (rec.workflowStep == WorkflowStep.officeCheckIn) {
+      if (rec.workflowStep == WorkflowStep.officeCheckIn ||
+          rec.workflowStep == WorkflowStep.siteCheckIn ||
+          rec.workflowStep == WorkflowStep.emergencyCheckIn) {
         final elapsed = now.difference(rec.eventTimestamp);
         if (elapsed < const Duration(hours: 24)) {
           activeCheckIn = rec;
         }
-        break;
       }
     }
 
     if (activeCheckIn != null) {
-      // Shift is actively in progress! Return all records from activeCheckIn onwards
+      // Find the earliest start of this continuous open shift
+      final startIndex = empRecords.indexOf(activeCheckIn);
+      AttendanceRecord startRecord = activeCheckIn;
+      for (int i = startIndex - 1; i >= 0; i--) {
+        final prev = empRecords[i];
+        if (prev.workflowStep == WorkflowStep.officeCheckOut ||
+            prev.workflowStep == WorkflowStep.emergencyCheckOut) {
+          break;
+        }
+        if (prev.workflowStep == WorkflowStep.officeCheckIn ||
+            prev.workflowStep == WorkflowStep.siteCheckIn ||
+            prev.workflowStep == WorkflowStep.emergencyCheckIn) {
+          final elapsed = now.difference(prev.eventTimestamp);
+          if (elapsed < const Duration(hours: 24)) {
+            startRecord = prev;
+          }
+        }
+      }
       return empRecords
-          .where((r) => !r.eventTimestamp.isBefore(activeCheckIn!.eventTimestamp))
+          .where((r) => !r.eventTimestamp.isBefore(startRecord.eventTimestamp))
           .toList();
     }
 
     // 2. Check if an officeCheckIn occurred on today's calendar date
     final todayCheckIns = empRecords.where((r) {
-      if (r.workflowStep != WorkflowStep.officeCheckIn) return false;
+      if (r.workflowStep != WorkflowStep.officeCheckIn &&
+          r.workflowStep != WorkflowStep.siteCheckIn &&
+          r.workflowStep != WorkflowStep.emergencyCheckIn) {
+        return false;
+      }
       final localEv = r.eventTimestamp.toLocal();
       final rDate = DateTime(localEv.year, localEv.month, localEv.day);
       return rDate.isAtSameMomentAs(today);
@@ -852,7 +1316,10 @@ class LocalDatabaseService {
 
     // 3. Check if an overnight shift concluded recently today (officeCheckOut on today's calendar date)
     final recentCheckOutToday = empRecords.where((r) {
-      if (r.workflowStep != WorkflowStep.officeCheckOut) return false;
+      if (r.workflowStep != WorkflowStep.officeCheckOut &&
+          r.workflowStep != WorkflowStep.emergencyCheckOut) {
+        return false;
+      }
       final localEv = r.eventTimestamp.toLocal();
       final rDate = DateTime(localEv.year, localEv.month, localEv.day);
       return rDate.isAtSameMomentAs(today);
@@ -862,7 +1329,9 @@ class LocalDatabaseService {
       final lastOut = recentCheckOutToday.last;
       final matchingIn = empRecords.lastWhere(
         (r) =>
-            r.workflowStep == WorkflowStep.officeCheckIn &&
+            (r.workflowStep == WorkflowStep.officeCheckIn ||
+                r.workflowStep == WorkflowStep.siteCheckIn ||
+                r.workflowStep == WorkflowStep.emergencyCheckIn) &&
             r.eventTimestamp.isBefore(lastOut.eventTimestamp),
         orElse: () => recentCheckOutToday.first,
       );
@@ -872,9 +1341,6 @@ class LocalDatabaseService {
           DateTime(matchingInLocal.year, matchingInLocal.month, matchingInLocal.day);
       final isOvernightFromPrevDay = matchingInDate.isBefore(today);
 
-      // If the checkout closed an overnight shift from a previous day:
-      // - Show completed shift summary within a 4-hour window (e.g. 2:05 AM right after shift end).
-      // - After 4+ hours (e.g. 2:00 PM next afternoon), the employee has rested and is ready to start Day 2 duty fresh!
       final elapsedSinceCheckout = now.difference(lastOut.eventTimestamp);
       if (!isOvernightFromPrevDay || elapsedSinceCheckout < const Duration(hours: 4)) {
         return empRecords
@@ -900,8 +1366,7 @@ class LocalDatabaseService {
     for (int i = todayRecords.length - 1; i >= 0; i--) {
       final step = todayRecords[i].workflowStep;
       if (step == WorkflowStep.siteCheckIn) return true;
-      if (step == WorkflowStep.siteCheckOut ||
-          step == WorkflowStep.officeCheckOut) return false;
+      if (step == WorkflowStep.siteCheckOut || step == WorkflowStep.officeCheckOut) return false;
     }
     return false;
   }
@@ -910,16 +1375,19 @@ class LocalDatabaseService {
   WorkflowStep getWorkflowStepForEmployee([String? employeeId]) {
     autoResolveExpiredCheckIns();
 
+    if (isEmergencyDutyActiveToday(employeeId)) {
+      return WorkflowStep.emergencyCheckOut;
+    }
+
     final todayUserRecords = getTodayAttendanceRecords(employeeId);
 
     if (todayUserRecords.isEmpty) {
       return WorkflowStep.officeCheckIn;
     }
 
-    final lastRecord = todayUserRecords.last;
-    if (lastRecord.workflowStep == WorkflowStep.officeCheckOut) {
+    if (todayUserRecords.any((r) => r.workflowStep == WorkflowStep.officeCheckOut)) {
       return WorkflowStep.completed;
-    } else if (lastRecord.workflowStep == WorkflowStep.breakStart) {
+    } else if (todayUserRecords.last.workflowStep == WorkflowStep.breakStart) {
       return WorkflowStep.breakEnd;
     } else if (isCurrentlyAtSite(employeeId)) {
       return WorkflowStep.siteCheckOut;
@@ -927,6 +1395,13 @@ class LocalDatabaseService {
       // Last record was officeCheckIn, siteCheckOut, or breakEnd: user can do siteCheckIn or officeCheckOut
       return WorkflowStep.siteCheckIn;
     }
+  }
+
+  /// Checks if the employee is currently on break
+  bool isEmployeeOnBreakToday([String? employeeId]) {
+    final todayRecords = getTodayAttendanceRecords(employeeId);
+    if (todayRecords.isEmpty) return false;
+    return todayRecords.last.workflowStep == WorkflowStep.breakStart;
   }
 
   /// Checks if employee currently has an active Emergency Duty check-in without check-out today
@@ -941,18 +1416,22 @@ class LocalDatabaseService {
     return false;
   }
 
-  /// Checks if the employee is currently on break
-  bool isEmployeeOnBreakToday([String? employeeId]) {
+  /// Gets the active emergency duty check-in record for today (if on emergency duty)
+  AttendanceRecord? getActiveEmergencyDutyRecordToday([String? employeeId]) {
     final todayRecords = getTodayAttendanceRecords(employeeId);
-    if (todayRecords.isEmpty) return false;
-    return todayRecords.last.workflowStep == WorkflowStep.breakStart;
+    if (todayRecords.isEmpty) return null;
+    for (int i = todayRecords.length - 1; i >= 0; i--) {
+      final step = todayRecords[i].workflowStep;
+      if (step == WorkflowStep.emergencyCheckIn) return todayRecords[i];
+      if (step == WorkflowStep.emergencyCheckOut) return null;
+    }
+    return null;
   }
 
   /// Gets the active break record for today (if on break)
   AttendanceRecord? getActiveBreakToday([String? employeeId]) {
     final todayRecords = getTodayAttendanceRecords(employeeId);
-    if (todayRecords.isNotEmpty &&
-        todayRecords.last.workflowStep == WorkflowStep.breakStart) {
+    if (todayRecords.isNotEmpty && todayRecords.last.workflowStep == WorkflowStep.breakStart) {
       return todayRecords.last;
     }
     return null;
@@ -998,8 +1477,7 @@ class LocalDatabaseService {
       if (step == WorkflowStep.siteCheckIn) {
         return todayRecords[i].siteName ?? 'Current Site';
       }
-      if (step == WorkflowStep.siteCheckOut ||
-          step == WorkflowStep.officeCheckOut) {
+      if (step == WorkflowStep.siteCheckOut || step == WorkflowStep.officeCheckOut) {
         return null;
       }
     }
@@ -1011,17 +1489,15 @@ class LocalDatabaseService {
   List<AttendanceRecord> getPendingSyncRecords([String? employeeId]) {
     autoResolveExpiredCheckIns();
 
-    final targetId =
-        employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
+    final targetId = employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
     return _attendanceRecords.where((r) {
       if (r.syncStatus != SyncStatus.pending) return false;
       if (targetId == null || targetId.isEmpty) return true;
       return r.employeeId == targetId ||
           (_currentUser != null &&
               (r.employeeId == _currentUser!.id ||
-                  r.employeeId == _currentUser!.firebaseUid ||
-                  r.employeeName.trim().toLowerCase() ==
-                      _currentUser!.fullName.trim().toLowerCase()));
+               r.employeeId == _currentUser!.firebaseUid ||
+               r.employeeName.trim().toLowerCase() == _currentUser!.fullName.trim().toLowerCase()));
     }).toList();
   }
 
@@ -1042,12 +1518,6 @@ class LocalDatabaseService {
         );
       }
     }
-    _persistAttendanceRecords();
-  }
-
-  /// Purges all locally stored attendance records from memory and Hive local storage.
-  void clearLocalAttendanceRecords() {
-    _attendanceRecords.clear();
     _persistAttendanceRecords();
   }
 
@@ -1084,6 +1554,11 @@ class LocalDatabaseService {
     } catch (e) {
       debugPrint('Error saving theme mode to Hive: $e');
     }
+  }
+
+  void clearLocalAttendanceRecords() {
+    _attendanceRecords.clear();
+    _persistAttendanceRecords();
   }
 
   // ==========================================================
