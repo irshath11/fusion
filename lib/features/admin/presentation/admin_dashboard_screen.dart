@@ -7,6 +7,7 @@ import 'work_site_management_screen.dart';
 import 'live_tracking_map_screen.dart';
 import 'reports_analytics_screen.dart';
 import 'ownership_transfer_dialog.dart';
+import '../../reconciliation/presentation/reconciliation_screen.dart';
 import '../../../core/constants/app_theme.dart';
 import '../../../core/theme/app_theme_preset.dart';
 import '../../../core/constants/app_enums.dart';
@@ -66,6 +67,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       icon: Icons.analytics_outlined,
       activeIcon: Icons.analytics_rounded,
       label: 'Reports',
+    ),
+    NavDestinationItem(
+      icon: Icons.receipt_long_outlined,
+      activeIcon: Icons.receipt_long_rounded,
+      label: 'Reconciliation',
     ),
   ];
 
@@ -189,6 +195,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   WorkSiteManagementScreen(key: ValueKey('worksite_$_currentNavIndex')),
                   LiveTrackingMapScreen(key: ValueKey('live_map_$_currentNavIndex')),
                   ReportsAnalyticsScreen(key: ValueKey('reports_$_currentNavIndex')),
+                  ReconciliationScreen(key: ValueKey('reconciliation_$_currentNavIndex')),
                 ],
               ),
             ),
@@ -476,6 +483,13 @@ class AdminOverviewTab extends StatelessWidget {
                               label: 'Office Stations',
                               color: palette.warning,
                               onTap: () => onNavigateTab?.call(2),
+                            ),
+                            _buildQuickActionButton(
+                              context: context,
+                              icon: Icons.receipt_long_rounded,
+                              label: 'Card Reconciliation',
+                              color: Colors.green,
+                              onTap: () => onNavigateTab?.call(6),
                             ),
                           ],
                         ),

@@ -11,6 +11,9 @@ import '../features/admin/domain/office_entity.dart';
 import '../features/admin/domain/work_site_entity.dart';
 import '../features/attendance/domain/attendance_record.dart';
 import '../core/utils/employee_directory_helper.dart';
+import '../features/reconciliation/domain/expense_bill_entity.dart';
+import '../features/reconciliation/domain/statement_transaction_entity.dart';
+import '../features/reconciliation/services/reconciliation_matching_service.dart';
 
 class LocalDatabaseService {
   static final LocalDatabaseService _instance =
@@ -30,6 +33,8 @@ class LocalDatabaseService {
   final List<OfficeEntity> _offices = [];
   final List<WorkSiteEntity> _workSites = [];
   final List<AttendanceRecord> _attendanceRecords = [];
+  final List<ExpenseBillEntity> _expenseBills = [];
+  final List<StatementTransactionEntity> _statementTransactions = [];
 
   // Initialize with Hive persistence & seed enterprise defaults
   Future<void> init() async {
@@ -125,6 +130,30 @@ class LocalDatabaseService {
             }
           } catch (_) {}
         }
+      }
+
+      // Load Reconciliation Expense Bills
+      final savedBillsJson = _settingsBox?.get('expense_bills_json');
+      if (savedBillsJson != null && savedBillsJson.toString().isNotEmpty) {
+        try {
+          final List<dynamic> decoded = jsonDecode(savedBillsJson);
+          _expenseBills.clear();
+          for (final item in decoded) {
+            _expenseBills.add(ExpenseBillEntity.fromJson(item));
+          }
+        } catch (_) {}
+      }
+
+      // Load Reconciliation Statement Transactions
+      final savedStatementJson = _settingsBox?.get('statement_transactions_json');
+      if (savedStatementJson != null && savedStatementJson.toString().isNotEmpty) {
+        try {
+          final List<dynamic> decoded = jsonDecode(savedStatementJson);
+          _statementTransactions.clear();
+          for (final item in decoded) {
+            _statementTransactions.add(StatementTransactionEntity.fromJson(item));
+          }
+        } catch (_) {}
       }
 
       // Check live setup status against Supabase table 'organizations'
@@ -1922,6 +1951,306 @@ class LocalDatabaseService {
       debugPrint('Deleted work photo submission #$id.');
     } catch (e) {
       debugPrint('Error deleting work photo submission: $e');
+    }
+  }
+
+  // ==========================================
+  // RECONCILIATION & BILL MANAGEMENT
+  // ==========================================
+
+  List<ExpenseBillEntity> getExpenseBills() {
+    return List.unmodifiable(_expenseBills);
+  }
+
+  Future<void> saveExpenseBill(ExpenseBillEntity bill) async {
+    final idx = _expenseBills.indexWhere((b) => b.id == bill.id);
+    if (idx >= 0) {
+      _expenseBills[idx] = bill;
+    } else {
+      _expenseBills.add(bill);
+    }
+    await _persistExpenseBills();
+  }
+
+  Future<void> deleteExpenseBill(String id) async {
+    final billIdx = _expenseBills.indexWhere((b) => b.id == id);
+    if (billIdx >= 0) {
+      final bill = _expenseBills[billIdx];
+      // If it was matched with a statement transaction, unmatch the statement line
+      if (bill.isMatched) {
+        final txIdx = _statementTransactions.indexWhere((t) => t.id == bill.matchedStatementId);
+        if (txIdx >= 0) {
+          _statementTransactions[txIdx] = _statementTransactions[txIdx].copyWith(clearMatch: true);
+          await _persistStatementTransactions();
+        }
+      }
+      _expenseBills.removeAt(billIdx);
+      await _persistExpenseBills();
+    }
+  }
+
+  List<StatementTransactionEntity> getStatementTransactions({String? cycleMonth}) {
+    if (cycleMonth != null && cycleMonth.isNotEmpty) {
+      return _statementTransactions.where((t) => t.cycleMonth == cycleMonth).toList();
+    }
+    return List.unmodifiable(_statementTransactions);
+  }
+
+  Future<void> saveStatementTransactions(List<StatementTransactionEntity> items) async {
+    for (final item in items) {
+      final idx = _statementTransactions.indexWhere((t) => t.id == item.id);
+      if (idx >= 0) {
+        _statementTransactions[idx] = item;
+      } else {
+        _statementTransactions.add(item);
+      }
+    }
+    await _persistStatementTransactions();
+  }
+
+  Future<void> deleteStatementTransaction(String id) async {
+    final txIdx = _statementTransactions.indexWhere((t) => t.id == id);
+    if (txIdx >= 0) {
+      final tx = _statementTransactions[txIdx];
+      // If it was matched with a bill, unmatch the bill
+      if (tx.isMatched) {
+        final billIdx = _expenseBills.indexWhere((b) => b.id == tx.matchedBillId);
+        if (billIdx >= 0) {
+          _expenseBills[billIdx] = _expenseBills[billIdx].copyWith(clearMatch: true);
+          await _persistExpenseBills();
+        }
+      }
+      _statementTransactions.removeAt(txIdx);
+      await _persistStatementTransactions();
+    }
+  }
+
+  Future<void> pairMatch(String statementId, String billId) async {
+    final txIdx = _statementTransactions.indexWhere((t) => t.id == statementId);
+    final billIdx = _expenseBills.indexWhere((b) => b.id == billId);
+
+    if (txIdx >= 0 && billIdx >= 0) {
+      _statementTransactions[txIdx] = _statementTransactions[txIdx].copyWith(
+        matchedBillId: billId,
+        matchConfidence: 1.0,
+        matchNotes: 'Manually verified & matched by Admin',
+      );
+      _expenseBills[billIdx] = _expenseBills[billIdx].copyWith(
+        matchedStatementId: statementId,
+      );
+
+      await _persistStatementTransactions();
+      await _persistExpenseBills();
+    }
+  }
+
+  Future<void> unpairMatch(String statementId) async {
+    final txIdx = _statementTransactions.indexWhere((t) => t.id == statementId);
+    if (txIdx >= 0) {
+      final matchedBillId = _statementTransactions[txIdx].matchedBillId;
+      _statementTransactions[txIdx] = _statementTransactions[txIdx].copyWith(clearMatch: true);
+
+      if (matchedBillId != null) {
+        final billIdx = _expenseBills.indexWhere((b) => b.id == matchedBillId);
+        if (billIdx >= 0) {
+          _expenseBills[billIdx] = _expenseBills[billIdx].copyWith(clearMatch: true);
+        }
+      }
+
+      await _persistStatementTransactions();
+      await _persistExpenseBills();
+    }
+  }
+
+  Future<int> autoMatchCycle(String cycleMonth) async {
+    final result = ReconciliationMatchingService.autoMatch(
+      cycleMonth: cycleMonth,
+      transactions: _statementTransactions,
+      bills: _expenseBills,
+    );
+
+    _statementTransactions.clear();
+    _statementTransactions.addAll(result.updatedTransactions);
+
+    _expenseBills.clear();
+    _expenseBills.addAll(result.updatedBills);
+
+    await _persistStatementTransactions();
+    await _persistExpenseBills();
+
+    return result.newlyMatchedCount;
+  }
+
+  Future<void> clearCycleData(String cycleMonth) async {
+    _statementTransactions.removeWhere((t) => t.cycleMonth == cycleMonth);
+    _expenseBills.removeWhere((b) {
+      final bMonth = '${b.billDate.year}-${b.billDate.month.toString().padLeft(2, '0')}';
+      return bMonth == cycleMonth;
+    });
+    await _persistStatementTransactions();
+    await _persistExpenseBills();
+  }
+
+  Future<void> seedReconciliationDemoData(String cycleMonth) async {
+    final parts = cycleMonth.split('-');
+    final year = int.tryParse(parts[0]) ?? DateTime.now().year;
+    final month = int.tryParse(parts[1]) ?? DateTime.now().month;
+
+    final empList = getEmployees();
+    final emp1 = empList.isNotEmpty ? empList[0] : null;
+    final emp2 = empList.length > 1 ? empList[1] : emp1;
+    final emp3 = empList.length > 2 ? empList[2] : emp1;
+
+    final emp1Id = emp1?.id ?? 'emp-101';
+    final emp1Name = emp1?.name ?? 'Anandh Kumar';
+    final emp2Id = emp2?.id ?? 'emp-102';
+    final emp2Name = emp2?.name ?? 'Mohammed Rafi';
+    final emp3Id = emp3?.id ?? 'emp-103';
+    final emp3Name = emp3?.name ?? 'Azharudeen';
+
+    final tx1Id = _uuid.v4();
+    final tx2Id = _uuid.v4();
+    final tx3Id = _uuid.v4();
+    final tx4Id = _uuid.v4();
+
+    final bill1Id = _uuid.v4();
+    final bill2Id = _uuid.v4();
+    final bill3Id = _uuid.v4();
+    final bill4Id = _uuid.v4();
+
+    // 4 realistic statement transactions
+    final demoTransactions = [
+      StatementTransactionEntity(
+        id: tx1Id,
+        cycleMonth: cycleMonth,
+        transactionDate: DateTime(year, month, 4),
+        description: 'AL FUTTAIM HARDWARE DUBAI',
+        amount: 320.00,
+        cardLast4: '4129',
+        matchedBillId: bill1Id,
+        matchConfidence: 1.0,
+        matchNotes: 'Auto-matched: Exact amount and merchant',
+        createdAt: DateTime.now(),
+      ),
+      StatementTransactionEntity(
+        id: tx2Id,
+        cycleMonth: cycleMonth,
+        transactionDate: DateTime(year, month, 8),
+        description: 'ACE HARDWARE ELECTRICAL CABLES',
+        amount: 145.50,
+        cardLast4: '4129',
+        matchedBillId: bill2Id,
+        matchConfidence: 1.0,
+        matchNotes: 'Auto-matched: Exact amount and date',
+        createdAt: DateTime.now(),
+      ),
+      StatementTransactionEntity(
+        id: tx3Id,
+        cycleMonth: cycleMonth,
+        transactionDate: DateTime(year, month, 15),
+        description: 'DANUBE BUILDING MATERIALS',
+        amount: 580.00,
+        cardLast4: '4129',
+        matchedBillId: bill3Id,
+        matchConfidence: 1.0,
+        matchNotes: 'Auto-matched: Exact amount and vendor',
+        createdAt: DateTime.now(),
+      ),
+      StatementTransactionEntity(
+        id: tx4Id,
+        cycleMonth: cycleMonth,
+        transactionDate: DateTime(year, month, 22),
+        description: 'DEWALT TOOLS & DRILL BITS',
+        amount: 210.00,
+        cardLast4: '4129',
+        matchedBillId: null, // Discrepancy: Missing receipt!
+        createdAt: DateTime.now(),
+      ),
+    ];
+
+    // 4 employee bills
+    final demoBills = [
+      ExpenseBillEntity(
+        id: bill1Id,
+        employeeId: emp1Id,
+        employeeName: emp1Name,
+        vendorName: 'Al Futtaim Hardware',
+        invoiceNumber: 'INV-4821',
+        amount: 320.00,
+        billDate: DateTime(year, month, 3),
+        cardLast4: '4129',
+        category: 'Material Purchase',
+        materialDescription: 'PVC Pipes, Elbows & Fittings',
+        matchedStatementId: tx1Id,
+        createdAt: DateTime.now(),
+      ),
+      ExpenseBillEntity(
+        id: bill2Id,
+        employeeId: emp2Id,
+        employeeName: emp2Name,
+        vendorName: 'Ace Hardware',
+        invoiceNumber: 'ACE-9011',
+        amount: 145.50,
+        billDate: DateTime(year, month, 7),
+        cardLast4: '4129',
+        category: 'Electricals',
+        materialDescription: 'Industrial Cable rolls & terminal blocks',
+        matchedStatementId: tx2Id,
+        createdAt: DateTime.now(),
+      ),
+      ExpenseBillEntity(
+        id: bill3Id,
+        employeeId: emp3Id,
+        employeeName: emp3Name,
+        vendorName: 'Danube Building Materials',
+        invoiceNumber: 'DAN-3142',
+        amount: 580.00,
+        billDate: DateTime(year, month, 14),
+        cardLast4: '4129',
+        category: 'Material Purchase',
+        materialDescription: 'Drywall Sheets, Screws & Joint Compound',
+        matchedStatementId: tx3Id,
+        createdAt: DateTime.now(),
+      ),
+      // A pending bill that matches tx4 once verified or a separate one
+      ExpenseBillEntity(
+        id: bill4Id,
+        employeeId: emp1Id,
+        employeeName: emp1Name,
+        vendorName: 'Speedy Hardware & Tools',
+        invoiceNumber: 'SH-1029',
+        amount: 210.00,
+        billDate: DateTime(year, month, 21),
+        cardLast4: '4129',
+        category: 'Tools & Hardware',
+        materialDescription: 'Masonry Drill bit set & angle grinder discs',
+        matchedStatementId: null, // Unmatched so user can test 1-tap Auto Match or Manual Link to achieve ZERO BALANCE!
+        createdAt: DateTime.now(),
+      ),
+    ];
+
+    await clearCycleData(cycleMonth);
+    await saveStatementTransactions(demoTransactions);
+    for (final b in demoBills) {
+      await saveExpenseBill(b);
+    }
+  }
+
+  Future<void> _persistExpenseBills() async {
+    try {
+      final jsonList = _expenseBills.map((b) => b.toJson()).toList();
+      await _settingsBox?.put('expense_bills_json', jsonEncode(jsonList));
+    } catch (e) {
+      debugPrint('Error saving expense bills: $e');
+    }
+  }
+
+  Future<void> _persistStatementTransactions() async {
+    try {
+      final jsonList = _statementTransactions.map((t) => t.toJson()).toList();
+      await _settingsBox?.put('statement_transactions_json', jsonEncode(jsonList));
+    } catch (e) {
+      debugPrint('Error saving statement transactions: $e');
     }
   }
 }
