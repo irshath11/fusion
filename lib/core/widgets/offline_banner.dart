@@ -15,7 +15,7 @@ class OfflineBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isVisible = pendingCount > 0;
+    final bool isVisible = pendingCount > 0 || isSyncing;
 
     return AnimatedSize(
       duration: const Duration(milliseconds: 300),
@@ -34,7 +34,9 @@ class OfflineBanner extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Offline Mode: $pendingCount pending sync record${pendingCount > 1 ? 's' : ''}',
+                        isSyncing && pendingCount == 0
+                            ? 'Syncing records with cloud...'
+                            : 'Offline Mode: $pendingCount pending sync record${pendingCount > 1 ? 's' : ''}',
                         style: const TextStyle(
                           color: Colors.black87,
                           fontWeight: FontWeight.w700,

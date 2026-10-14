@@ -1141,10 +1141,16 @@ class LocalDatabaseService {
     final now = DateTime.now();
     int resolvedCount = 0;
 
-    // Group records by employeeId
+    // Group records by canonical employeeId
     final Map<String, List<AttendanceRecord>> employeeRecordsMap = {};
     for (final record in _attendanceRecords) {
-      employeeRecordsMap.putIfAbsent(record.employeeId, () => []).add(record);
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: record.employeeId,
+        name: record.employeeName,
+        id: record.employeeId,
+      );
+      final key = official != null ? official.employeeId.toUpperCase() : record.employeeId;
+      employeeRecordsMap.putIfAbsent(key, () => []).add(record);
     }
 
     final List<AttendanceRecord> newAutoCheckOuts = [];
@@ -1247,7 +1253,10 @@ class LocalDatabaseService {
         employeeName: _currentUser?.fullName,
         employeeEmail: _currentUser?.email,
       );
-      return matchesId || matchesName || matchesUser || matchesIdentity;
+      final matchesDevice = _currentUser != null &&
+          r.deviceId.isNotEmpty &&
+          r.deviceId == 'device-hw-${_currentUser!.id}';
+      return matchesId || matchesName || matchesUser || matchesIdentity || matchesDevice;
     }).toList()
       ..sort((a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
 
@@ -1489,15 +1498,74 @@ class LocalDatabaseService {
   List<AttendanceRecord> getPendingSyncRecords([String? employeeId]) {
     autoResolveExpiredCheckIns();
 
-    final targetId = employeeId ?? _currentUser?.id ?? _currentUser?.firebaseUid;
-    return _attendanceRecords.where((r) {
-      if (r.syncStatus != SyncStatus.pending) return false;
-      if (targetId == null || targetId.isEmpty) return true;
-      return r.employeeId == targetId ||
-          (_currentUser != null &&
-              (r.employeeId == _currentUser!.id ||
-               r.employeeId == _currentUser!.firebaseUid ||
-               r.employeeName.trim().toLowerCase() == _currentUser!.fullName.trim().toLowerCase()));
+    final pending = _attendanceRecords
+        .where((r) => r.syncStatus == SyncStatus.pending)
+        .toList();
+    if (employeeId == null || employeeId.trim().isEmpty) {
+      return pending;
+    }
+
+    final cleanTarget = employeeId.trim().toLowerCase();
+    final user = _currentUser;
+    final officialUser = EmployeeDirectoryHelper.resolveOfficialRecord(
+      code: user?.employeeCode,
+      name: user?.fullName,
+      email: user?.email,
+      id: user?.id,
+    );
+
+    return pending.where((r) {
+      final rEmpId = r.employeeId.trim().toLowerCase();
+      final rEmpName = r.employeeName.trim().toLowerCase();
+
+      // 1. Direct match on target ID or name
+      if (rEmpId == cleanTarget || rEmpName == cleanTarget) return true;
+
+      // 2. Current user attributes & device binding
+      if (user != null) {
+        if (user.id.trim().toLowerCase() == rEmpId) return true;
+        if (user.firebaseUid.trim().toLowerCase() == rEmpId) return true;
+        if (user.employeeCode != null &&
+            user.employeeCode!.trim().isNotEmpty &&
+            user.employeeCode!.trim().toLowerCase() == rEmpId) {
+          return true;
+        }
+        if (user.fullName.trim().toLowerCase() == rEmpName) return true;
+        if (r.deviceId.isNotEmpty && r.deviceId == 'device-hw-${user.id}') {
+          return true;
+        }
+      }
+
+      // 3. Match against employee identity rules
+      if (EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: r.employeeId,
+        recordEmployeeName: r.employeeName,
+        employeeId: cleanTarget,
+        employeeCode: user?.employeeCode,
+        employeeName: user?.fullName,
+        employeeEmail: user?.email,
+      )) {
+        return true;
+      }
+
+      // 4. Match against official master directory resolution
+      final officialRecord = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: r.employeeId,
+        name: r.employeeName,
+        id: r.employeeId,
+      );
+      if (officialRecord != null) {
+        if (officialUser != null &&
+            officialRecord.employeeId.toUpperCase() == officialUser.employeeId.toUpperCase()) {
+          return true;
+        }
+        if (officialRecord.employeeId.toLowerCase() == cleanTarget ||
+            officialRecord.aliases.any((a) => a.toLowerCase() == cleanTarget)) {
+          return true;
+        }
+      }
+
+      return false;
     }).toList();
   }
 

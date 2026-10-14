@@ -114,14 +114,21 @@ class TimesheetCalculator {
     List<AttendanceRecord> records, {
     bool isSingleEmployee = false,
   }) {
-    // 1. Separate by employee
+    // 1. Separate by employee (canonicalizing aliases and short names to official employee ID)
     final Map<String, List<AttendanceRecord>> empRecordsMap = {};
     for (final record in records) {
-      final empKey = record.employeeId.isNotEmpty
-          ? record.employeeId
-          : (record.employeeName.trim().isNotEmpty
-              ? record.employeeName.trim().toLowerCase()
-              : 'unknown');
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: record.employeeId,
+        name: record.employeeName,
+        id: record.employeeId,
+      );
+      final empKey = official != null
+          ? official.employeeId.toUpperCase()
+          : (record.employeeId.isNotEmpty
+              ? record.employeeId
+              : (record.employeeName.trim().isNotEmpty
+                  ? record.employeeName.trim().toLowerCase()
+                  : 'unknown'));
       empRecordsMap.putIfAbsent(empKey, () => []).add(record);
     }
 

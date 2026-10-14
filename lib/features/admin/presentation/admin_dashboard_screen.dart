@@ -228,15 +228,28 @@ class AdminOverviewTab extends StatelessWidget {
               return rDate.isAtSameMomentAs(today);
             }).toList();
 
-            final checkedInEmpIds =
-                todayRecords.map((r) => r.employeeId).toSet();
+            final checkedInEmpIds = todayRecords.map((r) {
+              final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+                code: r.employeeId,
+                name: r.employeeName,
+                id: r.employeeId,
+              );
+              return official?.employeeId.toUpperCase() ?? r.employeeId;
+            }).toSet();
             final totalCheckedInToday = checkedInEmpIds.length;
 
             final completedEmpIds = todayRecords
                 .where((r) =>
                     r.workflowStep == WorkflowStep.officeCheckOut ||
                     r.workflowStep == WorkflowStep.completed)
-                .map((r) => r.employeeId)
+                .map((r) {
+                  final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+                    code: r.employeeId,
+                    name: r.employeeName,
+                    id: r.employeeId,
+                  );
+                  return official?.employeeId.toUpperCase() ?? r.employeeId;
+                })
                 .toSet();
             final totalCompletedToday = completedEmpIds.length;
 

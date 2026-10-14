@@ -48,6 +48,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
   int _pendingSyncCount = 0;
   bool _isSyncing = false;
   Timer? _workingTimeTimer;
+  StreamSubscription? _syncResultSubscription;
 
   @override
   void initState() {
@@ -55,13 +56,29 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     _refreshSyncCount();
     _startWorkingTimeTimer();
     _syncCloudData();
+    _syncEngine.isSyncingNotifier.addListener(_onSyncStateChanged);
+    _syncResultSubscription = _syncEngine.syncResultStream.listen((_) {
+      if (mounted) _refreshSyncCount();
+    });
+  }
+
+  void _onSyncStateChanged() {
+    if (mounted) {
+      setState(() {
+        _isSyncing = _syncEngine.isSyncingNotifier.value;
+      });
+      _refreshSyncCount();
+    }
   }
 
   Future<void> _syncCloudData() async {
     try {
       await SupabaseService().syncCloudDataToLocal();
       await _db.sanitizeDuplicateEmployees();
-      if (mounted) setState(() {});
+      if (mounted) {
+        _refreshSyncCount();
+        setState(() {});
+      }
     } catch (_) {}
   }
 
@@ -70,6 +87,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     _workingTimeTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (mounted) {
         _db.autoResolveExpiredCheckIns();
+        _refreshSyncCount();
         setState(() {});
       }
     });
@@ -78,15 +96,21 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
   @override
   void dispose() {
     _workingTimeTimer?.cancel();
+    _syncEngine.isSyncingNotifier.removeListener(_onSyncStateChanged);
+    _syncResultSubscription?.cancel();
     super.dispose();
   }
 
   void _refreshSyncCount() {
     final user = _db.currentUser;
-    setState(() {
-      _pendingSyncCount =
-          _db.getPendingSyncRecords(user?.id ?? user?.firebaseUid).length;
-    });
+    final userPending =
+        _db.getPendingSyncRecords(user?.id ?? user?.firebaseUid).length;
+    final allPending = _db.getAllPendingSyncRecords().length;
+    if (mounted) {
+      setState(() {
+        _pendingSyncCount = userPending > 0 ? userPending : allPending;
+      });
+    }
   }
 
   Future<void> _manualSync() async {

@@ -10,6 +10,7 @@ import '../../../core/utils/geofence_calculator.dart';
 import '../domain/attendance_record.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../admin/domain/office_entity.dart';
+import '../../../core/utils/employee_directory_helper.dart';
 
 abstract class AttendanceState extends Equatable {
   @override
@@ -119,20 +120,68 @@ class AttendanceCubit extends Cubit<AttendanceState> {
         } catch (_) {}
       }
 
-      // 2. Resolve target geofence bounds based on employee's assigned office / site
+      // 2. Resolve employee entity accurately matching authenticated user
       final employees = _db.getEmployees();
-      final emp = employees.firstWhere(
-        (e) => e.id == user.id || e.email == user.email,
-        orElse: () => employees.isNotEmpty ? employees.first : EmployeeEntity(
-          id: user.id,
-          employeeCode: 'EMP-DEFAULT',
-          name: user.fullName,
-          mobileNumber: '',
-          email: user.email,
-          designation: 'Staff',
-          department: 'General',
-        ),
+      EmployeeEntity? matchedEmp;
+      final cleanUserId = user.id.trim().toLowerCase();
+      final cleanUserFirebaseUid = user.firebaseUid.trim().toLowerCase();
+      final cleanUserEmail = user.email.trim().toLowerCase();
+      final cleanUserCode = user.employeeCode?.trim().toLowerCase() ?? '';
+
+      for (final e in employees) {
+        final eId = e.id.trim().toLowerCase();
+        final eEmail = e.email.trim().toLowerCase();
+        final eCode = e.employeeCode.trim().toLowerCase();
+        if (eId == cleanUserId ||
+            (cleanUserFirebaseUid.isNotEmpty && eId == cleanUserFirebaseUid) ||
+            (cleanUserEmail.isNotEmpty && eEmail == cleanUserEmail) ||
+            (cleanUserCode.isNotEmpty && (eCode == cleanUserCode || eId == cleanUserCode)) ||
+            EmployeeDirectoryHelper.matchesEmployeeIdentity(
+              recordEmployeeId: e.id,
+              recordEmployeeName: e.name,
+              employeeId: user.id,
+              employeeCode: user.employeeCode,
+              employeeName: user.fullName,
+              employeeEmail: user.email,
+            )) {
+          matchedEmp = e;
+          break;
+        }
+      }
+
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: user.employeeCode,
+        name: user.fullName,
+        email: user.email,
+        id: user.id,
       );
+
+      final emp = matchedEmp ??
+          EmployeeEntity(
+            id: official?.employeeId ??
+                ((user.employeeCode != null && user.employeeCode!.trim().isNotEmpty)
+                    ? user.employeeCode!.trim()
+                    : user.id),
+            employeeCode: official?.employeeId ??
+                ((user.employeeCode != null && user.employeeCode!.trim().isNotEmpty)
+                    ? user.employeeCode!.trim()
+                    : 'EMP-DEFAULT'),
+            name: official?.fullName ??
+                (user.fullName.trim().isNotEmpty ? user.fullName : 'Employee'),
+            mobileNumber: user.phoneNumber ?? '',
+            email: user.email,
+            designation: official?.designation ??
+                ((user.designation != null && user.designation!.trim().isNotEmpty)
+                    ? user.designation!.trim()
+                    : 'Staff'),
+            department: official?.department ??
+                ((user.department != null && user.department!.trim().isNotEmpty)
+                    ? user.department!.trim()
+                    : 'General'),
+            useDefaultOffice: user.useDefaultOffice,
+            assignedOfficeId: user.assignedOfficeId,
+            assignedOfficeName: user.assignedOfficeName,
+          );
 
       double targetLat = 0.0;
       double targetLng = 0.0;
@@ -280,7 +329,7 @@ class AttendanceCubit extends Cubit<AttendanceState> {
 
       _db.addAttendanceRecord(record);
 
-      WorkflowStep next = _db.getWorkflowStepForEmployee();
+      WorkflowStep next = _db.getWorkflowStepForEmployee(emp.id);
       emit(AttendanceStepSuccess(record, next));
     } catch (e) {
       emit(AttendanceFailure('Attendance capture failed: ${e.toString()}'));
@@ -295,6 +344,8 @@ class AttendanceCubit extends Cubit<AttendanceState> {
   }
 
   void resetState() {
-    emit(AttendanceInitial(_db.getWorkflowStepForEmployee()));
+    final user = _db.currentUser;
+    emit(AttendanceInitial(
+        _db.getWorkflowStepForEmployee(user?.id ?? user?.firebaseUid)));
   }
 }
