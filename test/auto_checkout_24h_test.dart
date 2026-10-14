@@ -5,8 +5,11 @@ import 'package:attendance_app/features/attendance/domain/attendance_record.dart
 import 'package:attendance_app/database/local_database_service.dart';
 
 void main() {
-  group('Auto Check-Out & 8-Hour Regular Time Capping Tests (TimesheetCalculator)', () {
-    test('Active shift under 24 hours without checkout remains in progress', () {
+  group(
+      'Auto Check-Out & 8-Hour Regular Time Capping Tests (TimesheetCalculator)',
+      () {
+    test('Active shift under 24 hours without checkout remains in progress',
+        () {
       final now = DateTime.now();
       final checkInTime = now.subtract(const Duration(hours: 5));
 
@@ -38,7 +41,9 @@ void main() {
       expect(entry.totalHours, lessThanOrEqualTo(5.1));
     });
 
-    test('Unclosed shift crossing 24 hours is automatically capped at 8.0 regular hours and 0.0 OT', () {
+    test(
+        'Unclosed shift crossing 24 hours is automatically capped at 8.0 regular hours and 0.0 OT',
+        () {
       final now = DateTime.now();
       // Checked in 26 hours ago
       final checkInTime = now.subtract(const Duration(hours: 26));
@@ -71,7 +76,8 @@ void main() {
       // Check-out time must be exactly 8 hours after check-in
       final expectedCheckOut = checkInTime.add(const Duration(hours: 8));
       expect(entry.checkOutTime, isNotNull);
-      expect(entry.checkOutTime!.difference(checkInTime), const Duration(hours: 8));
+      expect(entry.checkOutTime!.difference(checkInTime),
+          const Duration(hours: 8));
       expect(entry.checkOutTime, expectedCheckOut);
 
       // Total duration must be exactly 8 hours
@@ -80,7 +86,9 @@ void main() {
       expect(entry.overtimeHours, 0.0);
     });
 
-    test('Unclosed shift crossing 48 hours is also capped at exactly 8.0 hours with 0 OT', () {
+    test(
+        'Unclosed shift crossing 48 hours is also capped at exactly 8.0 hours with 0 OT',
+        () {
       final now = DateTime.now();
       final checkInTime = now.subtract(const Duration(hours: 48));
 
@@ -112,7 +120,9 @@ void main() {
       expect(entry.totalDuration, const Duration(hours: 8));
     });
 
-    test('Normal completed shift with 10 hours work calculates 8.0 regular, 1.0 food break, 1.0 travel tolerance and 0.0 overtime', () {
+    test(
+        'Normal completed shift with 10 hours work calculates 8.0 regular, 1.0 food break, 1.0 travel tolerance and 0.0 overtime',
+        () {
       final checkInTime = DateTime(2026, 8, 10, 8, 0);
       final checkOutTime = DateTime(2026, 8, 10, 18, 0); // 10 hours
 
@@ -160,9 +170,12 @@ void main() {
       expect(entry.grossDuration, const Duration(hours: 10));
     });
 
-    test('11-hour shift (07:30 AM to 06:30 PM) calculates 8.0 regular, 1.0 food break, 1.0 travel tolerance and 1.0 overtime (OT starts after 10h)', () {
+    test(
+        '11-hour shift (07:30 AM to 06:30 PM) calculates 8.0 regular, 1.0 food break, 1.0 travel tolerance and 1.0 overtime (OT starts after 10h)',
+        () {
       final checkInTime = DateTime(2026, 8, 10, 7, 30); // 07:30 AM
-      final checkOutTime = DateTime(2026, 8, 10, 18, 30); // 06:30 PM (11 hours gross)
+      final checkOutTime =
+          DateTime(2026, 8, 10, 18, 30); // 06:30 PM (11 hours gross)
 
       final records = [
         AttendanceRecord(
@@ -208,9 +221,12 @@ void main() {
       expect(entry.grossDuration, const Duration(hours: 11));
     });
 
-    test('12-hour shift (06:45 AM to 06:45 PM) calculates 8.0 regular, 1.0 food break, 1.0 travel tolerance and 2.0 overtime hours', () {
+    test(
+        '12-hour shift (06:45 AM to 06:45 PM) calculates 8.0 regular, 1.0 food break, 1.0 travel tolerance and 2.0 overtime hours',
+        () {
       final checkInTime = DateTime(2026, 8, 10, 6, 45); // 06:45 AM
-      final checkOutTime = DateTime(2026, 8, 10, 18, 45); // 06:45 PM (12 hours gross)
+      final checkOutTime =
+          DateTime(2026, 8, 10, 18, 45); // 06:45 PM (12 hours gross)
 
       final records = [
         AttendanceRecord(
@@ -258,7 +274,9 @@ void main() {
   });
 
   group('LocalDatabaseService autoResolveExpiredCheckIns Tests', () {
-    test('autoResolveExpiredCheckIns synthesizes officeCheckOut record at checkIn + 8 hours', () {
+    test(
+        'autoResolveExpiredCheckIns synthesizes officeCheckOut record at checkIn + 8 hours',
+        () {
       final db = LocalDatabaseService();
       final now = DateTime.now();
       final oldCheckInTime = now.subtract(const Duration(hours: 30));
@@ -290,7 +308,8 @@ void main() {
 
       expect(autoCheckOutMatches.isNotEmpty, isTrue);
       final autoRec = autoCheckOutMatches.first;
-      expect(autoRec.eventTimestamp, oldCheckInTime.add(const Duration(hours: 8)));
+      expect(
+          autoRec.eventTimestamp, oldCheckInTime.add(const Duration(hours: 8)));
       expect(autoRec.address, contains('Auto Check-Out'));
       expect(autoRec.syncStatus, SyncStatus.pending);
 

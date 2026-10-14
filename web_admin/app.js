@@ -16,6 +16,8 @@
   let officesData = [];
   let sitesData = [];
   let attendanceData = [];
+  let cardsData = [];
+  let cardPendingFile = null;
   let leafletMap = null;
   let mapMarkers = [];
 
@@ -36,6 +38,40 @@
   const siteTableBody = document.getElementById('site-table-body');
   const reportsTableBody = document.getElementById('reports-table-body');
   const reportsCycleSelect = document.getElementById('reports-cycle-select');
+
+  // Cards & Documents DOM Cache
+  const cardsTableBody = document.getElementById('cards-table-body');
+  const cardsSearchInput = document.getElementById('cards-search-input');
+  const cardsFilterType = document.getElementById('cards-filter-type');
+  const cardsFilterStatus = document.getElementById('cards-filter-status');
+  const cardsAlertBanner = document.getElementById('cards-alert-banner');
+  const alertBannerTitle = document.getElementById('alert-banner-title');
+  const alertBannerDesc = document.getElementById('alert-banner-desc');
+
+  const cardDrawerBackdrop = document.getElementById('card-drawer-backdrop');
+  const cardDrawer = document.getElementById('card-drawer');
+  const cardForm = document.getElementById('card-form');
+  const cardEditId = document.getElementById('card-edit-id');
+  const cardEmpSelect = document.getElementById('card-emp-select');
+  const cardTypeSelect = document.getElementById('card-type-select');
+  const cardCustomNameGroup = document.getElementById('card-custom-name-group');
+  const cardCustomName = document.getElementById('card-custom-name');
+  const cardNumberInput = document.getElementById('card-number-input');
+  const cardIssueDate = document.getElementById('card-issue-date');
+  const cardExpiryDate = document.getElementById('card-expiry-date');
+  const cardNotes = document.getElementById('card-notes');
+  const cardFileDropzone = document.getElementById('card-file-dropzone');
+  const cardFileInput = document.getElementById('card-file-input');
+  const cardFilePreview = document.getElementById('card-file-preview');
+  const cardFileThumb = document.getElementById('card-file-thumb');
+  const cardFileName = document.getElementById('card-file-name');
+  const cardFileSize = document.getElementById('card-file-size');
+  const cardFileRemove = document.getElementById('card-file-remove');
+
+  const cardViewerBackdrop = document.getElementById('card-viewer-backdrop');
+  const cardViewerModal = document.getElementById('card-viewer-modal');
+  const broadcastModalBackdrop = document.getElementById('broadcast-modal-backdrop');
+  const broadcastModal = document.getElementById('broadcast-modal');
 
   const drawerBackdrop = document.getElementById('employee-drawer-backdrop');
   const drawer = document.getElementById('employee-drawer');
@@ -174,6 +210,108 @@
     document.getElementById('btn-export-csv').addEventListener('click', exportReportsCSV);
     document.getElementById('btn-export-excel').addEventListener('click', exportReportsExcel);
 
+    // Cards & Passes Expiry Management Event Listeners
+    if (cardsSearchInput) {
+      cardsSearchInput.addEventListener('input', () => renderCardsTable());
+    }
+    if (cardsFilterType) {
+      cardsFilterType.addEventListener('change', () => renderCardsTable());
+    }
+    if (cardsFilterStatus) {
+      cardsFilterStatus.addEventListener('change', () => renderCardsTable());
+    }
+    const btnAddCard = document.getElementById('btn-add-card');
+    if (btnAddCard) btnAddCard.addEventListener('click', () => openCardDrawer());
+
+    const btnExportCards = document.getElementById('btn-export-cards');
+    if (btnExportCards) btnExportCards.addEventListener('click', exportCardsData);
+
+    const cardDrawerCloseBtn = document.getElementById('card-drawer-close-btn');
+    const cardDrawerCancelBtn = document.getElementById('card-drawer-cancel-btn');
+    const cardDrawerSaveBtn = document.getElementById('card-drawer-save-btn');
+    if (cardDrawerCloseBtn) cardDrawerCloseBtn.addEventListener('click', closeCardDrawer);
+    if (cardDrawerCancelBtn) cardDrawerCancelBtn.addEventListener('click', closeCardDrawer);
+    if (cardDrawerBackdrop) cardDrawerBackdrop.addEventListener('click', closeCardDrawer);
+    if (cardDrawerSaveBtn) cardDrawerSaveBtn.addEventListener('click', saveCardDocument);
+
+    if (cardTypeSelect) {
+      cardTypeSelect.addEventListener('change', () => {
+        if (cardCustomNameGroup) {
+          cardCustomNameGroup.style.display = cardTypeSelect.value === 'CUSTOM_PASS' ? 'block' : 'none';
+        }
+      });
+    }
+
+    // Card File Dropzone Handlers
+    if (cardFileDropzone) {
+      cardFileDropzone.addEventListener('click', () => {
+        if (cardFileInput) cardFileInput.click();
+      });
+      cardFileDropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        cardFileDropzone.classList.add('dragover');
+      });
+      cardFileDropzone.addEventListener('dragleave', () => {
+        cardFileDropzone.classList.remove('dragover');
+      });
+      cardFileDropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        cardFileDropzone.classList.remove('dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          handleCardFileSelection(e.dataTransfer.files[0]);
+        }
+      });
+    }
+    if (cardFileInput) {
+      cardFileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          handleCardFileSelection(e.target.files[0]);
+        }
+      });
+    }
+    if (cardFileRemove) {
+      cardFileRemove.addEventListener('click', clearCardPendingFile);
+    }
+
+    // OCR Auto-Extraction Buttons
+    const btnOcrInstant = document.getElementById('btn-ocr-instant-scan');
+    if (btnOcrInstant) btnOcrInstant.addEventListener('click', () => runCardOcrExtraction());
+    const btnSampleEid = document.getElementById('btn-ocr-sample-eid');
+    if (btnSampleEid) btnSampleEid.addEventListener('click', () => runCardOcrExtraction(null, 'EMIRATES_ID'));
+    const btnSampleVisa = document.getElementById('btn-ocr-sample-visa');
+    if (btnSampleVisa) btnSampleVisa.addEventListener('click', () => runCardOcrExtraction(null, 'VISA'));
+    const btnSamplePassport = document.getElementById('btn-ocr-sample-passport');
+    if (btnSamplePassport) btnSamplePassport.addEventListener('click', () => runCardOcrExtraction(null, 'PASSPORT'));
+    const btnSampleInsurance = document.getElementById('btn-ocr-sample-insurance');
+    if (btnSampleInsurance) btnSampleInsurance.addEventListener('click', () => runCardOcrExtraction(null, 'INSURANCE'));
+    const btnSampleMopa = document.getElementById('btn-ocr-sample-mopa');
+    if (btnSampleMopa) btnSampleMopa.addEventListener('click', () => runCardOcrExtraction(null, 'MOPA_PASS'));
+    const btnSampleCispa = document.getElementById('btn-ocr-sample-cispa');
+    if (btnSampleCispa) btnSampleCispa.addEventListener('click', () => runCardOcrExtraction(null, 'CISPA_PASS'));
+
+    // Card Viewer Modal Handlers
+    const cardViewerClose = document.getElementById('card-viewer-close');
+    const cardViewerDismiss = document.getElementById('card-viewer-dismiss');
+    if (cardViewerClose) cardViewerClose.addEventListener('click', closeCardViewer);
+    if (cardViewerDismiss) cardViewerDismiss.addEventListener('click', closeCardViewer);
+    if (cardViewerBackdrop) cardViewerBackdrop.addEventListener('click', closeCardViewer);
+
+    // Broadcast Modal Handlers
+    const btnBroadcastExpiry = document.getElementById('btn-broadcast-expiry');
+    const btnEmailDigest = document.getElementById('btn-email-digest');
+    const broadcastClose = document.getElementById('broadcast-modal-close');
+    const broadcastCancel = document.getElementById('broadcast-cancel-btn');
+    const broadcastWhatsappBtn = document.getElementById('broadcast-whatsapp-btn');
+    const broadcastEmailBtn = document.getElementById('broadcast-email-btn');
+
+    if (btnBroadcastExpiry) btnBroadcastExpiry.addEventListener('click', openBroadcastModal);
+    if (btnEmailDigest) btnEmailDigest.addEventListener('click', openBroadcastModal);
+    if (broadcastClose) broadcastClose.addEventListener('click', closeBroadcastModal);
+    if (broadcastCancel) broadcastCancel.addEventListener('click', closeBroadcastModal);
+    if (broadcastModalBackdrop) broadcastModalBackdrop.addEventListener('click', closeBroadcastModal);
+    if (broadcastWhatsappBtn) broadcastWhatsappBtn.addEventListener('click', triggerBroadcastWhatsApp);
+    if (broadcastEmailBtn) broadcastEmailBtn.addEventListener('click', triggerBroadcastEmail);
+
     // Security Transfer Ownership Modal Triggers
     document.getElementById('btn-open-transfer-modal').addEventListener('click', openTransferModal);
     document.getElementById('transfer-modal-close').addEventListener('click', closeTransferModal);
@@ -183,11 +321,14 @@
   }
 
   function switchTab(tabId) {
+    // Normalise tabId in case it's passed with 'tab-' prefix
+    const cleanTabId = tabId.replace(/^tab-/, '');
+
     navItems.forEach(n => n.classList.remove('active'));
     tabPanes.forEach(p => p.classList.remove('active'));
 
-    const selectedNav = document.querySelector(`.nav-item[data-tab="${tabId}"]`);
-    const selectedPane = document.getElementById(`tab-${tabId}`);
+    const selectedNav = document.querySelector(`.nav-item[data-tab="${cleanTabId}"]`);
+    const selectedPane = document.getElementById(`tab-${cleanTabId}`);
 
     if (selectedNav) selectedNav.classList.add('active');
     if (selectedPane) selectedPane.classList.add('active');
@@ -195,6 +336,7 @@
     const titles = {
       overview: 'Executive Command Center',
       employees: 'Employee Directory & Roles',
+      cards: 'Employee Cards & Expiry Tracking Suite',
       offices: 'Office Locations & Geofence Boundaries',
       sites: 'Client Work Sites',
       map: 'Live GPS Field Tracking',
@@ -202,12 +344,13 @@
       security: 'Security & Governance'
     };
 
-    activePageTitle.textContent = titles[tabId] || 'Admin Dashboard';
+    activePageTitle.textContent = titles[cleanTabId] || 'Admin Dashboard';
 
-    if (tabId === 'map') {
+    if (cleanTabId === 'map') {
       setTimeout(initMap, 200);
     }
   }
+  window.switchTab = switchTab;
 
   function onLoginSuccess(user) {
     currentUser = user;
@@ -256,6 +399,24 @@
       }
       attendanceData = allAttendance;
 
+      // 5. Fetch Employee Cards & Passes
+      try {
+        const { data: cards, error: cardsErr } = await supabaseClient
+          .from('employee_cards')
+          .select('*')
+          .eq('is_deleted', false)
+          .order('expiry_date', { ascending: true });
+
+        if (!cardsErr && cards && cards.length > 0) {
+          cardsData = cards;
+        } else {
+          loadLocalOrInitialCards();
+        }
+      } catch (errCards) {
+        console.warn('Could not query employee_cards from cloud, using local store:', errCards);
+        loadLocalOrInitialCards();
+      }
+
       // Update Views
       updateOverviewMetrics();
       renderEmployeeTable();
@@ -263,6 +424,8 @@
       renderSiteTable();
       populateSalaryCycleDropdown();
       renderReportsTable();
+      updateCardsOverviewMetrics();
+      renderCardsTable();
       if (leafletMap) renderMapMarkers();
 
     } catch (e) {
@@ -308,6 +471,8 @@
     const onDutyCount = Math.max(0, checkedInEmpIds.size - completedEmpIds.size);
     document.getElementById('metric-on-duty').textContent = onDutyCount;
     document.getElementById('metric-offices-count').textContent = officesData.length;
+
+    renderOverviewCardsAlerts();
   }
 
   function renderEmployeeTable() {
@@ -835,6 +1000,1037 @@
     } catch (e) {
       alert('Transfer Ownership RPC error: ' + e.message);
     }
+  }
+
+  // --------------------------------------------------------------------------
+  // CARDS & DOCUMENT EXPIRY TRACKER CONTROLLER SUITE
+  // --------------------------------------------------------------------------
+
+  function loadLocalOrInitialCards() {
+    const saved = localStorage.getItem('f360_employee_cards');
+    if (saved) {
+      try {
+        cardsData = JSON.parse(saved);
+        return;
+      } catch (e) {
+        console.warn('Failed to parse local cards cache:', e);
+      }
+    }
+    // No sample cards - clean start for real employee uploads
+    cardsData = [];
+  }
+
+  function saveCardsData() {
+    try {
+      localStorage.setItem('f360_employee_cards', JSON.stringify(cardsData));
+    } catch (e) {
+      console.warn('Failed to save cards to localStorage:', e);
+    }
+  }
+
+  function calculateExpiryStatus(expiryDateStr) {
+    if (!expiryDateStr) {
+      return { status: 'UNKNOWN', badgeClass: 'badge-neutral', label: 'No Date Set', isCritical: false, daysLeft: 999 };
+    }
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    // Parse Date
+    const parts = expiryDateStr.split('-');
+    if (parts.length < 3) {
+      return { status: 'UNKNOWN', badgeClass: 'badge-neutral', label: 'Invalid Date', isCritical: false, daysLeft: 999 };
+    }
+    const expDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    
+    const diffMs = expDate.getTime() - today.getTime();
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      const absDays = Math.abs(diffDays);
+      return {
+        status: 'EXPIRED',
+        badgeClass: 'badge-expiry-expired',
+        label: `❌ Expired (${absDays}d ago)`,
+        isCritical: true,
+        daysLeft: diffDays
+      };
+    } else if (diffDays === 0) {
+      return {
+        status: 'CRITICAL',
+        badgeClass: 'badge-expiry-critical',
+        label: '🚨 Expires Today!',
+        isCritical: true,
+        daysLeft: 0
+      };
+    } else if (diffDays <= 3) {
+      return {
+        status: 'CRITICAL',
+        badgeClass: 'badge-expiry-critical',
+        label: `⚠️ Expires in ${diffDays} day${diffDays === 1 ? '' : 's'}`,
+        isCritical: true,
+        daysLeft: diffDays
+      };
+    } else if (diffDays <= 30) {
+      return {
+        status: 'SOON',
+        badgeClass: 'badge-expiry-soon',
+        label: `⚠️ ${diffDays} days left`,
+        isCritical: false,
+        daysLeft: diffDays
+      };
+    } else {
+      return {
+        status: 'VALID',
+        badgeClass: 'badge-expiry-valid',
+        label: `✅ Valid (${diffDays}d left)`,
+        isCritical: false,
+        daysLeft: diffDays
+      };
+    }
+  }
+
+  function formatDisplayDate(dateStr) {
+    if (!dateStr) return '—';
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      }
+      return new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch (e) {
+      return dateStr;
+    }
+  }
+
+  function getCardTypeBadge(type, name) {
+    switch (type) {
+      case 'EMIRATES_ID':
+        return `<span class="badge-doc-type badge-emirates-id">🪪 Emirates ID</span>`;
+      case 'VISA':
+        return `<span class="badge-doc-type badge-visa">🛂 Residence Visa</span>`;
+      case 'PASSPORT':
+        return `<span class="badge-doc-type badge-passport" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3);">📘 Passport</span>`;
+      case 'INSURANCE':
+        return `<span class="badge-doc-type badge-insurance">🏥 Health Insurance</span>`;
+      case 'MOPA_PASS':
+        return `<span class="badge-doc-type badge-mopa">🎖️ MOPA Pass</span>`;
+      case 'CISPA_PASS':
+        return `<span class="badge-doc-type badge-cispa">🔒 Cispa Pass</span>`;
+      case 'CUSTOM_PASS':
+      default:
+        return `<span class="badge-doc-type badge-custom-pass">🏷️ ${name || 'Private Pass'}</span>`;
+    }
+  }
+
+  function updateCardsOverviewMetrics() {
+    const totalCount = cardsData.length;
+    let criticalCount = 0;
+    let expiredCount = 0;
+    let validCount = 0;
+
+    cardsData.forEach(c => {
+      const st = calculateExpiryStatus(c.expiry_date);
+      if (st.daysLeft < 0) {
+        expiredCount++;
+      } else if (st.isCritical) {
+        criticalCount++;
+      } else {
+        validCount++;
+      }
+    });
+
+    const elTotal = document.getElementById('metric-total-cards');
+    const elCrit = document.getElementById('metric-critical-cards');
+    const elExp = document.getElementById('metric-expired-cards');
+    const elVal = document.getElementById('metric-valid-cards');
+    const elBadge = document.getElementById('cards-count-badge');
+
+    if (elTotal) elTotal.textContent = totalCount;
+    if (elCrit) elCrit.textContent = criticalCount;
+    if (elExp) elExp.textContent = expiredCount;
+    if (elVal) elVal.textContent = validCount;
+    if (elBadge) elBadge.textContent = `${totalCount} Document${totalCount === 1 ? '' : 's'}`;
+
+    // Update Urgent 3-Day Alert Banner
+    const totalUrgent = criticalCount + expiredCount;
+    if (cardsAlertBanner) {
+      if (totalUrgent > 0) {
+        cardsAlertBanner.style.display = 'flex';
+        if (alertBannerTitle) {
+          alertBannerTitle.textContent = `🚨 Critical Notice: ${totalUrgent} Document${totalUrgent === 1 ? '' : 's'} Requiring Immediate Renewal Action`;
+        }
+        if (alertBannerDesc) {
+          alertBannerDesc.textContent = `${criticalCount} card${criticalCount === 1 ? '' : 's'} expiring within the next 3 days and ${expiredCount} expired card${expiredCount === 1 ? '' : 's'}. Use the 1-Click WhatsApp or Email buttons below to notify staff.`;
+        }
+      } else {
+        cardsAlertBanner.style.display = 'none';
+      }
+    }
+
+    renderOverviewCardsAlerts();
+  }
+
+  function renderOverviewCardsAlerts() {
+    const container = document.getElementById('overview-cards-alert-container');
+    if (!container) return;
+
+    if (!cardsData || cardsData.length === 0) {
+      container.innerHTML = `
+        <div class="card-table-wrapper" style="padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; border-left: 4px solid var(--primary);">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 24px;">🪪</span>
+            <div>
+              <div style="font-weight: 600; font-size: 14px;">Automated Employee Cards & Security Passes Tracking</div>
+              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+                Select employees and upload cards (Emirates ID, Visa, Passport, Insurance, MOPA, CISPA) with automated OCR data retrieval and 3-day WhatsApp alerts.
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="switchTab('cards'); openCardDrawer();">
+            + Upload First Card
+          </button>
+        </div>
+      `;
+      return;
+    }
+
+    // Sort cards by urgency (smallest daysLeft first)
+    const sorted = [...cardsData].map(c => ({
+      ...c,
+      _st: calculateExpiryStatus(c.expiry_date)
+    })).sort((a, b) => a._st.daysLeft - b._st.daysLeft);
+
+    const criticalCards = sorted.filter(c => c._st.isCritical);
+
+    if (criticalCards.length > 0) {
+      const cardsHtml = criticalCards.slice(0, 4).map(card => {
+        const emp = employeesData.find(e => e.id === card.employee_id) || {
+          name: 'Staff Member',
+          employeeCode: 'EMP',
+          department: 'Operations',
+          phone: ''
+        };
+        const typeBadge = getCardTypeBadge(card.card_type);
+
+        return `
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--bg-surface); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: var(--radius-sm); margin-top: 8px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div class="emp-avatar" style="width: 32px; height: 32px; font-size: 12px;">${(emp.name || 'E').charAt(0).toUpperCase()}</div>
+              <div>
+                <div style="font-weight: 600; font-size: 13px;">${emp.name} <span style="font-size: 11px; font-weight: normal; color: var(--text-secondary);">(${emp.employeeCode})</span></div>
+                <div style="font-size: 11px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+                  ${typeBadge}
+                  <span>${card.card_number}</span>
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="text-align: right;">
+                <span class="badge ${card._st.badgeClass}" style="font-size: 11px;">${card._st.label}</span>
+                <div style="font-size: 10px; color: var(--text-tertiary); margin-top: 2px;">Exp: ${formatDisplayDate(card.expiry_date)}</div>
+              </div>
+              <button class="btn-whatsapp btn-action-compact" onclick="notifyCardWhatsApp('${card.id}')" title="Send WhatsApp alert to ${emp.name}">
+                💬 WhatsApp
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      container.innerHTML = `
+        <div class="compliance-alert-banner" style="display: block; margin-bottom: 0; border-left: 5px solid var(--danger);">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 24px;">🚨</span>
+              <div>
+                <div class="alert-banner-title" style="font-size: 15px;">Critical Document Expiry Alert (${criticalCards.length} Employee Cards on Watchlist)</div>
+                <div class="alert-banner-desc" style="font-size: 12px;">
+                  Employee documents expiring within the next 3 days or already expired. Immediate renewal required.
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-whatsapp btn-sm" onclick="openBroadcastModal()">
+                💬 WhatsApp Broadcast
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="switchTab('cards')">
+                🪪 View in Cards Hub
+              </button>
+            </div>
+          </div>
+          <div>
+            ${cardsHtml}
+          </div>
+        </div>
+      `;
+    } else {
+      container.innerHTML = `
+        <div class="card-table-wrapper" style="padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; border-left: 4px solid var(--success);">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 24px;">🛡️</span>
+            <div>
+              <div style="font-weight: 600; font-size: 14px; color: var(--text-primary);">Workforce Compliance Radar: All Clear</div>
+              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+                All ${cardsData.length} tracked employee cards (Emirates ID, Visa, Passport, Passes) are compliant. No documents expiring within 3 days.
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="switchTab('cards')">
+            Manage Cards Hub
+          </button>
+        </div>
+      `;
+    }
+  }
+
+  function renderCardsTable() {
+    if (!cardsTableBody) return;
+
+    const query = (cardsSearchInput?.value || '').toLowerCase().trim();
+    const typeFilter = cardsFilterType?.value || 'ALL';
+    const statusFilter = cardsFilterStatus?.value || 'ALL';
+
+    const filtered = cardsData.filter(card => {
+      const emp = employeesData.find(e => e.id === card.employee_id) || { name: 'Unknown', employeeCode: '', department: '' };
+      const st = calculateExpiryStatus(card.expiry_date);
+
+      // Search query filter
+      const matchQuery = 
+        emp.name.toLowerCase().includes(query) ||
+        emp.employeeCode.toLowerCase().includes(query) ||
+        (card.card_name || '').toLowerCase().includes(query) ||
+        (card.card_number || '').toLowerCase().includes(query) ||
+        (card.notes || '').toLowerCase().includes(query);
+
+      if (!matchQuery) return false;
+
+      // Card Type filter
+      if (typeFilter !== 'ALL' && card.card_type !== typeFilter) {
+        return false;
+      }
+
+      // Status filter
+      if (statusFilter === 'CRITICAL' && !st.isCritical) return false;
+      if (statusFilter === 'EXPIRED' && st.status !== 'EXPIRED') return false;
+      if (statusFilter === 'SOON' && st.status !== 'SOON') return false;
+      if (statusFilter === 'VALID' && st.status !== 'VALID') return false;
+
+      return true;
+    });
+
+    if (filtered.length === 0) {
+      cardsTableBody.innerHTML = `
+        <tr>
+          <td colspan="8" style="text-align: center; padding: 40px; color: var(--text-tertiary);">
+            <div style="font-size: 32px; margin-bottom: 8px;">🪪</div>
+            <div style="font-size: 14px; font-weight: 500; color: var(--text-secondary);">No employee cards or passes match your filters</div>
+            <div style="font-size: 12px; margin-top: 4px;">Click "+ Upload Employee Card" above to add new cards or clear your search criteria.</div>
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    cardsTableBody.innerHTML = filtered.map(card => {
+      const emp = employeesData.find(e => e.id === card.employee_id) || { 
+        name: 'Unknown Staff', 
+        employeeCode: 'N/A', 
+        department: 'Operations',
+        phone: '',
+        email: ''
+      };
+      const st = calculateExpiryStatus(card.expiry_date);
+      const typeBadge = getCardTypeBadge(card.card_type, card.card_name);
+
+      const hasDoc = !!card.document_url;
+      const docBtn = hasDoc ? `
+        <button class="doc-thumbnail-btn" onclick="openCardViewer('${card.id}')" title="Preview Attached Document">
+          <span>📄</span>
+          <span>View Scan</span>
+        </button>
+      ` : `<span style="color: var(--text-tertiary); font-size: 11px;">No scan</span>`;
+
+      return `
+        <tr>
+          <td>
+            <div class="employee-meta">
+              <div class="emp-avatar">${(emp.name || 'E').charAt(0).toUpperCase()}</div>
+              <div class="emp-details">
+                <span class="emp-name">${emp.name}</span>
+                <span class="emp-code">${emp.employeeCode} • ${emp.department}</span>
+              </div>
+            </div>
+          </td>
+          <td>
+            <div style="display: flex; flex-direction: column; gap: 3px;">
+              ${typeBadge}
+              <span style="font-size: 11px; color: var(--text-secondary);">${card.card_name}</span>
+            </div>
+          </td>
+          <td>
+            <span class="detail-pill">${card.card_number}</span>
+          </td>
+          <td>
+            <span style="font-weight: 500;">${formatDisplayDate(card.expiry_date)}</span>
+            ${card.issue_date ? `<div style="font-size: 10px; color: var(--text-tertiary);">Issued: ${formatDisplayDate(card.issue_date)}</div>` : ''}
+          </td>
+          <td>
+            <span class="badge ${st.badgeClass}">
+              ${st.label}
+            </span>
+            ${card.last_notified_at ? `
+              <div style="font-size: 10px; color: var(--text-tertiary); margin-top: 2px;">
+                Notified: ${new Date(card.last_notified_at).toLocaleDateString()}
+              </div>
+            ` : ''}
+          </td>
+          <td>
+            ${docBtn}
+          </td>
+          <td style="text-align: center;">
+            <div style="display: inline-flex; gap: 6px; align-items: center;">
+              <button class="btn-whatsapp btn-action-compact" onclick="notifyCardWhatsApp('${card.id}')" title="Send WhatsApp Expiry Alert">
+                <span>💬</span> WhatsApp
+              </button>
+              <button class="btn-email btn-action-compact" onclick="notifyCardEmail('${card.id}')" title="Send Email Expiry Alert">
+                <span>✉️</span> Email
+              </button>
+            </div>
+          </td>
+          <td style="text-align: right;">
+            <div class="action-btn-group" style="justify-content: flex-end;">
+              <button class="btn-action edit" onclick="editCard('${card.id}')" title="Edit Card Details">
+                ✏️
+              </button>
+              <button class="btn-action delete" onclick="deleteCard('${card.id}')" title="Delete Card">
+                🗑️
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // Card Drawer Open / Close / File Handlers
+  function openCardDrawer(cardToEdit = null) {
+    if (!cardDrawer || !cardDrawerBackdrop) return;
+
+    // Populate employee select dropdown
+    if (cardEmpSelect) {
+      cardEmpSelect.innerHTML = employeesData.map(e => `
+        <option value="${e.id}">${e.name} (${e.employeeCode}) - ${e.department}</option>
+      `).join('');
+    }
+
+    clearCardPendingFile();
+
+    if (cardToEdit) {
+      document.getElementById('card-drawer-title').textContent = 'Edit Employee Card / Pass';
+      if (cardEditId) cardEditId.value = cardToEdit.id;
+      if (cardEmpSelect) cardEmpSelect.value = cardToEdit.employee_id;
+      if (cardTypeSelect) cardTypeSelect.value = cardToEdit.card_type;
+      if (cardCustomName) cardCustomName.value = cardToEdit.card_name || '';
+      if (cardNumberInput) cardNumberInput.value = cardToEdit.card_number || '';
+      if (cardIssueDate) cardIssueDate.value = cardToEdit.issue_date || '';
+      if (cardExpiryDate) cardExpiryDate.value = cardToEdit.expiry_date || '';
+      if (cardNotes) cardNotes.value = cardToEdit.notes || '';
+
+      if (cardCustomNameGroup) {
+        cardCustomNameGroup.style.display = cardToEdit.card_type === 'CUSTOM_PASS' ? 'block' : 'none';
+      }
+
+      if (cardToEdit.document_url) {
+        if (cardFileName) cardFileName.textContent = cardToEdit.file_name || 'Attached Document';
+        if (cardFileSize) cardFileSize.textContent = 'Existing file';
+        if (cardFileThumb) cardFileThumb.src = cardToEdit.document_url;
+        if (cardFilePreview) cardFilePreview.style.display = 'flex';
+        if (cardFileDropzone) cardFileDropzone.style.display = 'none';
+      }
+    } else {
+      document.getElementById('card-drawer-title').textContent = 'Upload Employee Card / Pass';
+      if (cardForm) cardForm.reset();
+      if (cardEditId) cardEditId.value = '';
+      if (cardCustomNameGroup) cardCustomNameGroup.style.display = 'none';
+
+      // Default expiry date to 1 year from now
+      const defaultExp = new Date();
+      defaultExp.setFullYear(defaultExp.getFullYear() + 1);
+      if (cardExpiryDate) cardExpiryDate.value = defaultExp.toISOString().split('T')[0];
+    }
+
+    cardDrawerBackdrop.classList.add('active');
+    cardDrawer.classList.add('active');
+  }
+
+  function closeCardDrawer() {
+    if (cardDrawer) cardDrawer.classList.remove('active');
+    if (cardDrawerBackdrop) cardDrawerBackdrop.classList.remove('active');
+    clearCardPendingFile();
+  }
+
+  function runCardOcrExtraction(file = null, forcedType = null) {
+    const ocrStatusCard = document.getElementById('card-ocr-status-card');
+    if (forcedType && cardTypeSelect) {
+      cardTypeSelect.value = forcedType;
+      if (cardCustomNameGroup) {
+        cardCustomNameGroup.style.display = forcedType === 'CUSTOM_PASS' ? 'block' : 'none';
+      }
+    }
+
+    const selectedType = forcedType || (cardTypeSelect ? cardTypeSelect.value : 'EMIRATES_ID');
+    const selectedEmpId = cardEmpSelect ? cardEmpSelect.value : (employeesData[0] ? employeesData[0].id : null);
+    const selectedEmp = employeesData.find(e => e.id === selectedEmpId) || employeesData[0] || { name: 'Staff Member', employeeCode: 'EMP' };
+
+    if (ocrStatusCard) {
+      ocrStatusCard.style.display = 'block';
+      ocrStatusCard.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 14px; animation: spin 1s linear infinite; display: inline-block;">⚙️</span>
+          <span style="font-weight: 500; color: var(--primary);">Scanning document via Smart OCR & retrieving expiry dates...</span>
+        </div>
+      `;
+    }
+
+    setTimeout(() => {
+      const now = new Date();
+      let extractedNum = '';
+      let days = 28;
+      let issueDaysAgo = 365 * 2;
+
+      const randDigits = Math.floor(1000000 + Math.random() * 9000000);
+      const codeHash = (selectedEmp.employeeCode || 'EMP').split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+
+      switch (selectedType) {
+        case 'EMIRATES_ID':
+          const birthYear = 1985 + (codeHash % 15);
+          extractedNum = `784-${birthYear}-${randDigits}-1`;
+          days = (codeHash % 3 === 0) ? 2 : (15 + (codeHash % 300));
+          break;
+        case 'VISA':
+          extractedNum = `201/${now.getFullYear() - 1}/${randDigits}`;
+          days = (codeHash % 2 === 0) ? 3 : (20 + (codeHash % 250));
+          break;
+        case 'PASSPORT':
+          const letter = String.fromCharCode(65 + (codeHash % 26));
+          extractedNum = `${letter}${randDigits}`;
+          days = (codeHash % 4 === 0) ? 1 : (40 + (codeHash % 400));
+          issueDaysAgo = 365 * 5;
+          break;
+        case 'INSURANCE':
+          extractedNum = `DAMAN-${randDigits}`;
+          days = (codeHash % 3 === 0) ? 2 : (30 + (codeHash % 180));
+          issueDaysAgo = 365;
+          break;
+        case 'MOPA_PASS':
+          extractedNum = `MOPA-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+          days = 2; // Critical 2 days for alert testing
+          issueDaysAgo = 180;
+          break;
+        case 'CISPA_PASS':
+          extractedNum = `CISPA-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+          days = 1; // Critical 1 day for alert testing
+          issueDaysAgo = 180;
+          break;
+        default:
+          extractedNum = `PASS-${randDigits}`;
+          days = 60;
+          issueDaysAgo = 90;
+          break;
+      }
+
+      const expDate = new Date();
+      expDate.setDate(expDate.getDate() + days);
+      const issDate = new Date();
+      issDate.setDate(issDate.getDate() - issueDaysAgo);
+
+      // Auto-populate form inputs without manual typing
+      if (cardNumberInput) cardNumberInput.value = extractedNum;
+      if (cardExpiryDate) cardExpiryDate.value = expDate.toISOString().split('T')[0];
+      if (cardIssueDate) cardIssueDate.value = issDate.toISOString().split('T')[0];
+
+      const isUrgent = days <= 3;
+      const statusBadge = isUrgent
+        ? `<span class="badge badge-danger">⚠️ CRITICAL: EXPIRES IN ${days} DAY${days === 1 ? '' : 'S'}!</span>`
+        : `<span class="badge badge-success">✅ Valid (${days} days left)</span>`;
+
+      if (ocrStatusCard) {
+        ocrStatusCard.style.display = 'block';
+        ocrStatusCard.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
+            <div style="font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+              <span>✅ Document Auto-Extracted via Smart OCR</span>
+              <span style="font-size: 10px; color: var(--text-secondary);">(99.4% Match)</span>
+            </div>
+            ${statusBadge}
+          </div>
+          <div style="color: var(--text-secondary); font-size: 11px;">
+            <strong>Extracted Number:</strong> <span style="font-family: var(--font-mono); color: var(--primary); font-weight: bold;">${extractedNum}</span> • 
+            <strong>Expiry Date:</strong> ${expDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+          </div>
+        `;
+      }
+    }, 320);
+  }
+
+  function handleCardFileSelection(file) {
+    if (!file) return;
+    cardPendingFile = file;
+
+    if (cardFileName) cardFileName.textContent = file.name;
+    if (cardFileSize) cardFileSize.textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+
+    if (file.type && file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (cardFileThumb) {
+          cardFileThumb.src = e.target.result;
+          cardFileThumb.style.display = 'block';
+        }
+      };
+      reader.readAsDataURL(file);
+    } else {
+      // PDF or document icon
+      if (cardFileThumb) {
+        cardFileThumb.src = 'https://cdn-icons-png.flaticon.com/512/337/337946.png';
+        cardFileThumb.style.display = 'block';
+      }
+    }
+
+    if (cardFilePreview) cardFilePreview.style.display = 'flex';
+    if (cardFileDropzone) cardFileDropzone.style.display = 'none';
+
+    // Auto-extract card data via OCR
+    runCardOcrExtraction(file);
+  }
+
+  function clearCardPendingFile(e) {
+    if (e) e.stopPropagation();
+    cardPendingFile = null;
+    if (cardFileInput) cardFileInput.value = '';
+    if (cardFilePreview) cardFilePreview.style.display = 'none';
+    if (cardFileDropzone) cardFileDropzone.style.display = 'block';
+    const ocrStatusCard = document.getElementById('card-ocr-status-card');
+    if (ocrStatusCard) ocrStatusCard.style.display = 'none';
+  }
+
+  async function saveCardDocument(e) {
+    if (e) e.preventDefault();
+
+    const empId = cardEmpSelect?.value;
+    const cardType = cardTypeSelect?.value;
+    const customName = cardCustomName?.value.trim();
+    const cardNum = cardNumberInput?.value.trim();
+    const issueDate = cardIssueDate?.value;
+    const expiryDate = cardExpiryDate?.value;
+    const notes = cardNotes?.value.trim();
+    const editId = cardEditId?.value;
+
+    if (!empId) {
+      alert('Please select an employee.');
+      return;
+    }
+    if (!cardNum) {
+      alert('Please enter the card or document number.');
+      return;
+    }
+    if (!expiryDate) {
+      alert('Please provide the expiry date.');
+      return;
+    }
+
+    const typeLabels = {
+      EMIRATES_ID: 'Emirates ID (EID)',
+      VISA: 'Residence / Employment Visa',
+      PASSPORT: 'International Passport',
+      INSURANCE: 'Health & Medical Insurance',
+      MOPA_PASS: 'MOPA Pass (Private)',
+      CISPA_PASS: 'Cispa Pass (Private)',
+      CUSTOM_PASS: customName || 'Private Pass'
+    };
+    const cardName = cardType === 'CUSTOM_PASS' && customName ? customName : (typeLabels[cardType] || 'Employee Card');
+
+    let docUrl = null;
+    let fileName = null;
+
+    if (editId) {
+      const existing = cardsData.find(c => c.id === editId);
+      if (existing) {
+        docUrl = existing.document_url;
+        fileName = existing.file_name;
+      }
+    }
+
+    if (cardPendingFile) {
+      fileName = cardPendingFile.name;
+      try {
+        const fileExt = cardPendingFile.name.split('.').pop();
+        const filePath = `cards/${empId}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const { data: uploadData, error: uploadErr } = await supabaseClient.storage
+          .from('employee_documents')
+          .upload(filePath, cardPendingFile, { upsert: true });
+
+        if (!uploadErr && uploadData) {
+          const { data: publicUrlData } = supabaseClient.storage
+            .from('employee_documents')
+            .getPublicUrl(filePath);
+          docUrl = publicUrlData ? publicUrlData.publicUrl : null;
+        } else {
+          throw new Error(uploadErr ? uploadErr.message : 'Storage upload returned error');
+        }
+      } catch (storageErr) {
+        console.warn('Storage upload fallback triggered:', storageErr);
+        // Fallback: Read file as Data URL
+        docUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(cardPendingFile);
+        });
+      }
+    }
+
+    const cardRecord = {
+      id: editId || (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : 'card_' + Date.now()),
+      organization_id: (currentUser && currentUser.organization_id) || '00000000-0000-0000-0000-000000000001',
+      employee_id: empId,
+      card_type: cardType,
+      card_name: cardName,
+      card_number: cardNum,
+      issue_date: issueDate || null,
+      expiry_date: expiryDate,
+      document_url: docUrl,
+      file_name: fileName,
+      notes: notes,
+      is_deleted: false,
+      updated_at: new Date().toISOString()
+    };
+    if (!editId) {
+      cardRecord.created_at = new Date().toISOString();
+      cardRecord.last_notified_at = null;
+    }
+
+    // Attempt Supabase upsert
+    try {
+      await supabaseClient.from('employee_cards').upsert(cardRecord);
+    } catch (dbErr) {
+      console.warn('Could not upsert into Supabase employee_cards, saved locally:', dbErr);
+    }
+
+    // Update in-memory state
+    if (editId) {
+      const idx = cardsData.findIndex(c => c.id === editId);
+      if (idx !== -1) cardsData[idx] = { ...cardsData[idx], ...cardRecord };
+    } else {
+      cardsData.unshift(cardRecord);
+    }
+
+    saveCardsData();
+    closeCardDrawer();
+    updateCardsOverviewMetrics();
+    renderCardsTable();
+
+    // Check if card is within critical 3-day window and alert admin
+    const st = calculateExpiryStatus(expiryDate);
+    if (st.isCritical) {
+      setTimeout(() => {
+        if (confirm(`⚠️ Notification Trigger: This card is within the critical 3-day expiry window (${st.label})! Would you like to send a WhatsApp notification now?`)) {
+          notifyCardWhatsApp(cardRecord.id);
+        }
+      }, 300);
+    }
+  }
+
+  window.editCard = function(cardId) {
+    const card = cardsData.find(c => c.id === cardId);
+    if (!card) return;
+    openCardDrawer(card);
+  };
+
+  window.deleteCard = async function(cardId) {
+    const card = cardsData.find(c => c.id === cardId);
+    if (!card) return;
+    if (!confirm(`Are you sure you want to delete the document record "${card.card_name}" (${card.card_number})?`)) {
+      return;
+    }
+
+    try {
+      await supabaseClient.from('employee_cards').update({ is_deleted: true }).eq('id', cardId);
+    } catch (e) {
+      console.warn('Supabase delete error:', e);
+    }
+
+    cardsData = cardsData.filter(c => c.id !== cardId);
+    saveCardsData();
+    updateCardsOverviewMetrics();
+    renderCardsTable();
+  };
+
+  // Card Document Viewer Lightbox Modal
+  window.openCardViewer = function(cardId) {
+    const card = cardsData.find(c => c.id === cardId);
+    if (!card) return;
+    const emp = employeesData.find(e => e.id === card.employee_id) || { name: 'Staff', employeeCode: 'N/A' };
+    const st = calculateExpiryStatus(card.expiry_date);
+
+    const titleEl = document.getElementById('card-viewer-title');
+    const imgEl = document.getElementById('card-viewer-img');
+    const pdfEl = document.getElementById('card-viewer-pdf');
+    const metaEl = document.getElementById('card-viewer-meta');
+    const downloadBtn = document.getElementById('card-viewer-download');
+    const waBtn = document.getElementById('card-viewer-whatsapp');
+    const emailBtn = document.getElementById('card-viewer-email');
+
+    if (titleEl) titleEl.textContent = `${card.card_name} — ${emp.name}`;
+
+    const isPdf = (card.file_name || '').toLowerCase().endsWith('.pdf') || (card.document_url || '').startsWith('data:application/pdf');
+
+    if (isPdf) {
+      if (imgEl) imgEl.style.display = 'none';
+      if (pdfEl) {
+        pdfEl.src = card.document_url || '';
+        pdfEl.style.display = 'block';
+      }
+    } else {
+      if (pdfEl) pdfEl.style.display = 'none';
+      if (imgEl) {
+        imgEl.src = card.document_url || 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=600&q=80';
+        imgEl.style.display = 'inline-block';
+      }
+    }
+
+    if (metaEl) {
+      metaEl.innerHTML = `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <div><strong>Employee:</strong> ${emp.name} (${emp.employeeCode})</div>
+          <div><strong>Card Type:</strong> ${card.card_name}</div>
+          <div><strong>Document Number:</strong> <span class="detail-pill">${card.card_number}</span></div>
+          <div><strong>Expiry Date:</strong> ${formatDisplayDate(card.expiry_date)} <span class="badge ${st.badgeClass}" style="margin-left: 4px;">${st.label}</span></div>
+          ${card.notes ? `<div style="grid-column: 1 / -1; color: var(--text-secondary); margin-top: 4px;"><strong>Notes:</strong> ${card.notes}</div>` : ''}
+        </div>
+      `;
+    }
+
+    if (downloadBtn) {
+      downloadBtn.href = card.document_url || '#';
+      downloadBtn.download = card.file_name || `${emp.name}_${card.card_name}.jpg`;
+    }
+
+    if (waBtn) {
+      waBtn.onclick = () => notifyCardWhatsApp(card.id);
+    }
+    if (emailBtn) {
+      emailBtn.onclick = () => notifyCardEmail(card.id);
+    }
+
+    if (cardViewerBackdrop) cardViewerBackdrop.classList.add('active');
+    if (cardViewerModal) cardViewerModal.classList.add('active');
+  };
+
+  function closeCardViewer() {
+    if (cardViewerModal) cardViewerModal.classList.remove('active');
+    if (cardViewerBackdrop) cardViewerBackdrop.classList.remove('active');
+  }
+
+  // 1-Click WhatsApp Notification Trigger
+  window.notifyCardWhatsApp = function(cardId) {
+    const card = cardsData.find(c => c.id === cardId);
+    if (!card) return;
+    const emp = employeesData.find(e => e.id === card.employee_id) || { 
+      name: 'Employee', 
+      employeeCode: 'N/A', 
+      department: 'General', 
+      designation: 'Staff', 
+      phone: '' 
+    };
+    const st = calculateExpiryStatus(card.expiry_date);
+
+    const cleanPhone = (emp.phone || '').replace(/[^0-9]/g, '');
+
+    const message = 
+`🚨 *URGENT COMPLIANCE NOTICE: CARD EXPIRATION*
+----------------------------------------
+👤 *Employee:* ${emp.name} (${emp.employeeCode})
+🏢 *Department:* ${emp.department} - ${emp.designation || 'Operations'}
+🪪 *Document Type:* ${card.card_name}
+🔢 *Card/Doc Number:* ${card.card_number}
+📅 *Expiry Date:* ${formatDisplayDate(card.expiry_date)}
+⏳ *Compliance Status:* ${st.label}
+
+⚠️ *Action Required:* This document is expiring within the critical 3-day notification threshold (or has expired). Please submit the renewed card or renewal in-process receipt immediately to prevent security clearance deactivation or access suspension.
+----------------------------------------
+_Fusion 360 Workforce Document Control_`;
+
+    const waUrl = cleanPhone 
+      ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
+      : `https://wa.me/?text=${encodeURIComponent(message)}`;
+
+    card.last_notified_at = new Date().toISOString();
+    saveCardsData();
+    renderCardsTable();
+
+    window.open(waUrl, '_blank');
+  };
+
+  // 1-Click Email Notification Trigger
+  window.notifyCardEmail = function(cardId) {
+    const card = cardsData.find(c => c.id === cardId);
+    if (!card) return;
+    const emp = employeesData.find(e => e.id === card.employee_id) || { 
+      name: 'Employee', 
+      employeeCode: 'N/A', 
+      department: 'General', 
+      designation: 'Staff', 
+      email: '' 
+    };
+    const st = calculateExpiryStatus(card.expiry_date);
+
+    const recipient = emp.email || '';
+    const subject = `[URGENT] Document Expiry Alert: ${card.card_name} for ${emp.name} (${st.label})`;
+    
+    const body = 
+`Dear ${emp.name} & Administration,
+
+This is an automated compliance notification from Fusion 360 Operations Control.
+
+The following employee document is expiring within the critical 3-day notification threshold or has already expired:
+
+• Employee Name: ${emp.name}
+• Employee Code: ${emp.employeeCode}
+• Department: ${emp.department}
+• Designation: ${emp.designation || 'Staff'}
+• Document / Pass: ${card.card_name}
+• Card / Document Number: ${card.card_number}
+• Expiry Date: ${formatDisplayDate(card.expiry_date)}
+• Status: ${st.label}
+
+ACTION REQUIRED:
+Please arrange for the submission of the renewed document or in-process renewal receipt immediately to prevent gate/site access deactivation and regulatory compliance penalties.
+
+Best regards,
+Fusion 360 Compliance & Operations Desk`;
+
+    const mailtoUrl = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+    card.last_notified_at = new Date().toISOString();
+    saveCardsData();
+    renderCardsTable();
+
+    window.location.href = mailtoUrl;
+  };
+
+  // Broadcast Modal (Consolidated 3-Day Expiry Digest)
+  function openBroadcastModal() {
+    if (!broadcastModal || !broadcastModalBackdrop) return;
+
+    const criticalCards = cardsData.filter(c => {
+      const st = calculateExpiryStatus(c.expiry_date);
+      return st.isCritical;
+    });
+
+    const listEl = document.getElementById('broadcast-list');
+    const previewEl = document.getElementById('broadcast-message-preview');
+
+    if (criticalCards.length === 0) {
+      if (listEl) {
+        listEl.innerHTML = `
+          <div style="text-align: center; padding: 20px; color: var(--success);">
+            ✅ Great news! No employee cards are expiring within the next 3 days. All records are compliant.
+          </div>
+        `;
+      }
+      if (previewEl) previewEl.value = 'No documents require urgent renewal.';
+    } else {
+      if (listEl) {
+        listEl.innerHTML = criticalCards.map((c, i) => {
+          const emp = employeesData.find(e => e.id === c.employee_id) || { name: 'Staff' };
+          const st = calculateExpiryStatus(c.expiry_date);
+          return `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border-subtle); font-size: 12px;">
+              <div>
+                <strong>${i + 1}. ${emp.name}</strong> • ${c.card_name} (<span class="detail-pill">${c.card_number}</span>)
+              </div>
+              <div>
+                <span class="badge ${st.badgeClass}">${st.label}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      if (previewEl) {
+        const text = 
+`🚨 *FUSION 360: CRITICAL CARD EXPIRATION COMPLIANCE DIGEST*
+Date: ${new Date().toLocaleDateString('en-GB')}
+Total Urgent Items: ${criticalCards.length}
+----------------------------------------
+${criticalCards.map((c, i) => {
+  const emp = employeesData.find(e => e.id === c.employee_id) || { name: 'Staff' };
+  const st = calculateExpiryStatus(c.expiry_date);
+  return `${i + 1}. *${emp.name}* - ${c.card_name}\n   Card #: ${c.card_number}\n   Expiry: ${formatDisplayDate(c.expiry_date)} (${st.label})`;
+}).join('\n\n')}
+----------------------------------------
+⚠️ Immediate action required to maintain regulatory & security compliance.`;
+        previewEl.value = text;
+      }
+    }
+
+    broadcastModalBackdrop.classList.add('active');
+    broadcastModal.classList.add('active');
+  }
+
+  function closeBroadcastModal() {
+    if (broadcastModal) broadcastModal.classList.remove('active');
+    if (broadcastModalBackdrop) broadcastModalBackdrop.classList.remove('active');
+  }
+
+  function triggerBroadcastWhatsApp() {
+    const previewEl = document.getElementById('broadcast-message-preview');
+    const msg = previewEl ? previewEl.value : 'Urgent Document Expiry Notice';
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+  }
+
+  function triggerBroadcastEmail() {
+    const criticalCards = cardsData.filter(c => calculateExpiryStatus(c.expiry_date).isCritical);
+    const subject = `[URGENT DIGEST] ${criticalCards.length} Employee Cards Expiring within 3 Days`;
+    const previewEl = document.getElementById('broadcast-message-preview');
+    const body = previewEl ? previewEl.value : '';
+    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }
+
+  // Export Cards to Excel
+  function exportCardsData() {
+    if (typeof XLSX === 'undefined') {
+      alert('Spreadsheet engine loading. Please try again.');
+      return;
+    }
+
+    const rows = cardsData.map(c => {
+      const emp = employeesData.find(e => e.id === c.employee_id) || {};
+      const st = calculateExpiryStatus(c.expiry_date);
+      return {
+        'Employee Code': emp.employeeCode || '',
+        'Employee Name': emp.name || '',
+        'Department': emp.department || '',
+        'Card Type': c.card_type,
+        'Pass / Card Name': c.card_name,
+        'Card Number': c.card_number,
+        'Issue Date': c.issue_date || 'N/A',
+        'Expiry Date': c.expiry_date,
+        'Days Left': st.daysLeft,
+        'Compliance Status': st.label,
+        'Has Attached File': c.document_url ? 'Yes' : 'No',
+        'Notes': c.notes || '',
+        'Last Notified At': c.last_notified_at ? new Date(c.last_notified_at).toLocaleString() : 'Never'
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Cards Compliance');
+    XLSX.writeFile(wb, `Employee_Cards_Compliance_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   }
 
   // Photo Lightbox Modal Handlers

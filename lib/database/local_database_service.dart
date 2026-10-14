@@ -1437,6 +1437,26 @@ class LocalDatabaseService {
     }
   }
 
+  // Employee Cards Persistence (Hive offline-fallback)
+  List<Map<String, dynamic>> getSavedEmployeeCards() {
+    try {
+      final str = _settingsBox?.get('employee_cards_json');
+      if (str != null && str.toString().isNotEmpty) {
+        final List<dynamic> decoded = jsonDecode(str);
+        return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  void persistEmployeeCards(List<Map<String, dynamic>> cardsJson) {
+    try {
+      _settingsBox?.put('employee_cards_json', jsonEncode(cardsJson));
+    } catch (e) {
+      debugPrint('Error saving employee cards to Hive: $e');
+    }
+  }
+
   // Theme Persistence
   String getSavedThemePresetName() {
     return _settingsBox?.get('theme_preset', defaultValue: 'slateIndigo') ??

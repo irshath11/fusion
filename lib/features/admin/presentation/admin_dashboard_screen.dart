@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'admin_cubit.dart';
 import 'employee_management_screen.dart';
+import 'cards_management_screen.dart';
 import 'office_management_screen.dart';
 import 'work_site_management_screen.dart';
 import 'live_tracking_map_screen.dart';
 import 'reports_analytics_screen.dart';
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'ownership_transfer_dialog.dart';
 import '../../../core/constants/app_theme.dart';
 import '../../../core/theme/app_theme_preset.dart';
@@ -14,11 +17,13 @@ import '../../../database/local_database_service.dart';
 import '../../auth/presentation/auth_cubit.dart';
 import '../../auth/presentation/login_screen.dart';
 import '../domain/employee_entity.dart';
+import '../domain/employee_card.dart';
 import '../../attendance/domain/attendance_record.dart';
 import '../../../core/utils/timesheet_calculator.dart';
 import '../../../core/utils/salary_cycle_helper.dart';
 import '../../../core/utils/employee_directory_helper.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../../../core/widgets/employee_avatar.dart';
 
 import '../../../core/widgets/app_bounceable.dart';
 import '../../../core/widgets/app_glass_card.dart';
@@ -45,6 +50,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       icon: Icons.people_outline_rounded,
       activeIcon: Icons.people_alt_rounded,
       label: 'Employees',
+    ),
+    NavDestinationItem(
+      icon: Icons.badge_outlined,
+      activeIcon: Icons.badge_rounded,
+      label: 'Cards & Passes',
     ),
     NavDestinationItem(
       icon: Icons.business_outlined,
@@ -178,6 +188,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     },
                   ),
                   EmployeeManagementScreen(key: ValueKey('employee_$_currentNavIndex')),
+                  CardsManagementScreen(key: ValueKey('cards_$_currentNavIndex')),
                   OfficeManagementScreen(key: ValueKey('office_$_currentNavIndex')),
                   WorkSiteManagementScreen(key: ValueKey('worksite_$_currentNavIndex')),
                   LiveTrackingMapScreen(key: ValueKey('live_map_$_currentNavIndex')),
@@ -337,6 +348,18 @@ class AdminOverviewTab extends StatelessWidget {
                 const SizedBox(height: 20),
                 StaggeredAnimatedItem(
                   index: 7,
+                  child: _buildDocumentExpiryAlertCenter(
+                    context,
+                    db,
+                    employees,
+                    isDark,
+                    palette,
+                    primary,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                StaggeredAnimatedItem(
+                  index: 8,
                   child: AppGlassCard(
                     padding: const EdgeInsets.all(20.0),
                     child: Column(
@@ -435,17 +458,24 @@ class AdminOverviewTab extends StatelessWidget {
                           children: [
                             _buildQuickActionButton(
                               context: context,
+                              icon: Icons.badge_rounded,
+                              label: 'Cards & Pass Expiry',
+                              color: palette.info,
+                              onTap: () => onNavigateTab?.call(2),
+                            ),
+                            _buildQuickActionButton(
+                              context: context,
                               icon: Icons.map_rounded,
                               label: 'Live Field Map',
                               color: primary,
-                              onTap: () => onNavigateTab?.call(4),
+                              onTap: () => onNavigateTab?.call(5),
                             ),
                             _buildQuickActionButton(
                               context: context,
                               icon: Icons.analytics_rounded,
                               label: 'Reports & Timesheets',
                               color: palette.secondary,
-                              onTap: () => onNavigateTab?.call(5),
+                              onTap: () => onNavigateTab?.call(6),
                             ),
                             _buildQuickActionButton(
                               context: context,
@@ -459,7 +489,7 @@ class AdminOverviewTab extends StatelessWidget {
                               icon: Icons.business_rounded,
                               label: 'Office Stations',
                               color: palette.warning,
-                              onTap: () => onNavigateTab?.call(2),
+                              onTap: () => onNavigateTab?.call(3),
                             ),
                           ],
                         ),
@@ -976,6 +1006,365 @@ class AdminOverviewTab extends StatelessWidget {
                     color: isDark
                         ? palette.textSecondaryDark
                         : palette.textSecondaryLight)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDocumentExpiryAlertCenter(
+    BuildContext context,
+    LocalDatabaseService db,
+    List<EmployeeEntity> employees,
+    bool isDark,
+    AppThemePalette palette,
+    Color primary,
+  ) {
+    final dateFormat = DateFormat('dd MMM yyyy');
+    final cardMaps = db.getSavedEmployeeCards();
+    final cards = cardMaps.map((m) => EmployeeCard.fromJson(m)).toList();
+
+    // Sort: earliest expiry / most urgent first
+    cards.sort((a, b) => a.daysUntilExpiry.compareTo(b.daysUntilExpiry));
+
+    final criticalCards = cards.where((c) => c.isExpired || c.isCritical).toList();
+
+    Future<void> launchWhatsAppNotification(EmployeeCard card) async {
+      final emp = employees.firstWhere(
+        (e) => e.id == card.employeeId,
+        orElse: () => EmployeeEntity(
+          id: card.employeeId,
+          name: 'Staff Member',
+          employeeCode: 'EMP',
+          department: 'Operations',
+          designation: 'Officer',
+          mobileNumber: '',
+          email: '',
+        ),
+      );
+
+      final days = card.daysUntilExpiry;
+      final daysText = card.isExpired
+          ? 'expired ${days.abs()} days ago'
+          : (days == 0 ? 'expires TODAY' : 'expires in $days day${days == 1 ? '' : 's'}');
+      final message = '🚨 *URGENT COMPLIANCE NOTICE*\n\n'
+          'Dear ${emp.name} (${emp.employeeCode}),\n'
+          'Your *${card.cardName}* (Card No: ${card.cardNumber}) $daysText (Expiry Date: ${dateFormat.format(card.expiryDate)}).\n\n'
+          '⚠️ Immediate document renewal is required. Please submit your renewed card to Administration/HR without delay.\n\n'
+          'Regards,\nWorkforce Compliance Department';
+
+      final phone = emp.mobileNumber.replaceAll(RegExp(r'[^0-9]'), '');
+      final encodedMsg = Uri.encodeComponent(message);
+      final waUrl = phone.isNotEmpty
+          ? 'https://wa.me/$phone?text=$encodedMsg'
+          : 'https://wa.me/?text=$encodedMsg';
+
+      final uri = Uri.parse(waUrl);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Could not open WhatsApp for ${emp.name}'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      }
+    }
+
+    if (criticalCards.isNotEmpty) {
+      return AppGlassCard(
+        customBackgroundColor: Colors.redAccent.withValues(alpha: isDark ? 0.14 : 0.06),
+        customBorderColor: Colors.redAccent.withValues(alpha: isDark ? 0.45 : 0.35),
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              'Document Expiry & Compliance Radar',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${criticalCards.length} CRITICAL',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          'Cards expiring in ≤3 days or expired. Immediate renewal action required.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? palette.textSecondaryDark : palette.textSecondaryLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF25D366),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  ),
+                  icon: const Icon(Icons.chat_bubble_rounded, size: 16),
+                  label: const Text('WhatsApp All Alerts', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  onPressed: () => launchWhatsAppNotification(criticalCards.first),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 14),
+
+            // Critical Cards List
+            ...criticalCards.take(4).map((card) {
+              final emp = employees.firstWhere(
+                (e) => e.id == card.employeeId,
+                orElse: () => EmployeeEntity(
+                  id: card.employeeId,
+                  name: 'Staff',
+                  employeeCode: 'EMP',
+                  department: 'Operations',
+                  designation: 'Officer',
+                  mobileNumber: '',
+                  email: '',
+                ),
+              );
+
+              final isExp = card.isExpired;
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.black.withValues(alpha: 0.25) : Colors.white.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.redAccent.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    EmployeeAvatar(
+                      fullName: emp.name,
+                      radius: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                emp.name,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '(${emp.employeeCode})',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark ? palette.textSecondaryDark : palette.textSecondaryLight,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${card.cardName} • ${card.cardNumber}',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: (isExp ? Colors.red : Colors.orange).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: (isExp ? Colors.red : Colors.orange).withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Text(
+                            card.statusLabel,
+                            style: TextStyle(
+                              color: isExp ? Colors.redAccent : Colors.orangeAccent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Expires: ${dateFormat.format(card.expiryDate)}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: isDark ? palette.textSecondaryDark : palette.textSecondaryLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 10),
+                    IconButton(
+                      icon: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF25D366), size: 20),
+                      tooltip: 'Send WhatsApp Alert to ${emp.name}',
+                      onPressed: () => launchWhatsAppNotification(card),
+                    ),
+                  ],
+                ),
+              );
+            }),
+
+            const SizedBox(height: 6),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => onNavigateTab?.call(2),
+                icon: const Icon(Icons.badge_rounded, size: 16),
+                label: const Text('Manage & View All Cards in Hub', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.35)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (cards.isNotEmpty) {
+      return AppGlassCard(
+        customBackgroundColor: palette.success.withValues(alpha: isDark ? 0.12 : 0.05),
+        customBorderColor: palette.success.withValues(alpha: isDark ? 0.35 : 0.2),
+        padding: const EdgeInsets.all(18.0),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: palette.success.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.verified_user_rounded, color: palette.success, size: 24),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Workforce Document & Security Pass Radar',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'All ${cards.length} tracked employee cards (Emirates ID, Visa, Passport, Passes) are compliant. 0 expirations in the 3-day notice window.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? palette.textSecondaryDark : palette.textSecondaryLight,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            OutlinedButton.icon(
+              onPressed: () => onNavigateTab?.call(2),
+              icon: const Icon(Icons.badge_outlined, size: 16),
+              label: const Text('Cards Hub', style: TextStyle(fontSize: 12)),
+              style: OutlinedButton.styleFrom(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return AppGlassCard(
+      padding: const EdgeInsets.all(18.0),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: primary.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.badge_outlined, color: primary, size: 24),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Automated Employee Cards & Pass Expiry Tracking',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Select employees and scan cards (Emirates ID, Visa, Passport, MOPA, CISPA) to automatically fetch expiry dates and receive 3-day alerts.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? palette.textSecondaryDark : palette.textSecondaryLight,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          ElevatedButton.icon(
+            onPressed: () => onNavigateTab?.call(2),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(Icons.add_card_rounded, size: 16),
+            label: const Text('Add Cards', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
           ),
         ],
       ),

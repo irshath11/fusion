@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   
   <!-- Application CSS -->
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
 
@@ -73,6 +73,13 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
           </svg>
           <span>Employees</span>
+        </div>
+
+        <div class="nav-item" data-tab="cards">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+          </svg>
+          <span>Cards & Pass Expiry</span>
         </div>
 
         <div class="nav-item" data-tab="offices">
@@ -196,6 +203,9 @@
             </div>
           </div>
 
+          <!-- Main Dashboard Document & Pass Expiry Alert Center (3-Day Watchlist) -->
+          <div id="overview-cards-alert-container" style="margin-bottom: 20px;"></div>
+
           <div class="card-table-wrapper" style="padding: 20px;">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
               <div style="display: flex; align-items: center; gap: 10px;">
@@ -209,10 +219,11 @@
             </div>
             
             <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-color);">
-              <button class="btn btn-secondary btn-sm" onclick="switchTab('tab-live-map')">📍 Live Field Map</button>
-              <button class="btn btn-secondary btn-sm" onclick="switchTab('tab-reports')">📊 Reports & Timesheets</button>
-              <button class="btn btn-secondary btn-sm" onclick="switchTab('tab-employees')">👥 Manage Team</button>
-              <button class="btn btn-secondary btn-sm" onclick="switchTab('tab-offices')">🏢 Office Stations</button>
+              <button class="btn btn-secondary btn-sm" onclick="switchTab('cards')">🪪 Cards & Pass Expiry</button>
+              <button class="btn btn-secondary btn-sm" onclick="switchTab('map')">📍 Live Field Map</button>
+              <button class="btn btn-secondary btn-sm" onclick="switchTab('reports')">📊 Reports & Timesheets</button>
+              <button class="btn btn-secondary btn-sm" onclick="switchTab('employees')">👥 Manage Team</button>
+              <button class="btn btn-secondary btn-sm" onclick="switchTab('offices')">🏢 Office Stations</button>
             </div>
           </div>
         </div>
@@ -253,6 +264,134 @@
                   </tr>
                 </thead>
                 <tbody id="employee-table-body">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: CARDS & PASS EXPIRY TRACKER -->
+        <div id="tab-cards" class="tab-pane">
+          
+          <!-- Critical Expiry Alert Banner (Displayed when <= 3 days or expired) -->
+          <div id="cards-alert-banner" class="compliance-alert-banner" style="display: none;">
+            <div class="alert-banner-content">
+              <div class="alert-banner-icon">🚨</div>
+              <div>
+                <div id="alert-banner-title" class="alert-banner-title">Critical Document Expiry Alert</div>
+                <div id="alert-banner-desc" class="alert-banner-desc">You have employees with cards expiring within the next 3 days or already expired. Immediate renewal action required.</div>
+              </div>
+            </div>
+            <div class="alert-banner-actions">
+              <button id="btn-broadcast-expiry" class="btn btn-whatsapp btn-sm">
+                💬 Notify via WhatsApp
+              </button>
+              <button id="btn-email-digest" class="btn btn-email btn-sm">
+                ✉️ Send Email Digest
+              </button>
+            </div>
+          </div>
+
+          <!-- Cards Summary Metrics Grid -->
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-title">Total Documents</span>
+                <div class="metric-icon">🪪</div>
+              </div>
+              <div id="metric-total-cards" class="metric-value">0</div>
+              <div class="metric-footer">Uploaded employee cards & passes</div>
+            </div>
+
+            <div class="metric-card" style="border-color: rgba(239, 68, 68, 0.4);">
+              <div class="metric-header">
+                <span class="metric-title" style="color: #F87171;">Expiring in ≤ 3 Days</span>
+                <div class="metric-icon">⚠️</div>
+              </div>
+              <div id="metric-critical-cards" class="metric-value" style="color: #F87171;">0</div>
+              <div class="metric-footer">Urgent action required (critical 3 days)</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-title">Already Expired</span>
+                <div class="metric-icon">❌</div>
+              </div>
+              <div id="metric-expired-cards" class="metric-value" style="color: var(--danger);">0</div>
+              <div class="metric-footer">Overdue renewal / non-compliant</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-title">Active & Valid</span>
+                <div class="metric-icon">✅</div>
+              </div>
+              <div id="metric-valid-cards" class="metric-value" style="color: var(--success);">0</div>
+              <div class="metric-footer">Healthy & compliant workforce cards</div>
+            </div>
+          </div>
+
+          <!-- Table Container & Filter Toolbar -->
+          <div class="card-table-wrapper">
+            <div class="table-toolbar" style="flex-wrap: wrap; gap: 12px;">
+              <div class="table-title-group">
+                <h3 class="table-title">Employee Cards & Private Passes Directory</h3>
+                <span id="cards-count-badge" class="table-count-badge">0 Documents</span>
+              </div>
+
+              <div class="table-actions" style="flex-wrap: wrap; gap: 8px;">
+                <div class="search-input-wrapper">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <input type="text" id="cards-search-input" class="form-control" placeholder="Search employee, pass or number...">
+                </div>
+
+                <select id="cards-filter-type" class="form-control" style="width: auto; min-width: 155px;">
+                  <option value="ALL">All Card Types</option>
+                  <option value="EMIRATES_ID">Emirates ID (EID)</option>
+                  <option value="VISA">Visa Card</option>
+                  <option value="PASSPORT">Passport</option>
+                  <option value="INSURANCE">Insurance Card</option>
+                  <option value="MOPA_PASS">MOPA Pass (Private)</option>
+                  <option value="CISPA_PASS">Cispa Pass (Private)</option>
+                  <option value="CUSTOM_PASS">Other Passes</option>
+                </select>
+
+                <select id="cards-filter-status" class="form-control" style="width: auto; min-width: 165px;">
+                  <option value="ALL">All Expiry Statuses</option>
+                  <option value="CRITICAL">🚨 Expiring in ≤ 3 Days</option>
+                  <option value="EXPIRED">❌ Expired Cards</option>
+                  <option value="SOON">⚠️ Expiring within 30 Days</option>
+                  <option value="VALID">✅ Valid (> 30 Days)</option>
+                </select>
+
+                <button id="btn-export-cards" class="btn btn-secondary">
+                  📥 Export
+                </button>
+
+                <button id="btn-add-card" class="btn btn-primary">
+                  + Upload Employee Card
+                </button>
+              </div>
+            </div>
+
+            <div class="data-table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Document / Pass</th>
+                    <th>Card / Doc Number</th>
+                    <th>Expiry Date</th>
+                    <th>Expiry Status</th>
+                    <th>Attachment</th>
+                    <th style="text-align: center;">1-Click Alerts</th>
+                    <th style="text-align: right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="cards-table-body">
                   <!-- Dynamically populated -->
                 </tbody>
               </table>
@@ -500,6 +639,165 @@
     </div>
   </div>
 
+  <!-- Upload / Edit Card Drawer -->
+  <div id="card-drawer-backdrop" class="drawer-backdrop"></div>
+  <div id="card-drawer" class="slide-drawer" style="width: 460px;">
+    <div class="drawer-header">
+      <h3 id="card-drawer-title" class="drawer-title">Upload Employee Card / Pass</h3>
+      <button id="card-drawer-close-btn" class="btn-icon">✕</button>
+    </div>
+    <div class="drawer-body">
+      <form id="card-form">
+        <input type="hidden" id="card-edit-id" value="">
+
+        <div class="form-group">
+          <label class="form-label" for="card-emp-select">Select Employee *</label>
+          <select id="card-emp-select" class="form-control" required></select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="card-type-select">Document / Pass Type *</label>
+          <select id="card-type-select" class="form-control" required>
+            <option value="EMIRATES_ID">Emirates ID (EID)</option>
+            <option value="VISA">Visa Card</option>
+            <option value="PASSPORT">Passport</option>
+            <option value="INSURANCE">Health & Medical Insurance</option>
+            <option value="MOPA_PASS">MOPA Pass (Private Pass)</option>
+            <option value="CISPA_PASS">Cispa Pass (Private Pass)</option>
+            <option value="CUSTOM_PASS">Other Private Pass / Clearance</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="card-custom-name-group" style="display: none;">
+          <label class="form-label" for="card-custom-name">Pass Name / Title *</label>
+          <input type="text" id="card-custom-name" class="form-control" placeholder="e.g. Airport Access Pass / Security Permit">
+        </div>
+
+        <!-- Automated Smart Document Scanner & OCR Hub (No typing required) -->
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label class="form-label" style="margin-bottom: 0;">Upload & Auto-Extract Card Data (OCR)</label>
+            <span class="badge badge-success" style="font-size: 10px;">⚡ NO TYPING REQUIRED</span>
+          </div>
+          
+          <div id="card-file-dropzone" class="file-dropzone">
+            <input type="file" id="card-file-input" accept="image/*,application/pdf" style="display: none;">
+            <div class="dropzone-icon">📷</div>
+            <div class="dropzone-text">Click to choose or drop employee card file</div>
+            <div class="dropzone-subtext">Supports PNG, JPG, WEBP, PDF • Auto-extracts numbers & expiry dates</div>
+          </div>
+          
+          <div id="card-file-preview" class="dropzone-preview" style="display: none;">
+            <img id="card-file-thumb" class="dropzone-thumbnail" src="" alt="Thumbnail">
+            <div class="dropzone-file-meta">
+              <div id="card-file-name" class="dropzone-file-name">filename.png</div>
+              <div id="card-file-size" class="dropzone-file-size">1.2 MB</div>
+            </div>
+            <button type="button" id="card-file-remove" class="btn-icon" title="Remove attachment">✕</button>
+          </div>
+
+          <!-- Instant Document Recognition Trigger Buttons -->
+          <div style="margin-top: 10px;">
+            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">Or 1-click test auto-recognition for selected card:</div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <button type="button" id="btn-ocr-instant-scan" class="btn btn-secondary btn-sm" style="flex: 1; min-width: 140px; font-weight: 600;">
+                ⚡ Auto-Extract Data
+              </button>
+              <button type="button" id="btn-ocr-sample-eid" class="btn btn-secondary btn-sm" title="Simulate Emirates ID Scan">🇦🇪 EID</button>
+              <button type="button" id="btn-ocr-sample-visa" class="btn btn-secondary btn-sm" title="Simulate UAE Visa Scan">🛂 Visa</button>
+              <button type="button" id="btn-ocr-sample-passport" class="btn btn-secondary btn-sm" title="Simulate Passport Scan">📘 Passport</button>
+              <button type="button" id="btn-ocr-sample-insurance" class="btn btn-secondary btn-sm" title="Simulate Health Insurance Scan">🏥 Insurance</button>
+              <button type="button" id="btn-ocr-sample-mopa" class="btn btn-secondary btn-sm" title="Simulate MOPA Pass Scan">🛡️ MOPA</button>
+              <button type="button" id="btn-ocr-sample-cispa" class="btn btn-secondary btn-sm" title="Simulate CISPA Pass Scan">⚓ CISPA</button>
+            </div>
+          </div>
+
+          <!-- OCR Live Status & Extraction Result Banner -->
+          <div id="card-ocr-status-card" style="display: none; margin-top: 10px; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-surface); font-size: 12px;">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="card-number-input">Card / Document Number (Auto-Populated)</label>
+          <input type="text" id="card-number-input" class="form-control" placeholder="Extracted via OCR or enter number" required>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label class="form-label" for="card-issue-date">Issue Date</label>
+            <input type="date" id="card-issue-date" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="card-expiry-date">Expiry Date *</label>
+            <input type="date" id="card-expiry-date" class="form-control" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="card-notes">Notes / Renewal Remarks</label>
+          <textarea id="card-notes" class="form-control" rows="2" placeholder="Optional notes (e.g. Sponsor info, Renewal under process)"></textarea>
+        </div>
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button id="card-drawer-cancel-btn" class="btn btn-secondary">Cancel</button>
+      <button id="card-drawer-save-btn" class="btn btn-primary">Save Document</button>
+    </div>
+  </div>
+
+  <!-- Document Viewer Modal -->
+  <div id="card-viewer-backdrop" class="modal-backdrop"></div>
+  <div id="card-viewer-modal" class="modal-box" style="max-width: 600px;">
+    <div class="modal-header">
+      <h3 id="card-viewer-title" class="modal-title">Employee Document Viewer</h3>
+      <button id="card-viewer-close" class="btn-icon">✕</button>
+    </div>
+    <div class="modal-body" style="padding: 16px;">
+      <div id="card-viewer-content" style="text-align: center;">
+        <img id="card-viewer-img" src="" alt="Document Preview" style="max-width: 100%; max-height: 400px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); object-fit: contain;">
+        <iframe id="card-viewer-pdf" src="" style="width: 100%; height: 400px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); display: none;"></iframe>
+      </div>
+      <div id="card-viewer-meta" style="margin-top: 14px; padding: 12px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); font-size: 12px;"></div>
+    </div>
+    <div class="modal-footer" style="justify-content: space-between;">
+      <div style="display: flex; gap: 8px;">
+        <button id="card-viewer-whatsapp" class="btn btn-whatsapp btn-sm">💬 WhatsApp</button>
+        <button id="card-viewer-email" class="btn btn-email btn-sm">✉️ Email</button>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <a id="card-viewer-download" href="#" target="_blank" download class="btn btn-secondary btn-sm">⬇️ Download</a>
+        <button id="card-viewer-dismiss" class="btn btn-secondary btn-sm">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Broadcast Expiry Modal -->
+  <div id="broadcast-modal-backdrop" class="modal-backdrop"></div>
+  <div id="broadcast-modal" class="modal-box" style="max-width: 540px;">
+    <div class="modal-header">
+      <h3 class="modal-title">⚠️ Expiring Documents Alert Broadcast</h3>
+      <button id="broadcast-modal-close" class="btn-icon">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+        The following employee cards are expiring within the next 3 days or have expired. Choose your notification channel to dispatch alerts:
+      </p>
+      <div id="broadcast-list" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 8px; margin-bottom: 14px; background: var(--bg-surface);">
+        <!-- Dynamically rendered list of critical cards -->
+      </div>
+      <div class="form-group">
+        <label class="form-label">Alert Message Preview</label>
+        <textarea id="broadcast-message-preview" class="form-control" rows="5" readonly style="font-family: var(--font-mono); font-size: 11px;"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="broadcast-cancel-btn" class="btn btn-secondary">Close</button>
+      <button id="broadcast-email-btn" class="btn btn-email">✉️ Dispatch Email Alert</button>
+      <button id="broadcast-whatsapp-btn" class="btn btn-whatsapp">💬 Open WhatsApp Alert</button>
+    </div>
+  </div>
+
   <!-- Supabase JS Client SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   
@@ -510,7 +808,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application JS Controller -->
-  <script src="app.js"></script>
+  <script src="app.js?v=4"></script>
 
 </body>
 </html>

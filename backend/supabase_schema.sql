@@ -9,6 +9,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- Clean up legacy tables to prevent schema type mismatch errors (e.g. TEXT vs UUID)
 DROP TABLE IF EXISTS public.activity_logs CASCADE;
+DROP TABLE IF EXISTS public.employee_cards CASCADE;
 DROP TABLE IF EXISTS public.notifications CASCADE;
 DROP TABLE IF EXISTS public.devices CASCADE;
 DROP TABLE IF EXISTS public.gps_logs CASCADE;
@@ -227,6 +228,28 @@ CREATE TABLE IF NOT EXISTS public.activity_logs (
 );
 
 -- ------------------------------------------------------------------------------
+-- 14. EMPLOYEE CARDS & PASSES TABLE (Emirates ID, Visa, Insurance, MOPA, Cispa)
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.employee_cards (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+    employee_id UUID NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE,
+    card_type VARCHAR(50) NOT NULL CHECK (card_type IN ('EMIRATES_ID', 'VISA', 'PASSPORT', 'INSURANCE', 'MOPA_PASS', 'CISPA_PASS', 'CUSTOM_PASS')),
+    card_name VARCHAR(100) NOT NULL,
+    card_number VARCHAR(100) NOT NULL,
+    issue_date DATE,
+    expiry_date DATE NOT NULL,
+    document_url TEXT,
+    file_name VARCHAR(255),
+    notes TEXT,
+    last_notified_at TIMESTAMP WITH TIME ZONE,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ------------------------------------------------------------------------------
 -- INDEXES FOR HIGH PERFORMANCE
 -- ------------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_users_org ON public.users(organization_id);
@@ -237,6 +260,9 @@ CREATE INDEX IF NOT EXISTS idx_attendance_emp_time ON public.attendance_records(
 CREATE INDEX IF NOT EXISTS idx_attendance_org ON public.attendance_records(organization_id);
 CREATE INDEX IF NOT EXISTS idx_activity_org ON public.activity_logs(organization_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_devices_user ON public.devices(user_id);
+CREATE INDEX IF NOT EXISTS idx_employee_cards_emp ON public.employee_cards(employee_id);
+CREATE INDEX IF NOT EXISTS idx_employee_cards_org ON public.employee_cards(organization_id);
+CREATE INDEX IF NOT EXISTS idx_employee_cards_expiry ON public.employee_cards(expiry_date);
 
 -- ------------------------------------------------------------------------------
 -- STORED PROCEDURE: ATOMIC ORGANIZATION OWNERSHIP TRANSFER
@@ -356,11 +382,18 @@ CREATE POLICY devices_all ON public.devices FOR ALL USING (true);
 DROP POLICY IF EXISTS activity_logs_all ON public.activity_logs;
 CREATE POLICY activity_logs_all ON public.activity_logs FOR ALL USING (true);
 
+DROP POLICY IF EXISTS employee_cards_all ON public.employee_cards;
+CREATE POLICY employee_cards_all ON public.employee_cards FOR ALL USING (true);
+
 -- ------------------------------------------------------------------------------
--- STORAGE BUCKETS SETUP FOR ATTENDANCE PHOTOS
+-- STORAGE BUCKETS SETUP FOR ATTENDANCE PHOTOS & EMPLOYEE DOCUMENTS
 -- ------------------------------------------------------------------------------
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('attendance_photos', 'attendance_photos', true)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('employee_documents', 'employee_documents', true)
 ON CONFLICT (id) DO NOTHING;
 
 DROP POLICY IF EXISTS "Public Access for attendance_photos" ON storage.objects;
@@ -370,3 +403,11 @@ ON storage.objects FOR SELECT USING (bucket_id = 'attendance_photos');
 DROP POLICY IF EXISTS "Allow Public Uploads to attendance_photos" ON storage.objects;
 CREATE POLICY "Allow Public Uploads to attendance_photos"
 ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'attendance_photos');
+
+DROP POLICY IF EXISTS "Public Access for employee_documents" ON storage.objects;
+CREATE POLICY "Public Access for employee_documents"
+ON storage.objects FOR SELECT USING (bucket_id = 'employee_documents');
+
+DROP POLICY IF EXISTS "Allow Public Uploads to employee_documents" ON storage.objects;
+CREATE POLICY "Allow Public Uploads to employee_documents"
+ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'employee_documents');
