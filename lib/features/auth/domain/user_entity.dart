@@ -18,6 +18,7 @@ class UserEntity {
   final String? assignedOfficeId;
   final String? assignedOfficeName;
   final String? photoUrl;
+  final bool bypassGeofence;
 
   UserEntity({
     required this.id,
@@ -37,6 +38,7 @@ class UserEntity {
     this.assignedOfficeId,
     this.assignedOfficeName,
     this.photoUrl,
+    this.bypassGeofence = false,
   });
 
   /// Convenience getter for name
@@ -61,6 +63,8 @@ class UserEntity {
         'assigned_office_name': assignedOfficeName,
         'photoUrl': photoUrl,
         'photo_url': photoUrl,
+        'bypass_geofence': bypassGeofence,
+        'bypassGeofence': bypassGeofence,
       };
 
   factory UserEntity.fromJson(Map<String, dynamic> json) => UserEntity(
@@ -83,6 +87,7 @@ class UserEntity {
         assignedOfficeId: json['assigned_office_id'] ?? json['assignedOfficeId'],
         assignedOfficeName: json['assigned_office_name'] ?? json['assignedOfficeName'],
         photoUrl: json['photoUrl'] ?? json['photo_url'],
+        bypassGeofence: json['bypass_geofence'] ?? json['bypassGeofence'] ?? false,
       );
 
   UserEntity copyWith({
@@ -103,6 +108,7 @@ class UserEntity {
     String? assignedOfficeId,
     String? assignedOfficeName,
     String? photoUrl,
+    bool? bypassGeofence,
   }) {
     return UserEntity(
       id: id ?? this.id,
@@ -122,6 +128,7 @@ class UserEntity {
       assignedOfficeId: assignedOfficeId ?? this.assignedOfficeId,
       assignedOfficeName: assignedOfficeName ?? this.assignedOfficeName,
       photoUrl: photoUrl ?? this.photoUrl,
+      bypassGeofence: bypassGeofence ?? this.bypassGeofence,
     );
   }
 }

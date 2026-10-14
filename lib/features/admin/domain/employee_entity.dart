@@ -11,6 +11,7 @@ class EmployeeEntity {
   final String? assignedOfficeName;
   final bool isActive;
   final String? photoUrl;
+  final bool bypassGeofence;
 
   EmployeeEntity({
     required this.id,
@@ -25,6 +26,7 @@ class EmployeeEntity {
     this.assignedOfficeName,
     this.isActive = true,
     this.photoUrl,
+    this.bypassGeofence = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -41,6 +43,8 @@ class EmployeeEntity {
         'isActive': isActive,
         'photoUrl': photoUrl,
         'photo_url': photoUrl,
+        'bypassGeofence': bypassGeofence,
+        'bypass_geofence': bypassGeofence,
       };
 
   factory EmployeeEntity.fromJson(Map<String, dynamic> json) => EmployeeEntity(
@@ -56,6 +60,7 @@ class EmployeeEntity {
         assignedOfficeName: json['assignedOfficeName'] ?? json['assigned_office_name'],
         isActive: json['isActive'] ?? json['is_active'] ?? true,
         photoUrl: json['photoUrl'] ?? json['photo_url'],
+        bypassGeofence: json['bypassGeofence'] ?? json['bypass_geofence'] ?? false,
       );
 
   EmployeeEntity copyWith({
@@ -72,6 +77,7 @@ class EmployeeEntity {
     bool clearAssignedOffice = false,
     bool? isActive,
     String? photoUrl,
+    bool? bypassGeofence,
   }) {
     return EmployeeEntity(
       id: id ?? this.id,
@@ -90,6 +96,7 @@ class EmployeeEntity {
           : (assignedOfficeName ?? this.assignedOfficeName),
       isActive: isActive ?? this.isActive,
       photoUrl: photoUrl ?? this.photoUrl,
+      bypassGeofence: bypassGeofence ?? this.bypassGeofence,
     );
   }
 }

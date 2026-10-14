@@ -75,6 +75,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     try {
       await SupabaseService().syncCloudDataToLocal();
       await _db.sanitizeDuplicateEmployees();
+      _db.refreshCurrentUser();
       if (mounted) {
         _refreshSyncCount();
         setState(() {});
@@ -122,6 +123,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
 
     try {
       final result = await _syncEngine.performSync();
+      _db.refreshCurrentUser();
       _refreshSyncCount();
 
       if (!mounted) return;
@@ -618,10 +620,37 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
 
     final activeSiteName = _db.getActiveSiteNameToday(empId);
     final offices = _db.getOffices();
+    final defaultOfficeName = offices.isNotEmpty ? offices.first.name : 'Main HQ Office';
+    final assignedOffice = (user != null && !user.useDefaultOffice && user.assignedOfficeName != null && user.assignedOfficeName!.trim().isNotEmpty)
+        ? user.assignedOfficeName!.trim()
+        : defaultOfficeName;
     final activeLocationDisplay =
         (activeSiteName != null && activeSiteName.trim().isNotEmpty)
             ? activeSiteName.trim()
-            : (offices.isNotEmpty ? offices.first.name : 'Main HQ Office');
+            : assignedOffice;
+    final empMatches = _db.getEmployees().where(
+      (e) =>
+          e.id == user?.id ||
+          e.id == user?.firebaseUid ||
+          (user?.employeeCode != null &&
+              user!.employeeCode!.trim().isNotEmpty &&
+              e.employeeCode.trim().toLowerCase() ==
+                  user.employeeCode!.trim().toLowerCase()) ||
+          (user?.email != null &&
+              user!.email.trim().isNotEmpty &&
+              e.email.trim().toLowerCase() == user.email.trim().toLowerCase()),
+    );
+    final isEmpBypassed = empMatches.isNotEmpty && empMatches.any((e) => e.bypassGeofence);
+
+    final isGeofenceBypassed = (user?.bypassGeofence ?? false) ||
+        isEmpBypassed ||
+        (_db.getGeofenceOverride(
+              userId: user?.id,
+              email: user?.email,
+              employeeCode: user?.employeeCode,
+              name: user?.fullName,
+            ) ??
+            false);
 
     final destinations = const [
       NavDestinationItem(
@@ -882,6 +911,39 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                                     ? palette.textPrimaryDark
                                                     : palette.textPrimaryLight),
                                           ),
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                isGeofenceBypassed
+                                                    ? Icons.public_rounded
+                                                    : Icons.fmd_good_rounded,
+                                                size: 13,
+                                                color: isGeofenceBypassed
+                                                    ? Colors.purple
+                                                    : palette.success,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Flexible(
+                                                child: Text(
+                                                  isGeofenceBypassed
+                                                      ? 'Geofence Disabled (Anywhere)'
+                                                      : 'Geofence Enforced (Office)',
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: isGeofenceBypassed
+                                                        ? (isDark
+                                                            ? Colors.purple.shade200
+                                                            : Colors.purple.shade700)
+                                                        : palette.success,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -909,31 +971,37 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceAround,
                                   children: [
-                                    _buildInfoMetric(
-                                      context,
-                                      'Duty Status',
-                                      currentStep == WorkflowStep.completed
-                                          ? 'Completed'
-                                          : (isOnBreak
-                                              ? '☕ On Break'
-                                              : 'Active Duty'),
-                                      color: activePrimary,
+                                    Expanded(
+                                      child: _buildInfoMetric(
+                                        context,
+                                        'Duty Status',
+                                        currentStep == WorkflowStep.completed
+                                            ? 'Completed'
+                                            : (isOnBreak
+                                                ? '☕ On Break'
+                                                : 'Active Duty'),
+                                        color: activePrimary,
+                                      ),
                                     ),
-                                    _buildInfoMetric(
-                                      context,
-                                      'Net Working',
-                                      workingTime,
-                                      color: palette.success,
+                                    Expanded(
+                                      child: _buildInfoMetric(
+                                        context,
+                                        'Net Working',
+                                        workingTime,
+                                        color: palette.success,
+                                      ),
                                     ),
-                                    _buildInfoMetric(
-                                      context,
-                                      'Pending Sync',
-                                      '$_pendingSyncCount',
-                                      color: _pendingSyncCount > 0
-                                          ? palette.warning
-                                          : (isDark
-                                              ? palette.textPrimaryDark
-                                              : palette.textPrimaryLight),
+                                    Expanded(
+                                      child: _buildInfoMetric(
+                                        context,
+                                        'Pending Sync',
+                                        '$_pendingSyncCount',
+                                        color: _pendingSyncCount > 0
+                                            ? palette.warning
+                                            : (isDark
+                                                ? palette.textPrimaryDark
+                                                : palette.textPrimaryLight),
+                                      ),
                                     ),
                                   ],
                                 )
@@ -1811,31 +1879,39 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildInfoMetric(
-                  context,
-                  'Regular Hrs',
-                  '${cycleSummary.regularHours.toStringAsFixed(1)}h',
-                  color: activePrimary,
+                Expanded(
+                  child: _buildInfoMetric(
+                    context,
+                    'Regular Hrs',
+                    '${cycleSummary.regularHours.toStringAsFixed(1)}h',
+                    color: activePrimary,
+                  ),
                 ),
-                _buildInfoMetric(
-                  context,
-                  'Overtime (OT)',
-                  '${cycleSummary.overtimeHours.toStringAsFixed(1)}h',
-                  color: Colors.orange.shade800,
+                Expanded(
+                  child: _buildInfoMetric(
+                    context,
+                    'Overtime (OT)',
+                    '${cycleSummary.overtimeHours.toStringAsFixed(1)}h',
+                    color: Colors.orange.shade800,
+                  ),
                 ),
-                _buildInfoMetric(
-                  context,
-                  'Total Worked',
-                  '${cycleSummary.combinedHours.toStringAsFixed(1)}h',
-                  color: palette.success,
+                Expanded(
+                  child: _buildInfoMetric(
+                    context,
+                    'Total Worked',
+                    '${cycleSummary.combinedHours.toStringAsFixed(1)}h',
+                    color: palette.success,
+                  ),
                 ),
-                _buildInfoMetric(
-                  context,
-                  'Days Logged',
-                  '${cycleSummary.daysWorked}',
-                  color: isDark
-                      ? palette.textPrimaryDark
-                      : palette.textPrimaryLight,
+                Expanded(
+                  child: _buildInfoMetric(
+                    context,
+                    'Days Logged',
+                    '${cycleSummary.daysWorked}',
+                    color: isDark
+                        ? palette.textPrimaryDark
+                        : palette.textPrimaryLight,
+                  ),
                 ),
               ],
             ),
@@ -1876,6 +1952,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     final palette = AppTheme.currentColors;
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         FittedBox(
           fit: BoxFit.scaleDown,

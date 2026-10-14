@@ -25,6 +25,7 @@ class LocalDatabaseService {
   UserEntity? _currentUser;
   Box? _settingsBox;
 
+  final Map<String, bool> _geofenceBypassOverrides = {};
   final List<UserEntity> _users = [];
   final List<EmployeeEntity> _employees = [];
   final List<OfficeEntity> _offices = [];
@@ -39,6 +40,17 @@ class LocalDatabaseService {
 
       _isSetupCompleted =
           _settingsBox?.get('is_setup_completed', defaultValue: false) ?? false;
+
+      final savedGeofenceJson = _settingsBox?.get('geofence_bypass_overrides');
+      if (savedGeofenceJson != null && savedGeofenceJson.toString().isNotEmpty) {
+        try {
+          final Map<String, dynamic> decoded = jsonDecode(savedGeofenceJson);
+          _geofenceBypassOverrides.clear();
+          decoded.forEach((key, val) {
+            if (val is bool) _geofenceBypassOverrides[key.toLowerCase()] = val;
+          });
+        } catch (_) {}
+      }
 
       final orgJsonStr = _settingsBox?.get('organization_json');
       if (orgJsonStr != null && orgJsonStr.toString().isNotEmpty) {
@@ -192,13 +204,109 @@ class LocalDatabaseService {
   }
 
   // Auth User
-  UserEntity? get currentUser => _currentUser;
+  UserEntity? get currentUser {
+    if (_currentUser == null) return null;
+    final u = _currentUser!;
+
+    // 1. Check for any explicit local geofence bypass override
+    final override = getGeofenceOverride(
+      userId: u.id,
+      email: u.email,
+      employeeCode: u.employeeCode,
+      name: u.fullName,
+    );
+
+    // 2. Look up matching user in _users
+    UserEntity? matchedUser;
+    final uId = u.id.trim().toLowerCase();
+    final uFb = u.firebaseUid.trim().toLowerCase();
+    final uEmail = u.email.trim().toLowerCase();
+    final uCode = (u.employeeCode ?? '').trim().toLowerCase();
+    for (final usr in _users) {
+      final usrId = usr.id.trim().toLowerCase();
+      final usrFb = usr.firebaseUid.trim().toLowerCase();
+      final usrEmail = usr.email.trim().toLowerCase();
+      final usrCode = (usr.employeeCode ?? '').trim().toLowerCase();
+      if (usrId == uId ||
+          (usrFb.isNotEmpty && (usrFb == uFb || usrFb == uId)) ||
+          (usrEmail.isNotEmpty && uEmail.isNotEmpty && usrEmail == uEmail) ||
+          (usrCode.isNotEmpty && uCode.isNotEmpty && usrCode == uCode)) {
+        matchedUser = usr;
+        break;
+      }
+    }
+
+    // 3. Look up matching employee in _employees
+    EmployeeEntity? matchedEmp;
+    for (final emp in _employees) {
+      final empId = emp.id.trim().toLowerCase();
+      final empEmail = emp.email.trim().toLowerCase();
+      final empCode = emp.employeeCode.trim().toLowerCase();
+      if (empId == uId ||
+          (empEmail.isNotEmpty && uEmail.isNotEmpty && empEmail == uEmail) ||
+          (empCode.isNotEmpty && uCode.isNotEmpty && empCode == uCode) ||
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: emp.id,
+            recordEmployeeName: emp.name,
+            employeeId: u.id,
+            employeeCode: u.employeeCode,
+            employeeName: u.fullName,
+            employeeEmail: u.email,
+          )) {
+        matchedEmp = emp;
+        break;
+      }
+    }
+
+    final effectiveBypass = override ??
+        (matchedEmp?.bypassGeofence == true
+            ? true
+            : (matchedUser?.bypassGeofence ?? u.bypassGeofence));
+
+    return u.copyWith(
+      fullName: (matchedUser != null && matchedUser.fullName.trim().isNotEmpty)
+          ? matchedUser.fullName.trim()
+          : (matchedEmp != null && matchedEmp.name.trim().isNotEmpty ? matchedEmp.name.trim() : u.fullName),
+      email: (matchedUser != null && matchedUser.email.trim().isNotEmpty)
+          ? matchedUser.email.trim()
+          : (matchedEmp != null && matchedEmp.email.trim().isNotEmpty ? matchedEmp.email.trim() : u.email),
+      phoneNumber: matchedUser?.phoneNumber ?? matchedEmp?.mobileNumber ?? u.phoneNumber,
+      employeeCode: (matchedEmp != null && matchedEmp.employeeCode.trim().isNotEmpty && matchedEmp.employeeCode != 'EMP-000')
+          ? matchedEmp.employeeCode.trim()
+          : (matchedUser?.employeeCode ?? u.employeeCode),
+      designation: (matchedEmp != null && matchedEmp.designation.trim().isNotEmpty && matchedEmp.designation != 'Staff')
+          ? matchedEmp.designation.trim()
+          : (matchedUser?.designation ?? u.designation),
+      department: (matchedEmp != null && matchedEmp.department.trim().isNotEmpty && matchedEmp.department != 'General')
+          ? matchedEmp.department.trim()
+          : (matchedUser?.department ?? u.department),
+      role: matchedUser?.role ?? u.role,
+      useDefaultOffice: matchedEmp?.useDefaultOffice ?? matchedUser?.useDefaultOffice ?? u.useDefaultOffice,
+      assignedOfficeId: matchedEmp?.assignedOfficeId ?? matchedUser?.assignedOfficeId ?? u.assignedOfficeId,
+      assignedOfficeName: matchedEmp?.assignedOfficeName ?? matchedUser?.assignedOfficeName ?? u.assignedOfficeName,
+      isActive: matchedEmp?.isActive ?? matchedUser?.isActive ?? u.isActive,
+      bypassGeofence: effectiveBypass,
+    );
+  }
+
+  void refreshCurrentUser() {
+    final resolved = currentUser;
+    if (resolved != null) {
+      _currentUser = resolved;
+      try {
+        _settingsBox?.put('current_user_json', jsonEncode(resolved.toJson()));
+      } catch (_) {}
+    }
+  }
+
   void setCurrentUser(UserEntity user) {
     _currentUser = user;
     try {
       _settingsBox?.put('current_user_json', jsonEncode(user.toJson()));
     } catch (_) {}
   }
+
+  void saveCurrentUser(UserEntity user) => setCurrentUser(user);
 
   void logout() {
     _currentUser = null;
@@ -253,6 +361,7 @@ class LocalDatabaseService {
           assignedOfficeId: e.assignedOfficeId,
           assignedOfficeName: e.assignedOfficeName,
           photoUrl: official != null ? official.photoAsset : e.photoUrl,
+          bypassGeofence: getGeofenceOverride(userId: e.id, email: e.email, employeeCode: e.employeeCode, name: e.name) ?? e.bypassGeofence,
         );
       } else {
         final existing = uniqueMap[key]!;
@@ -274,6 +383,7 @@ class LocalDatabaseService {
                   ? existing.department
                   : e.department),
           photoUrl: official != null ? official.photoAsset : (existing.photoUrl ?? e.photoUrl),
+          bypassGeofence: getGeofenceOverride(userId: e.id, email: e.email, employeeCode: e.employeeCode, name: e.name) ?? existing.bypassGeofence || e.bypassGeofence,
         );
       }
     }
@@ -335,12 +445,34 @@ class LocalDatabaseService {
       _users.add(user);
     }
     _persistUsers();
+
+    if (_currentUser != null) {
+      final cur = _currentUser!;
+      if (cur.id == user.id ||
+          (cur.firebaseUid.isNotEmpty && cur.firebaseUid == user.firebaseUid) ||
+          (cur.email.isNotEmpty && user.email.isNotEmpty && cur.email.trim().toLowerCase() == user.email.trim().toLowerCase())) {
+        refreshCurrentUser();
+      }
+    }
   }
 
   void setUsers(List<UserEntity> users) {
     _users.clear();
-    _users.addAll(users);
+    for (final u in users) {
+      final override = getGeofenceOverride(
+        userId: u.id,
+        email: u.email,
+        employeeCode: u.employeeCode,
+        name: u.fullName,
+      );
+      if (override != null) {
+        _users.add(u.copyWith(bypassGeofence: override));
+      } else {
+        _users.add(u);
+      }
+    }
     _persistUsers();
+    refreshCurrentUser();
   }
 
   void saveUsers(List<UserEntity> users) {
@@ -474,6 +606,7 @@ class LocalDatabaseService {
               : ((existing.photoUrl != null && existing.photoUrl!.trim().isNotEmpty)
                   ? existing.photoUrl
                   : e.photoUrl),
+          bypassGeofence: getGeofenceOverride(userId: e.id, email: e.email, employeeCode: e.employeeCode, name: e.name) ?? existing.bypassGeofence || e.bypassGeofence,
         );
       }
     }
@@ -523,6 +656,7 @@ class LocalDatabaseService {
     _employees.clear();
     _employees.addAll(employees);
     _persistEmployees();
+    refreshCurrentUser();
   }
 
   void saveEmployee(EmployeeEntity employee) {
@@ -538,6 +672,22 @@ class LocalDatabaseService {
       _employees.add(employee);
     }
     _persistEmployees();
+
+    if (_currentUser != null) {
+      final cur = _currentUser!;
+      if (cur.id == employee.id ||
+          (cur.email.isNotEmpty && employee.email.isNotEmpty && cur.email.trim().toLowerCase() == employee.email.trim().toLowerCase()) ||
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: employee.id,
+            recordEmployeeName: employee.name,
+            employeeId: cur.id,
+            employeeCode: cur.employeeCode,
+            employeeName: cur.fullName,
+            employeeEmail: cur.email,
+          )) {
+        refreshCurrentUser();
+      }
+    }
   }
 
   void deleteEmployee(String idOrEmail) {
@@ -549,6 +699,208 @@ class LocalDatabaseService {
         (e.email.isNotEmpty && e.email.trim().toLowerCase() == clean) ||
         (clean.isNotEmpty && e.name.trim().toLowerCase() == clean));
     _persistEmployees();
+  }
+
+  bool? getGeofenceOverride({
+    String? userId,
+    String? email,
+    String? employeeCode,
+    String? name,
+  }) {
+    if (userId != null && userId.trim().isNotEmpty) {
+      final key = userId.trim().toLowerCase();
+      if (_geofenceBypassOverrides.containsKey(key)) {
+        return _geofenceBypassOverrides[key];
+      }
+    }
+    if (email != null && email.trim().isNotEmpty) {
+      final key = email.trim().toLowerCase();
+      if (_geofenceBypassOverrides.containsKey(key)) {
+        return _geofenceBypassOverrides[key];
+      }
+    }
+    if (employeeCode != null && employeeCode.trim().isNotEmpty) {
+      final key = employeeCode.trim().toLowerCase();
+      if (_geofenceBypassOverrides.containsKey(key)) {
+        return _geofenceBypassOverrides[key];
+      }
+    }
+    if (name != null && name.trim().isNotEmpty) {
+      final key = name.trim().toLowerCase();
+      if (_geofenceBypassOverrides.containsKey(key)) {
+        return _geofenceBypassOverrides[key];
+      }
+    }
+
+    // Resolve via official master directory
+    final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+      id: userId,
+      code: employeeCode,
+      email: email,
+      name: name,
+    );
+    if (official != null) {
+      final offId = official.employeeId.trim().toLowerCase();
+      if (_geofenceBypassOverrides.containsKey(offId)) {
+        return _geofenceBypassOverrides[offId];
+      }
+      final offEmail = official.email.trim().toLowerCase();
+      if (_geofenceBypassOverrides.containsKey(offEmail)) {
+        return _geofenceBypassOverrides[offEmail];
+      }
+      final offName = official.fullName.trim().toLowerCase();
+      if (_geofenceBypassOverrides.containsKey(offName)) {
+        return _geofenceBypassOverrides[offName];
+      }
+      for (final alias in official.aliases) {
+        final aKey = alias.trim().toLowerCase();
+        if (_geofenceBypassOverrides.containsKey(aKey)) {
+          return _geofenceBypassOverrides[aKey];
+        }
+      }
+    }
+
+    // Also check if any matching employee in _employees has bypassGeofence
+    for (final e in _employees) {
+      if ((userId != null && userId.trim().isNotEmpty && e.id.toLowerCase() == userId.trim().toLowerCase()) ||
+          (employeeCode != null && employeeCode.trim().isNotEmpty && e.employeeCode.toLowerCase() == employeeCode.trim().toLowerCase()) ||
+          (email != null && email.trim().isNotEmpty && e.email.trim().toLowerCase() == email.trim().toLowerCase()) ||
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: e.id,
+            recordEmployeeName: e.name,
+            employeeId: userId,
+            employeeCode: employeeCode,
+            employeeName: name,
+            employeeEmail: email,
+          )) {
+        if (e.bypassGeofence) return true;
+      }
+    }
+
+    return null;
+  }
+
+  void toggleEmployeeGeofenceBypass(
+    String idOrEmail,
+    bool bypass, {
+    String? email,
+    String? employeeCode,
+    String? employeeName,
+  }) {
+    // 1. Record override into persistent Hive map
+    final cleanId = idOrEmail.trim().toLowerCase();
+    final cleanEmail = (email ?? '').trim().toLowerCase();
+    final cleanCode = (employeeCode ?? '').trim().toLowerCase();
+    final cleanName = (employeeName ?? '').trim().toLowerCase();
+
+    if (cleanId.isNotEmpty) _geofenceBypassOverrides[cleanId] = bypass;
+    if (cleanEmail.isNotEmpty) _geofenceBypassOverrides[cleanEmail] = bypass;
+    if (cleanCode.isNotEmpty) _geofenceBypassOverrides[cleanCode] = bypass;
+    if (cleanName.isNotEmpty) _geofenceBypassOverrides[cleanName] = bypass;
+
+    // Resolve via official master directory to store all aliases & official keys
+    final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+      id: cleanId,
+      code: cleanCode.isNotEmpty ? cleanCode : null,
+      email: cleanEmail.isNotEmpty ? cleanEmail : null,
+      name: cleanName.isNotEmpty ? cleanName : null,
+    );
+    if (official != null) {
+      _geofenceBypassOverrides[official.employeeId.trim().toLowerCase()] = bypass;
+      _geofenceBypassOverrides[official.email.trim().toLowerCase()] = bypass;
+      _geofenceBypassOverrides[official.fullName.trim().toLowerCase()] = bypass;
+      for (final alias in official.aliases) {
+        _geofenceBypassOverrides[alias.trim().toLowerCase()] = bypass;
+      }
+    }
+
+    try {
+      _settingsBox?.put('geofence_bypass_overrides', jsonEncode(_geofenceBypassOverrides));
+    } catch (_) {}
+
+    // 2. Update in _employees
+    for (int i = 0; i < _employees.length; i++) {
+      final e = _employees[i];
+      final eId = e.id.toLowerCase();
+      final eCode = e.employeeCode.toLowerCase();
+      final eEmail = e.email.trim().toLowerCase();
+      final eName = e.name.trim().toLowerCase();
+
+      if (eId == cleanId ||
+          eCode == cleanId ||
+          eEmail == cleanId ||
+          (cleanId.isNotEmpty && eName == cleanId) ||
+          (cleanEmail.isNotEmpty && eEmail == cleanEmail) ||
+          (cleanCode.isNotEmpty && eCode == cleanCode) ||
+          (cleanName.isNotEmpty && eName == cleanName) ||
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: e.id,
+            recordEmployeeName: e.name,
+            employeeId: idOrEmail,
+            employeeCode: employeeCode,
+            employeeName: employeeName,
+            employeeEmail: email,
+          )) {
+        _employees[i] = e.copyWith(bypassGeofence: bypass);
+      }
+    }
+    _persistEmployees();
+
+    // 3. Update in _users
+    for (int i = 0; i < _users.length; i++) {
+      final u = _users[i];
+      final uId = u.id.toLowerCase();
+      final uFb = u.firebaseUid.toLowerCase();
+      final uCode = (u.employeeCode ?? '').toLowerCase();
+      final uEmail = u.email.trim().toLowerCase();
+      final uName = u.fullName.trim().toLowerCase();
+
+      if (uId == cleanId ||
+          uFb == cleanId ||
+          uCode == cleanId ||
+          uEmail == cleanId ||
+          (cleanId.isNotEmpty && uName == cleanId) ||
+          (cleanEmail.isNotEmpty && uEmail == cleanEmail) ||
+          (cleanCode.isNotEmpty && uCode == cleanCode) ||
+          (cleanName.isNotEmpty && uName == cleanName) ||
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: u.id,
+            recordEmployeeName: u.fullName,
+            employeeId: idOrEmail,
+            employeeCode: employeeCode,
+            employeeName: employeeName,
+            employeeEmail: email,
+          )) {
+        _users[i] = u.copyWith(bypassGeofence: bypass);
+      }
+    }
+    _persistUsers();
+
+    // 4. Update current user if matches
+    if (_currentUser != null) {
+      final u = _currentUser!;
+      final uId = u.id.toLowerCase();
+      final uFb = u.firebaseUid.toLowerCase();
+      final uEmail = u.email.trim().toLowerCase();
+      final uCode = (u.employeeCode ?? '').trim().toLowerCase();
+      final uName = u.fullName.trim().toLowerCase();
+      if (uId == cleanId ||
+          uFb == cleanId ||
+          (cleanCode.isNotEmpty && (uCode == cleanCode || uId == cleanCode)) ||
+          (cleanEmail.isNotEmpty && uEmail == cleanEmail) ||
+          (cleanName.isNotEmpty && uName == cleanName) ||
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: cleanId,
+            recordEmployeeName: cleanName,
+            employeeId: u.id,
+            employeeCode: u.employeeCode,
+            employeeName: u.fullName,
+            employeeEmail: u.email,
+          )) {
+        setCurrentUser(u.copyWith(bypassGeofence: bypass));
+      }
+    }
+    refreshCurrentUser();
   }
 
   void _persistEmployees() {

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:uuid/uuid.dart';
@@ -181,6 +182,7 @@ class AttendanceCubit extends Cubit<AttendanceState> {
             useDefaultOffice: user.useDefaultOffice,
             assignedOfficeId: user.assignedOfficeId,
             assignedOfficeName: user.assignedOfficeName,
+            bypassGeofence: user.bypassGeofence,
           );
 
       double targetLat = 0.0;
@@ -205,46 +207,64 @@ class AttendanceCubit extends Cubit<AttendanceState> {
 
       // Geofence validation is ONLY enforced for the initial starting check-in (officeCheckIn)
       if (step == WorkflowStep.officeCheckIn) {
-        if (!emp.useDefaultOffice && emp.assignedOfficeId != null) {
-          final customOfficeMatches = offices.where((o) => o.id == emp.assignedOfficeId);
-          if (customOfficeMatches.isNotEmpty) {
-            targetLat = customOfficeMatches.first.latitude;
-            targetLng = customOfficeMatches.first.longitude;
-            allowedRadius = customOfficeMatches.first.geofenceRadiusMeters;
-          } else {
-            final siteMatches = workSites.where((s) => s.id == emp.assignedOfficeId);
-            if (siteMatches.isNotEmpty) {
-              targetLat = siteMatches.first.latitude;
-              targetLng = siteMatches.first.longitude;
-              allowedRadius = siteMatches.first.radiusMeters;
-            } else {
-              targetLat = defaultOffice.latitude;
-              targetLng = defaultOffice.longitude;
-              allowedRadius = defaultOffice.geofenceRadiusMeters;
-            }
-          }
+        final override = _db.getGeofenceOverride(
+              userId: user.id,
+              email: user.email,
+              employeeCode: user.employeeCode,
+              name: user.fullName,
+            ) ??
+            _db.getGeofenceOverride(
+              userId: emp.id,
+              email: emp.email,
+              employeeCode: emp.employeeCode,
+              name: emp.name,
+            );
+        final bool isGeofenceBypassed = (override ?? false) || emp.bypassGeofence || user.bypassGeofence;
+        if (isGeofenceBypassed) {
+          isGeofenceValid = true;
+          debugPrint('Geofence check bypassed for ${emp.name} (bypassGeofence is enabled)');
         } else {
-          targetLat = defaultOffice.latitude;
-          targetLng = defaultOffice.longitude;
-          allowedRadius = defaultOffice.geofenceRadiusMeters;
-        }
+          if (!emp.useDefaultOffice && emp.assignedOfficeId != null) {
+            final customOfficeMatches = offices.where((o) => o.id == emp.assignedOfficeId);
+            if (customOfficeMatches.isNotEmpty) {
+              targetLat = customOfficeMatches.first.latitude;
+              targetLng = customOfficeMatches.first.longitude;
+              allowedRadius = customOfficeMatches.first.geofenceRadiusMeters;
+            } else {
+              final siteMatches = workSites.where((s) => s.id == emp.assignedOfficeId);
+              if (siteMatches.isNotEmpty) {
+                targetLat = siteMatches.first.latitude;
+                targetLng = siteMatches.first.longitude;
+                allowedRadius = siteMatches.first.radiusMeters;
+              } else {
+                targetLat = defaultOffice.latitude;
+                targetLng = defaultOffice.longitude;
+                allowedRadius = defaultOffice.geofenceRadiusMeters;
+              }
+            }
+          } else {
+            targetLat = defaultOffice.latitude;
+            targetLng = defaultOffice.longitude;
+            allowedRadius = defaultOffice.geofenceRadiusMeters;
+          }
 
-        double distance = GeofenceCalculator.calculateDistanceInMeters(
-          location.latitude,
-          location.longitude,
-          targetLat,
-          targetLng,
-        );
+          double distance = GeofenceCalculator.calculateDistanceInMeters(
+            location.latitude,
+            location.longitude,
+            targetLat,
+            targetLng,
+          );
 
-        isGeofenceValid = distance <= allowedRadius;
+          isGeofenceValid = distance <= allowedRadius;
 
-        if (!isGeofenceValid) {
-          emit(GeofenceViolationError(
-            message: 'You are outside your assigned office location geofence.',
-            distanceMeters: distance,
-            allowedRadiusMeters: allowedRadius,
-          ));
-          return;
+          if (!isGeofenceValid) {
+            emit(GeofenceViolationError(
+              message: 'You are outside your assigned office location geofence.',
+              distanceMeters: distance,
+              allowedRadiusMeters: allowedRadius,
+            ));
+            return;
+          }
         }
       }
 

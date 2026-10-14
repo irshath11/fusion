@@ -20,6 +20,7 @@ class UserFormDialog extends StatefulWidget {
     required bool useDefaultOffice,
     String? assignedOfficeId,
     String? assignedOfficeName,
+    bool? bypassGeofence,
   }) onSubmit;
 
   const UserFormDialog({
@@ -45,6 +46,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
   bool _useDefaultOffice = true;
   String _selectedOfficeId = 'default_main';
   String _selectedOfficeName = 'Head Office (Main Office)';
+  bool _bypassGeofence = false;
 
   List<Map<String, String>> _availableLocations = [];
   bool _isLoadingDetails = false;
@@ -83,6 +85,16 @@ class _UserFormDialogState extends State<UserFormDialog> {
 
     if (user != null) {
       _selectedRole = user.role;
+      _bypassGeofence = user.bypassGeofence;
+      final geofenceOverride = LocalDatabaseService().getGeofenceOverride(
+        userId: user.id,
+        email: user.email,
+        employeeCode: user.employeeCode,
+        name: user.fullName,
+      );
+      if (geofenceOverride != null) {
+        _bypassGeofence = geofenceOverride;
+      }
       _codeController.text =
           _resolveCleanCode(user.employeeCode, user.fullName, user.id);
       if (user.designation != null && user.designation!.isNotEmpty) {
@@ -99,6 +111,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
               e.email.trim().toLowerCase() == user.email.trim().toLowerCase()));
       if (empMatches.isNotEmpty) {
         final emp = empMatches.first;
+        _bypassGeofence = geofenceOverride ?? (emp.bypassGeofence || user.bypassGeofence);
         if (emp.employeeCode.isNotEmpty &&
             !_isHexFallback(emp.employeeCode, emp.id)) {
           _codeController.text = emp.employeeCode;
@@ -203,10 +216,14 @@ class _UserFormDialogState extends State<UserFormDialog> {
           _selectedOfficeName =
               remoteEmp.assignedOfficeName ?? 'Custom Location';
         }
+        _bypassGeofence = remoteEmp.bypassGeofence;
       }
 
       if (remoteUser != null) {
         _selectedRole = remoteUser.role;
+        if (remoteUser.bypassGeofence) {
+          _bypassGeofence = true;
+        }
         if (_nameController.text.isEmpty && remoteUser.fullName.isNotEmpty) {
           _nameController.text = remoteUser.fullName;
         }
@@ -422,6 +439,76 @@ class _UserFormDialogState extends State<UserFormDialog> {
               label: 'Designation / Title',
               prefixIcon: Icons.work_outline,
             ),
+            const SizedBox(height: 14),
+
+            // Geofence Bypass Control
+            Container(
+              decoration: BoxDecoration(
+                color: _bypassGeofence
+                    ? AppColors.success.withValues(alpha: 0.08)
+                    : Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: _bypassGeofence
+                      ? AppColors.success.withValues(alpha: 0.4)
+                      : Colors.grey.withValues(alpha: 0.25),
+                ),
+              ),
+              child: SwitchListTile(
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                secondary: Icon(
+                  _bypassGeofence
+                      ? Icons.public_rounded
+                      : Icons.fmd_good_outlined,
+                  color:
+                      _bypassGeofence ? AppColors.success : AppColors.primary,
+                ),
+                title: Row(
+                  children: [
+                    const Text(
+                      'Geofence Check-In Control',
+                      style:
+                          TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: (_bypassGeofence
+                                ? Colors.purple
+                                : AppColors.primary)
+                            .withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        _bypassGeofence
+                            ? 'Disabled (Anywhere)'
+                            : 'Enabled (Enforced)',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: _bypassGeofence
+                              ? Colors.purple
+                              : AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                subtitle: Text(
+                  _bypassGeofence
+                      ? 'Geofence Disabled: Employee can check in from ANY location without distance restrictions.'
+                      : 'Geofence Enabled: Employee must be within designated office boundaries.',
+                  style: const TextStyle(fontSize: 11),
+                ),
+                value: _bypassGeofence,
+                activeThumbColor: Colors.purple,
+                onChanged: (val) => setState(() => _bypassGeofence = val),
+              ),
+            ),
+
             if (!isEditing) ...[
               const SizedBox(height: 12),
               CustomTextField(
@@ -464,6 +551,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
               assignedOfficeId: _useDefaultOffice ? null : _selectedOfficeId,
               assignedOfficeName:
                   _useDefaultOffice ? null : _selectedOfficeName,
+              bypassGeofence: _bypassGeofence,
             );
             Navigator.of(context).pop();
           },
