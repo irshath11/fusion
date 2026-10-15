@@ -382,6 +382,9 @@
 
     if (cleanTabId === 'map') {
       setTimeout(initMap, 200);
+    } else if (cleanTabId === 'cards') {
+      renderCardsTable();
+      updateCardsOverviewMetrics();
     }
   }
   window.switchTab = switchTab;
@@ -433,7 +436,8 @@
       }
       attendanceData = allAttendance;
 
-      // 5. Fetch Employee Cards & Passes
+      // 5. Fetch Employee Cards & Passes (safely merged with local storage)
+      loadLocalOrInitialCards();
       try {
         const { data: cards, error: cardsErr } = await supabaseClient
           .from('employee_cards')
@@ -442,13 +446,21 @@
           .order('expiry_date', { ascending: true });
 
         if (!cardsErr && cards && cards.length > 0) {
-          cardsData = cards;
-        } else {
-          loadLocalOrInitialCards();
+          const merged = {};
+          cardsData.forEach(c => { merged[c.id] = c; });
+          cards.forEach(c => {
+            if (merged[c.id]) {
+              const local = merged[c.id];
+              merged[c.id] = (!c.document_url && local.document_url) ? { ...c, document_url: local.document_url, file_name: local.file_name } : c;
+            } else {
+              merged[c.id] = c;
+            }
+          });
+          cardsData = Object.values(merged);
+          saveCardsData();
         }
       } catch (errCards) {
         console.warn('Could not query employee_cards from cloud, using local store:', errCards);
-        loadLocalOrInitialCards();
       }
 
       // Update Views
@@ -1058,7 +1070,20 @@
     try {
       localStorage.setItem('f360_employee_cards', JSON.stringify(cardsData));
     } catch (e) {
-      console.warn('Failed to save cards to localStorage:', e);
+      console.warn('Failed to save full cards with attachments to localStorage, attempting fallback without bulky docs:', e);
+      try {
+        // Fallback: strip heavy document_url so all card attributes, IDs, numbers, and expiry dates are saved
+        const lightCards = cardsData.map(c => {
+          if (c.document_url && c.document_url.startsWith('data:') && c.document_url.length > 50000) {
+            const { document_url, ...rest } = c;
+            return rest;
+          }
+          return c;
+        });
+        localStorage.setItem('f360_employee_cards', JSON.stringify(lightCards));
+      } catch (innerErr) {
+        console.error('Critical: localStorage quota fully exhausted for cards:', innerErr);
+      }
     }
   }
 
@@ -1379,12 +1404,19 @@
       const typeBadge = getCardTypeBadge(card.card_type, card.card_name);
 
       const hasDoc = !!card.document_url;
-      const docBtn = hasDoc ? `
-        <button class="doc-thumbnail-btn" onclick="openCardViewer('${card.id}')" title="Preview Attached Document">
-          <span>📄</span>
-          <span>View Scan</span>
-        </button>
-      ` : `<span style="color: var(--text-tertiary); font-size: 11px;">No scan</span>`;
+      const docBtn = `
+        <div style="display: flex; gap: 4px; align-items: center;">
+          ${hasDoc ? `
+            <button class="doc-thumbnail-btn" onclick="openCardViewer('${card.id}')" title="Preview Attached Document">
+              <span>📄</span>
+              <span>View</span>
+            </button>
+          ` : `<span style="color: var(--text-tertiary); font-size: 11px;">No scan</span>`}
+          <button class="btn-action" onclick="downloadCardFile('${card.id}')" title="Download Card Document / Pass" style="padding: 4px 6px; font-size: 12px;">
+            ⬇️
+          </button>
+        </div>
+      `;
 
       return `
         <tr>
@@ -1919,8 +1951,56 @@ OUTPUT RULES
     }
   }
 
-  function handleCardFileSelection(file) {
-    if (!file) return;
+  // Client-side image compression to optimize Supabase DB and Storage footprint
+  async function compressImageFile(file, maxWidth = 1280, quality = 0.78) {
+    if (!file || !file.type || !file.type.startsWith('image/')) {
+      return file;
+    }
+    return new Promise((resolve) => {
+      const img = new Image();
+      const objUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objUrl);
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth || height > maxWidth) {
+          if (width > height) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxWidth) / height);
+            height = maxWidth;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            resolve(file);
+            return;
+          }
+          const compressed = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+            type: 'image/jpeg',
+            lastModified: Date.now()
+          });
+          console.log(`Card image compressed: ${(file.size / 1024).toFixed(1)} KB -> ${(compressed.size / 1024).toFixed(1)} KB`);
+          resolve(compressed);
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objUrl);
+        resolve(file);
+      };
+      img.src = objUrl;
+    });
+  }
+
+  async function handleCardFileSelection(rawFile) {
+    if (!rawFile) return;
+    const file = await compressImageFile(rawFile);
     cardPendingFile = file;
 
     if (cardFileName) cardFileName.textContent = file.name;
@@ -2158,8 +2238,11 @@ OUTPUT RULES
     }
 
     if (downloadBtn) {
-      downloadBtn.href = card.document_url || '#';
-      downloadBtn.download = card.file_name || `${emp.name}_${card.card_name}.jpg`;
+      downloadBtn.href = '#';
+      downloadBtn.onclick = (e) => {
+        e.preventDefault();
+        downloadCardFile(card.id);
+      };
     }
 
     if (waBtn) {
@@ -2177,6 +2260,58 @@ OUTPUT RULES
     if (cardViewerModal) cardViewerModal.classList.remove('active');
     if (cardViewerBackdrop) cardViewerBackdrop.classList.remove('active');
   }
+
+  // Download specific card file or generated summary pass
+  window.downloadCardFile = function(cardId) {
+    const card = cardsData.find(c => c.id === cardId);
+    if (!card) return;
+    const emp = employeesData.find(e => e.id === card.employee_id) || { name: 'Staff' };
+    const defaultName = `${(emp.name || 'Staff').replace(/\s+/g, '_')}_${(card.card_name || 'Card').replace(/\s+/g, '_')}`;
+
+    if (card.document_url && card.document_url.startsWith('data:')) {
+      const isPdf = card.document_url.startsWith('data:application/pdf') || (card.file_name || '').toLowerCase().endsWith('.pdf');
+      const ext = isPdf ? '.pdf' : '.jpg';
+      const fileName = card.file_name || `${defaultName}${ext}`;
+
+      const a = document.createElement('a');
+      a.href = card.document_url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showToast(`Downloading ${fileName}`, 'success');
+    } else if (card.document_url && card.document_url.startsWith('http')) {
+      window.open(card.document_url, '_blank');
+      showToast('Opening document file...', 'info');
+    } else {
+      // Generate official text summary pass download
+      const content = 
+`=============================================================
+         FUSION 360 WORKFORCE - CARD & PASS RECORD
+=============================================================
+Employee Name  : ${emp.name}
+Employee Code  : ${emp.employeeCode || 'N/A'}
+Department     : ${emp.department || 'N/A'}
+Card / Pass    : ${card.card_name} (${card.card_type})
+Card Number    : ${card.card_number}
+Issue Date     : ${card.issue_date || 'N/A'}
+Expiry Date    : ${card.expiry_date || 'N/A'}
+Compliance     : ${calculateExpiryStatus(card.expiry_date).label}
+Notes          : ${card.notes || 'None'}
+Generated Date : ${new Date().toLocaleString()}
+=============================================================`;
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${defaultName}_Pass_Record.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`Downloaded pass record for ${emp.name}`, 'success');
+    }
+  };
 
   // 1-Click WhatsApp Notification Trigger
   window.notifyCardWhatsApp = function(cardId) {

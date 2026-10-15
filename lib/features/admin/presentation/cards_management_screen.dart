@@ -6,11 +6,17 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:uuid/uuid.dart';
+import 'package:printing/printing.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:image/image.dart' as img;
 import '../domain/employee_card.dart';
 import '../domain/employee_entity.dart';
 import '../../../database/local_database_service.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/card_ocr_service.dart';
+import '../../../core/services/supabase_service.dart';
 import '../../attendance/presentation/camera_capture_modal.dart';
 import '../../../core/widgets/app_bounceable.dart';
 import '../../../core/widgets/app_glass_card.dart';
@@ -119,7 +125,13 @@ class _CardsManagementScreenState extends State<CardsManagementScreen>
     // 1. Fetch Employees
     _employees = _db.getEmployees();
 
-    // 2. Fetch Cards from Supabase (or load local saved cards)
+    // 2. Load Local Saved Cards First (ensures offline and restart persistence)
+    final savedCardsJson = await _db.loadSavedEmployeeCardsAsync();
+    if (savedCardsJson.isNotEmpty) {
+      _cards = savedCardsJson.map((json) => EmployeeCard.fromJson(json)).toList();
+    }
+
+    // 3. Fetch Cards from Supabase and merge safely with local cards
     try {
       final supabase = Supabase.instance.client;
       final response = await supabase
@@ -128,16 +140,34 @@ class _CardsManagementScreenState extends State<CardsManagementScreen>
           .eq('is_deleted', false)
           .order('expiry_date', ascending: true);
 
-      if ((response as List).isNotEmpty) {
-        _cards = (response as List)
+      if (response.isNotEmpty) {
+        final cloudCards = response
             .map((item) => EmployeeCard.fromJson(Map<String, dynamic>.from(item)))
             .toList();
-        _persistCardsLocally();
-      } else {
-        _loadLocalSavedCards();
+
+        // Merge keeping both local and cloud records (never wipe local cards)
+        final Map<String, EmployeeCard> mergedMap = {};
+        for (final c in _cards) {
+          mergedMap[c.id] = c;
+        }
+        for (final c in cloudCards) {
+          if (mergedMap.containsKey(c.id)) {
+            final local = mergedMap[c.id]!;
+            final hasLocalDoc = local.documentUrl != null && local.documentUrl!.isNotEmpty;
+            final hasCloudDoc = c.documentUrl != null && c.documentUrl!.isNotEmpty;
+            mergedMap[c.id] = (!hasCloudDoc && hasLocalDoc)
+                ? c.copyWith(documentUrl: local.documentUrl, fileName: local.fileName)
+                : c;
+          } else {
+            mergedMap[c.id] = c;
+          }
+        }
+        _cards = mergedMap.values.toList();
+        _cards.sort((a, b) => a.expiryDate.compareTo(b.expiryDate));
+        await _persistCardsLocally();
       }
     } catch (e) {
-      _loadLocalSavedCards();
+      debugPrint('Cloud cards query failed, relying on local cards: $e');
     }
 
     if (mounted) {
@@ -145,19 +175,11 @@ class _CardsManagementScreenState extends State<CardsManagementScreen>
     }
   }
 
-  void _loadLocalSavedCards() {
-    final saved = _db.getSavedEmployeeCards();
-    if (saved.isNotEmpty) {
-      _cards = saved.map((json) => EmployeeCard.fromJson(json)).toList();
-    } else {
-      // Clean start: No sample/demo cards as requested by the user
-      _cards = [];
-    }
-  }
 
-  void _persistCardsLocally() {
+
+  Future<void> _persistCardsLocally() async {
     final jsonList = _cards.map((c) => c.toJson()).toList();
-    _db.persistEmployeeCards(jsonList);
+    await _db.persistEmployeeCards(jsonList);
   }
 
   EmployeeEntity? _getEmployee(String empId) {
@@ -445,6 +467,20 @@ Fusion 360 Compliance & Operations Desk''';
           ),
         ),
         actions: [
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryLight,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(Icons.download_rounded, size: 16),
+            label: const Text('Download Document'),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _downloadCardDocument(card);
+            },
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Close'),
@@ -452,6 +488,258 @@ Fusion 360 Compliance & Operations Desk''';
         ],
       ),
     );
+  }
+
+  // --------------------------------------------------------------------------
+  // DOWNLOAD & EXPORT CONTROLLER (PDF / ORIGINAL ATTACHMENTS)
+  // --------------------------------------------------------------------------
+
+  Future<void> _downloadCardDocument(EmployeeCard card) async {
+    final docUrl = card.documentUrl;
+    final emp = _getEmployee(card.employeeId);
+    final empName = emp?.name ?? 'Employee';
+    final safeEmpName = empName.replaceAll(RegExp(r'[^\w\s]+'), '_').trim();
+    final fileName = card.fileName ?? '${safeEmpName}_${card.cardName}.pdf';
+
+    try {
+      if (docUrl != null && docUrl.isNotEmpty) {
+        if (docUrl.startsWith('data:')) {
+          final commaIdx = docUrl.indexOf(',');
+          final base64Str = commaIdx != -1 ? docUrl.substring(commaIdx + 1) : docUrl;
+          final bytes = base64Decode(base64Str);
+          await Printing.sharePdf(bytes: bytes, filename: fileName);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('⬇️ Downloading document: $fileName')),
+            );
+          }
+          return;
+        } else if (docUrl.startsWith('http://') || docUrl.startsWith('https://')) {
+          final uri = Uri.parse(docUrl);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+            return;
+          }
+        }
+      }
+
+      // If no raw file is attached, generate a branded official card certificate / pass
+      final pdfBytes = await _generateCardPassPdf(card, emp);
+      await Printing.sharePdf(
+        bytes: pdfBytes,
+        filename: '${safeEmpName}_${card.cardType}_Official_Pass.pdf',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('⬇️ Downloading official pass for $empName...')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error downloading card document: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not download document: $e')),
+        );
+      }
+    }
+  }
+
+  Future<Uint8List> _generateCardPassPdf(EmployeeCard card, EmployeeEntity? emp) async {
+    final pdf = pw.Document();
+    final empName = emp?.name ?? 'Employee';
+    final empCode = emp?.employeeCode ?? 'N/A';
+    final dept = emp?.department ?? 'General';
+    final desig = emp?.designation ?? 'Staff';
+    final issueStr = card.issueDate != null ? _dateFormat.format(card.issueDate!) : 'N/A';
+    final expiryStr = _dateFormat.format(card.expiryDate);
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a5,
+        margin: const pw.EdgeInsets.all(24),
+        build: (pw.Context context) {
+          return pw.Container(
+            padding: const pw.EdgeInsets.all(20),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.blueGrey700, width: 2),
+              borderRadius: pw.BorderRadius.circular(12),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'FUSION 360 WORKFORCE RECORD',
+                          style: pw.TextStyle(
+                            fontSize: 14,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.blue900,
+                          ),
+                        ),
+                        pw.Text(
+                          'Official Document & Card Control Record',
+                          style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                        ),
+                      ],
+                    ),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: pw.BoxDecoration(
+                        color: card.isExpired ? PdfColors.red100 : (card.isCritical ? PdfColors.amber100 : PdfColors.teal100),
+                        borderRadius: pw.BorderRadius.circular(6),
+                      ),
+                      child: pw.Text(
+                        card.statusLabel.toUpperCase(),
+                        style: pw.TextStyle(
+                          fontSize: 9,
+                          fontWeight: pw.FontWeight.bold,
+                          color: card.isExpired ? PdfColors.red900 : (card.isCritical ? PdfColors.amber900 : PdfColors.teal900),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                pw.Divider(thickness: 1.5, color: PdfColors.blueGrey300),
+                pw.SizedBox(height: 12),
+                pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Expanded(
+                      flex: 2,
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('DOCUMENT TYPE', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                          pw.Text(card.cardName, style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+                          pw.SizedBox(height: 10),
+                          pw.Text('CARD / DOCUMENT NUMBER', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                          pw.Text(card.cardNumber, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900)),
+                          pw.SizedBox(height: 10),
+                          pw.Row(
+                            children: [
+                              pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                children: [
+                                  pw.Text('ISSUE DATE', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                                  pw.Text(issueStr, style: const pw.TextStyle(fontSize: 10)),
+                                ],
+                              ),
+                              pw.SizedBox(width: 24),
+                              pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                children: [
+                                  pw.Text('EXPIRY DATE', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                                  pw.Text(expiryStr, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: card.isExpired ? PdfColors.red : PdfColors.black)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    pw.Expanded(
+                      flex: 2,
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('HOLDER / EMPLOYEE', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                          pw.Text(empName, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                          pw.Text('Employee Code: $empCode', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                          pw.Text('Designation: $desig', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                          pw.Text('Department: $dept', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                if (card.notes != null && card.notes!.isNotEmpty) ...[
+                  pw.SizedBox(height: 12),
+                  pw.Text('NOTES / RENEWAL STATUS', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                  pw.Text(card.notes!, style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey800)),
+                ],
+                pw.Spacer(),
+                pw.Divider(thickness: 1, color: PdfColors.grey300),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Generated by Fusion 360 Workforce System', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+                    pw.Text('Date: ${_dateFormat.format(DateTime.now())}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+
+    return pdf.save();
+  }
+
+  Future<void> _downloadAllCardsReport(List<EmployeeCard> cardsList, String title) async {
+    if (cardsList.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No cards available to download.')),
+      );
+      return;
+    }
+
+    try {
+      final pdf = pw.Document();
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4.landscape,
+          margin: const pw.EdgeInsets.all(24),
+          build: (pw.Context context) {
+            return [
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('FUSION 360 — $title REPORT', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                  pw.Text('Total: ${cardsList.length} cards • Generated: ${_dateFormat.format(DateTime.now())}', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                ],
+              ),
+              pw.SizedBox(height: 12),
+              pw.TableHelper.fromTextArray(
+                headers: ['Employee', 'Code', 'Document Type', 'Document #', 'Issue Date', 'Expiry Date', 'Status'],
+                data: cardsList.map((c) {
+                  final emp = _getEmployee(c.employeeId);
+                  return [
+                    emp?.name ?? 'Unknown',
+                    emp?.employeeCode ?? 'N/A',
+                    c.cardName,
+                    c.cardNumber,
+                    c.issueDate != null ? _dateFormat.format(c.issueDate!) : 'N/A',
+                    _dateFormat.format(c.expiryDate),
+                    c.statusLabel,
+                  ];
+                }).toList(),
+                headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
+                cellStyle: const pw.TextStyle(fontSize: 8),
+                cellHeight: 22,
+              ),
+            ];
+          },
+        ),
+      );
+
+      final bytes = await pdf.save();
+      final safeTitle = title.replaceAll(RegExp(r'[^\w\s]+'), '_').trim();
+      await Printing.sharePdf(bytes: bytes, filename: '${safeTitle}_Cards_Report.pdf');
+    } catch (e) {
+      debugPrint('Error generating cards report PDF: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not export cards report: $e')),
+        );
+      }
+    }
   }
 
   // Gemini AI Vision API Key Setup Dialog
@@ -654,21 +942,42 @@ Fusion 360 Compliance & Operations Desk''';
                 }
               }
 
+              Uint8List? compressedBytes = rawBytes;
+              final isPdf = file.name.toLowerCase().endsWith('.pdf');
+              if (rawBytes != null && !isPdf) {
+                try {
+                  final decoded = img.decodeImage(rawBytes);
+                  if (decoded != null) {
+                    img.Image resized = decoded;
+                    if (decoded.width > 1280 || decoded.height > 1280) {
+                      if (decoded.width > decoded.height) {
+                        resized = img.copyResize(decoded, width: 1280);
+                      } else {
+                        resized = img.copyResize(decoded, height: 1280);
+                      }
+                    }
+                    compressedBytes = Uint8List.fromList(img.encodeJpg(resized, quality: 78));
+                    debugPrint('Card compressed: ${rawBytes.length} -> ${compressedBytes.length} bytes (${((1 - compressedBytes.length / rawBytes.length) * 100).toStringAsFixed(1)}% reduction)');
+                  }
+                } catch (e) {
+                  debugPrint('Card image compression fallback: $e');
+                }
+              }
+
               setDialogState(() {
                 isScanning = true;
                 uploadedFileName = file.name;
-                uploadedFileBytes = rawBytes;
-                uploadedFileSize = file.size;
-                if (rawBytes != null) {
-                  final ext = file.name.split('.').last.toLowerCase();
-                  final mime = (ext == 'pdf') ? 'application/pdf' : 'image/$ext';
-                  uploadedFileUrl = 'data:$mime;base64,${base64Encode(rawBytes)}';
+                uploadedFileBytes = compressedBytes;
+                uploadedFileSize = compressedBytes?.length ?? file.size;
+                if (compressedBytes != null) {
+                  final mime = isPdf ? 'application/pdf' : 'image/jpeg';
+                  uploadedFileUrl = 'data:$mime;base64,${base64Encode(compressedBytes)}';
                 }
               });
 
               final ocrRes = await CardOcrService.extractFromFile(
                 fileName: file.name,
-                fileBytes: rawBytes,
+                fileBytes: compressedBytes,
                 filePath: file.path,
                 preferredCardType: selectedType,
                 employee: selectedEmp,
@@ -1115,6 +1424,15 @@ Fusion 360 Compliance & Operations Desk''';
                                       builder: (c) => CameraCaptureModal(
                                         stepName: 'Card Document Capture',
                                         onPhotoCaptured: (camRes) {
+                                          try {
+                                            final cleanBytes = base64Decode(camRes.base64Image);
+                                            setDialogState(() {
+                                              uploadedFileName = 'camera_card_${DateTime.now().millisecondsSinceEpoch}.jpg';
+                                              uploadedFileBytes = cleanBytes;
+                                              uploadedFileSize = cleanBytes.length;
+                                              uploadedFileUrl = 'data:image/jpeg;base64,${camRes.base64Image}';
+                                            });
+                                          } catch (_) {}
                                           runOcrScan(rawOcrText: camRes.base64Image);
                                         },
                                       ),
@@ -1384,8 +1702,36 @@ Fusion 360 Compliance & Operations Desk''';
                     return;
                   }
 
+                  final cardId = isEditing
+                      ? cardToEdit.id
+                      : ((cardToEdit?.id.isNotEmpty == true) ? cardToEdit!.id : const Uuid().v4());
+
+                  String? finalDocUrl = uploadedFileUrl ?? cardToEdit?.documentUrl;
+
+                  // Ultra-optimized cloud storage: upload binary file to Supabase Storage 'employee_documents' bucket
+                  // This keeps PostgreSQL database row < 1 KB by storing an ~85-byte CDN URL instead of megabytes!
+                  if (uploadedFileBytes != null && (uploadedFileName != null || cardToEdit?.fileName != null)) {
+                    final targetFileName = uploadedFileName ?? cardToEdit?.fileName ?? 'card.jpg';
+                    final isPdf = targetFileName.toLowerCase().endsWith('.pdf');
+                    try {
+                      final cdnUrl = await SupabaseService().uploadEmployeeCardDocument(
+                        employeeId: selectedEmpId,
+                        cardId: cardId,
+                        bytes: uploadedFileBytes!,
+                        fileName: targetFileName,
+                        mimeType: isPdf ? 'application/pdf' : 'image/jpeg',
+                      );
+                      if (cdnUrl != null && cdnUrl.isNotEmpty) {
+                        finalDocUrl = cdnUrl;
+                        debugPrint('Stored card in Supabase Storage: $cdnUrl');
+                      }
+                    } catch (storageErr) {
+                      debugPrint('Storage upload note (fallback to compressed data): $storageErr');
+                    }
+                  }
+
                   final newCard = EmployeeCard(
-                    id: isEditing ? cardToEdit.id : 'card_${DateTime.now().millisecondsSinceEpoch}',
+                    id: cardId,
                     organizationId: _db.currentUser?.organizationId ?? '00000000-0000-0000-0000-000000000001',
                     employeeId: selectedEmpId,
                     cardType: selectedType,
@@ -1394,26 +1740,32 @@ Fusion 360 Compliance & Operations Desk''';
                     issueDate: selectedIssue,
                     expiryDate: selectedExpiry,
                     notes: notesController.text.trim(),
-                    documentUrl: uploadedFileUrl ?? cardToEdit?.documentUrl,
+                    documentUrl: finalDocUrl,
                     fileName: uploadedFileName ?? cardToEdit?.fileName,
                   );
 
-                  // 1. Save to Supabase (if online)
-                  try {
-                    final supabase = Supabase.instance.client;
-                    await supabase.from('employee_cards').upsert(newCard.toJson());
-                  } catch (_) {}
-
-                  // 2. Update local state & Hive
+                  // 1. Immediately commit to local state & Hive storage
                   setState(() {
                     if (isEditing) {
                       final idx = _cards.indexWhere((c) => c.id == cardToEdit.id);
-                      if (idx != -1) _cards[idx] = newCard;
+                      if (idx != -1) {
+                        _cards[idx] = newCard;
+                      } else {
+                        _cards.insert(0, newCard);
+                      }
                     } else {
                       _cards.insert(0, newCard);
                     }
-                    _persistCardsLocally();
                   });
+                  await _persistCardsLocally();
+
+                  // 2. Sync to Supabase cloud table (non-blocking)
+                  try {
+                    final supabase = Supabase.instance.client;
+                    await supabase.from('employee_cards').upsert(newCard.toJson());
+                  } catch (dbErr) {
+                    debugPrint('Supabase employee_cards sync note (saved locally): $dbErr');
+                  }
 
                   // Switch tab to the uploaded card's category if needed
                   final targetTabIndex = _tabsConfig.indexWhere((t) => t['id'] == selectedType);
@@ -1486,8 +1838,8 @@ Fusion 360 Compliance & Operations Desk''';
 
       setState(() {
         _cards.removeWhere((c) => c.id == card.id);
-        _persistCardsLocally();
       });
+      await _persistCardsLocally();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1763,6 +2115,19 @@ Fusion 360 Compliance & Operations Desk''';
                     if (val != null) setState(() => _selectedStatusFilter = val);
                   },
                 ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                    foregroundColor: AppColors.primaryLight,
+                    side: const BorderSide(color: AppColors.primaryLight, width: 1.2),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  ),
+                  icon: const Icon(Icons.download_rounded, size: 16),
+                  label: const Text('Download All', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  onPressed: () => _downloadAllCardsReport(filtered, tabFullName),
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -1961,7 +2326,7 @@ Fusion 360 Compliance & Operations Desk''';
                                         ),
                                         const SizedBox(width: 4),
                                         Text(
-                                          'View Doc',
+                                          'View',
                                           style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
@@ -1972,17 +2337,52 @@ Fusion 360 Compliance & Operations Desk''';
                                     ),
                                   ),
                                 ),
+                                const SizedBox(width: 6),
                               ],
+                              InkWell(
+                                onTap: () => _downloadCardDocument(card),
+                                borderRadius: BorderRadius.circular(4),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.download_rounded,
+                                        size: 13,
+                                        color: isDark ? Colors.amberAccent : Colors.amber.shade900,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Download',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: isDark ? Colors.amberAccent : Colors.amber.shade900,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),
                       ],
                       const SizedBox(height: 10),
 
-                      // Actions: WhatsApp, Email, View Doc, Edit, Delete
+                      // Actions: Download, WhatsApp, Email, View Doc, Edit, Delete
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
+                          // Download Action Button
+                          IconButton(
+                            icon: const Icon(Icons.download_rounded, size: 18, color: AppColors.primaryLight),
+                            tooltip: 'Download Document / Card Pass',
+                            onPressed: () => _downloadCardDocument(card),
+                          ),
+                          const SizedBox(width: 4),
+
                           // Document Preview Action Button
                           if (card.documentUrl != null && card.documentUrl!.isNotEmpty) ...[
                             IconButton(

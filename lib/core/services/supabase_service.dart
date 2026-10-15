@@ -1359,6 +1359,40 @@ class SupabaseService {
     }
   }
 
+  /// Uploads and compresses employee identity card/pass documents to Supabase Storage
+  /// Stores file in 'employee_documents' bucket and returns CDN public URL, keeping PostgreSQL row size < 1 KB.
+  Future<String?> uploadEmployeeCardDocument({
+    required String employeeId,
+    required String cardId,
+    required Uint8List bytes,
+    required String fileName,
+    String? mimeType,
+  }) async {
+    if (!_isInitialized || client == null) return null;
+    try {
+      final ext = fileName.split('.').last.toLowerCase();
+      final effectiveMime = mimeType ?? (ext == 'pdf' ? 'application/pdf' : 'image/jpeg');
+      final safeCardId = cardId.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '');
+      final storagePath = 'cards/$employeeId/${safeCardId}_${DateTime.now().millisecondsSinceEpoch}.$ext';
+
+      await client!.storage.from('employee_documents').uploadBinary(
+            storagePath,
+            bytes,
+            fileOptions: FileOptions(
+              contentType: effectiveMime,
+              cacheControl: '86400',
+              upsert: true,
+            ),
+          );
+
+      final publicUrl = client!.storage.from('employee_documents').getPublicUrl(storagePath);
+      return publicUrl;
+    } catch (e) {
+      debugPrint('Supabase Storage employee_documents upload error: $e');
+      return null;
+    }
+  }
+
   /// Helper to guarantee that a valid employee record exists in public.employees in Supabase
   Future<String?> ensureEmployeeExistsInCloud(
       String employeeIdOrUid, String employeeName) async {

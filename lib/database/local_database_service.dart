@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../core/constants/app_enums.dart';
 import '../core/services/supabase_service.dart';
@@ -1437,7 +1438,7 @@ class LocalDatabaseService {
     }
   }
 
-  // Employee Cards Persistence (Hive offline-fallback)
+  // Employee Cards Persistence (Dual-layer: Hive + SharedPreferences for 100% fail-safe restart)
   List<Map<String, dynamic>> getSavedEmployeeCards() {
     try {
       final str = _settingsBox?.get('employee_cards_json');
@@ -1449,12 +1450,33 @@ class LocalDatabaseService {
     return [];
   }
 
-  void persistEmployeeCards(List<Map<String, dynamic>> cardsJson) {
+  Future<void> persistEmployeeCards(List<Map<String, dynamic>> cardsJson) async {
+    final encoded = jsonEncode(cardsJson);
     try {
-      _settingsBox?.put('employee_cards_json', jsonEncode(cardsJson));
+      await _settingsBox?.put('employee_cards_json', encoded);
     } catch (e) {
       debugPrint('Error saving employee cards to Hive: $e');
     }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('employee_cards_json', encoded);
+    } catch (e) {
+      debugPrint('Error saving employee cards to SharedPreferences: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> loadSavedEmployeeCardsAsync() async {
+    final fromHive = getSavedEmployeeCards();
+    if (fromHive.isNotEmpty) return fromHive;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final str = prefs.getString('employee_cards_json');
+      if (str != null && str.isNotEmpty) {
+        final List<dynamic> decoded = jsonDecode(str);
+        return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+    } catch (_) {}
+    return [];
   }
 
   // Theme Persistence
