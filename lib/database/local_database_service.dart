@@ -1482,4 +1482,21 @@ class LocalDatabaseService {
       debugPrint('Error saving theme mode to Hive: $e');
     }
   }
+
+  // Gemini AI Vision API Key
+  String? getGeminiApiKey() {
+    return _settingsBox?.get('gemini_api_key') as String?;
+  }
+
+  Future<void> saveGeminiApiKey(String? key) async {
+    try {
+      if (key == null || key.trim().isEmpty) {
+        await _settingsBox?.delete('gemini_api_key');
+      } else {
+        await _settingsBox?.put('gemini_api_key', key.trim());
+      }
+    } catch (e) {
+      debugPrint('Error saving Gemini API key to Hive: $e');
+    }
+  }
 }

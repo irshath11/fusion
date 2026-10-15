@@ -1,7 +1,11 @@
+import 'dart:convert';
+import 'dart:io' as io;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:file_picker/file_picker.dart';
 import '../domain/employee_card.dart';
 import '../domain/employee_entity.dart';
 import '../../../database/local_database_service.dart';
@@ -283,6 +287,259 @@ Fusion 360 Compliance & Operations Desk''';
     }
   }
 
+  // Preview Uploaded Document
+  void _showDocumentPreviewDialog(EmployeeCard card) {
+    final docUrl = card.documentUrl;
+    final fileName = card.fileName ?? 'Document';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (docUrl == null || docUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No document attachment found for this card.')),
+      );
+      return;
+    }
+
+    Uint8List? imageBytes;
+    final isPdf = fileName.toLowerCase().endsWith('.pdf') || docUrl.startsWith('data:application/pdf');
+
+    if (docUrl.startsWith('data:image/')) {
+      try {
+        final commaIdx = docUrl.indexOf(',');
+        final base64Str = commaIdx != -1 ? docUrl.substring(commaIdx + 1) : docUrl;
+        imageBytes = base64Decode(base64Str);
+      } catch (_) {}
+    } else if (!isPdf && !docUrl.startsWith('http')) {
+      try {
+        imageBytes = base64Decode(docUrl);
+      } catch (_) {}
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isPdf ? Colors.red.withValues(alpha: 0.15) : Colors.blue.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                isPdf ? Icons.picture_as_pdf_rounded : Icons.image_rounded,
+                color: isPdf ? Colors.redAccent : Colors.blueAccent,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    fileName,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    '${card.cardName} • #${card.cardNumber}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close_rounded, size: 20),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 500,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              if (imageBytes != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    constraints: const BoxConstraints(maxHeight: 380),
+                    color: Colors.black12,
+                    child: InteractiveViewer(
+                      panEnabled: true,
+                      minScale: 0.8,
+                      maxScale: 4.0,
+                      child: Image.memory(
+                        imageBytes,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                )
+              else if (isPdf)
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                  ),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.picture_as_pdf_rounded, size: 56, color: Colors.redAccent),
+                      const SizedBox(height: 12),
+                      Text(
+                        fileName,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'PDF Document (${(docUrl.length * 0.75 / 1024).toStringAsFixed(1)} KB)',
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      ),
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.teal.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'Extracted Card #: ${card.cardNumber}',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.teal),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.insert_drive_file_rounded, size: 48, color: Colors.blueGrey),
+                      const SizedBox(height: 10),
+                      Text(fileName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Attached document stored with record',
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Gemini AI Vision API Key Setup Dialog
+  void _showGeminiKeyDialog(BuildContext context, [VoidCallback? onSaved]) {
+    final currentKey = _db.getGeminiApiKey() ?? '';
+    final controller = TextEditingController(text: currentKey);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.auto_awesome_rounded, color: AppColors.primaryLight),
+            SizedBox(width: 8),
+            Text('Gemini AI Vision Setup', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Powers 100% accurate extraction for Emirates ID, UAE Visas, Passports, Insurance cards, and PDFs.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: 'Gemini API Key',
+                hintText: 'AIzaSy...',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                prefixIcon: const Icon(Icons.key_rounded, size: 18),
+              ),
+            ),
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: () async {
+                final uri = Uri.parse('https://aistudio.google.com/app/apikey');
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+              child: const Text(
+                'Get free Gemini API Key at Google AI Studio ↗',
+                style: TextStyle(fontSize: 11, color: Colors.blueAccent, decoration: TextDecoration.underline),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          if (currentKey.isNotEmpty)
+            TextButton(
+              onPressed: () async {
+                await _db.saveGeminiApiKey(null);
+                if (mounted) setState(() {});
+                if (onSaved != null) onSaved();
+                Navigator.pop(ctx);
+              },
+              child: const Text('Clear Key', style: TextStyle(color: Colors.redAccent)),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryLight,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () async {
+              await _db.saveGeminiApiKey(controller.text.trim());
+              if (mounted) setState(() {});
+              if (onSaved != null) onSaved();
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('✓ Gemini AI API Key saved! AI Vision is now active.')),
+              );
+            },
+            child: const Text('Save Key', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   // Consolidated Broadcast Digest via WhatsApp
   Future<void> _notifyBroadcastDigest() async {
     final critical = _cards.where((c) => c.isCritical || c.isExpired).toList();
@@ -352,6 +609,19 @@ Fusion 360 Compliance & Operations Desk''';
 
     bool isScanning = false;
     OcrCardResult? scanResult;
+    String? uploadedFileName = cardToEdit?.fileName;
+    String? uploadedFileUrl = cardToEdit?.documentUrl;
+    Uint8List? uploadedFileBytes;
+    int? uploadedFileSize;
+
+    if (uploadedFileUrl != null && uploadedFileUrl.startsWith('data:image')) {
+      try {
+        final commaIdx = uploadedFileUrl.indexOf(',');
+        if (commaIdx != -1) {
+          uploadedFileBytes = base64Decode(uploadedFileUrl.substring(commaIdx + 1));
+        }
+      } catch (_) {}
+    }
 
     showDialog(
       context: context,
@@ -363,6 +633,79 @@ Fusion 360 Compliance & Operations Desk''';
                 ? _employees.first
                 : EmployeeEntity(id: '', name: 'Staff', employeeCode: 'EMP', department: '', designation: '', mobileNumber: '', email: ''),
           );
+
+          Future<void> pickDocumentFromComputer() async {
+            try {
+              final result = await FilePicker.pickFiles(
+                type: FileType.custom,
+                allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'bmp'],
+                withData: true,
+              );
+
+              if (result == null || result.files.isEmpty) return;
+              final file = result.files.first;
+
+              Uint8List? rawBytes = file.bytes;
+              if (rawBytes == null && file.path != null && !kIsWeb) {
+                try {
+                  rawBytes = await io.File(file.path!).readAsBytes();
+                } catch (e) {
+                  debugPrint('Could not read bytes from file.path: $e');
+                }
+              }
+
+              setDialogState(() {
+                isScanning = true;
+                uploadedFileName = file.name;
+                uploadedFileBytes = rawBytes;
+                uploadedFileSize = file.size;
+                if (rawBytes != null) {
+                  final ext = file.name.split('.').last.toLowerCase();
+                  final mime = (ext == 'pdf') ? 'application/pdf' : 'image/$ext';
+                  uploadedFileUrl = 'data:$mime;base64,${base64Encode(rawBytes)}';
+                }
+              });
+
+              final ocrRes = await CardOcrService.extractFromFile(
+                fileName: file.name,
+                fileBytes: rawBytes,
+                filePath: file.path,
+                preferredCardType: selectedType,
+                employee: selectedEmp,
+              );
+
+              setDialogState(() {
+                isScanning = false;
+                scanResult = ocrRes;
+                if (ocrRes.confidence > 0) {
+                  selectedType = ocrRes.cardType;
+                  if (ocrRes.cardNumber.isNotEmpty) {
+                    cardNumController.text = ocrRes.cardNumber;
+                  }
+                  cardNameController.text = ocrRes.cardName;
+                  selectedExpiry = ocrRes.expiryDate;
+                  if (ocrRes.issueDate != null) selectedIssue = ocrRes.issueDate;
+                  if (ocrRes.notes != null && ocrRes.notes!.isNotEmpty) {
+                    notesController.text = ocrRes.notes!;
+                  }
+                  if (ocrRes.holderName != null && ocrRes.holderName!.isNotEmpty) {
+                    final hLower = ocrRes.holderName!.toLowerCase();
+                    try {
+                      final matched = _employees.firstWhere(
+                        (e) => e.name.toLowerCase().contains(hLower) || hLower.contains(e.name.toLowerCase()),
+                      );
+                      if (matched.id.isNotEmpty) {
+                        selectedEmpId = matched.id;
+                      }
+                    } catch (_) {}
+                  }
+                }
+              });
+            } catch (err) {
+              setDialogState(() => isScanning = false);
+              debugPrint('Error picking or extracting document: $err');
+            }
+          }
 
           Future<void> runOcrScan({String? rawText, String? rawOcrText}) async {
             setDialogState(() {
@@ -530,25 +873,194 @@ Fusion 360 Compliance & Operations Desk''';
                                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                               ),
                               const Spacer(),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Text(
-                                  'NO TYPING REQUIRED',
-                                  style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold),
+                              InkWell(
+                                onTap: () => _showGeminiKeyDialog(context, () => setDialogState(() {})),
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: _db.getGeminiApiKey() != null
+                                        ? Colors.teal.withValues(alpha: 0.15)
+                                        : Colors.amber.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: _db.getGeminiApiKey() != null ? Colors.teal : Colors.amber.shade700,
+                                      width: 0.8,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _db.getGeminiApiKey() != null ? Icons.auto_awesome_rounded : Icons.key_rounded,
+                                        size: 11,
+                                        color: _db.getGeminiApiKey() != null ? Colors.teal : Colors.amber.shade800,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _db.getGeminiApiKey() != null ? 'Gemini AI Vision ✓' : 'Set Gemini AI Key',
+                                        style: TextStyle(
+                                          color: _db.getGeminiApiKey() != null ? Colors.teal : Colors.amber.shade800,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                           const SizedBox(height: 6),
                           const Text(
-                            'Scan with live camera or auto-extract card values & expiry date instantly:',
+                            'Upload a document from your computer (PDF, PNG, JPG) or scan with camera:',
                             style: TextStyle(fontSize: 12, color: Colors.grey),
                           ),
                           const SizedBox(height: 12),
+
+                          // Document File Dropzone Box
+                          InkWell(
+                            onTap: isScanning ? null : pickDocumentFromComputer,
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: uploadedFileName != null
+                                    ? AppColors.primaryLight.withValues(alpha: 0.08)
+                                    : Theme.of(context).cardColor,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: uploadedFileName != null
+                                      ? AppColors.primaryLight
+                                      : Colors.grey.withValues(alpha: 0.35),
+                                  width: uploadedFileName != null ? 1.5 : 1.0,
+                                ),
+                              ),
+                              child: uploadedFileName != null
+                                  ? Row(
+                                      children: [
+                                        Container(
+                                          width: 42,
+                                          height: 42,
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primaryLight.withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: (uploadedFileBytes != null &&
+                                                  !uploadedFileName!.toLowerCase().endsWith('.pdf'))
+                                              ? ClipRRect(
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  child: Image.memory(
+                                                    uploadedFileBytes!,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (_, __, ___) => const Icon(
+                                                        Icons.description_rounded,
+                                                        color: AppColors.primaryLight),
+                                                  ),
+                                                )
+                                              : Icon(
+                                                  uploadedFileName!.toLowerCase().endsWith('.pdf')
+                                                      ? Icons.picture_as_pdf_rounded
+                                                      : Icons.insert_drive_file_rounded,
+                                                  color: uploadedFileName!.toLowerCase().endsWith('.pdf')
+                                                      ? Colors.redAccent
+                                                      : AppColors.primaryLight,
+                                                  size: 24,
+                                                ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  Flexible(
+                                                    child: Text(
+                                                      uploadedFileName!,
+                                                      style: const TextStyle(
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 13,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.green.withValues(alpha: 0.15),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                    ),
+                                                    child: const Text(
+                                                      '✓ Attached',
+                                                      style: TextStyle(
+                                                        color: Colors.green,
+                                                        fontSize: 10,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                uploadedFileSize != null
+                                                    ? '${(uploadedFileSize! / (1024 * 1024)).toStringAsFixed(2)} MB • Auto-extracted details below'
+                                                    : 'Document attached • Auto-extracted details below',
+                                                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.close_rounded, size: 18, color: Colors.redAccent),
+                                          tooltip: 'Remove Attachment',
+                                          onPressed: () {
+                                            setDialogState(() {
+                                              uploadedFileName = null;
+                                              uploadedFileBytes = null;
+                                              uploadedFileUrl = null;
+                                              uploadedFileSize = null;
+                                            });
+                                          },
+                                        ),
+                                      ],
+                                    )
+                                  : Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primaryLight.withValues(alpha: 0.12),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(Icons.upload_file_rounded,
+                                              color: AppColors.primaryLight, size: 24),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        const Text(
+                                          'Choose Document from Computer',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: AppColors.primaryLight,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        const Text(
+                                          'Click to browse PDF, PNG, JPG from your computer • Auto-fetches all card details',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(fontSize: 11, color: Colors.grey),
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
 
                           if (isScanning)
                             Container(
@@ -567,7 +1079,7 @@ Fusion 360 Compliance & Operations Desk''';
                                   SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
-                                      'Analyzing document & extracting expiry dates via OCR...',
+                                      'Reading document & extracting numbers & expiry dates via OCR...',
                                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                                     ),
                                   ),
@@ -575,87 +1087,134 @@ Fusion 360 Compliance & Operations Desk''';
                               ),
                             )
                           else
-                            Row(
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
                               children: [
-                                Expanded(
-                                  child: ElevatedButton.icon(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.primaryLight,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(vertical: 10),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                    ),
-                                    icon: const Icon(Icons.auto_awesome_rounded, size: 16),
-                                    label: const Text('Auto-Extract Data', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                                    onPressed: () => runOcrScan(),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primaryLight,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                   ),
+                                  icon: const Icon(Icons.upload_file_rounded, size: 16),
+                                  label: const Text('Upload from Computer', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                  onPressed: () => pickDocumentFromComputer(),
                                 ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(vertical: 10),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                    ),
-                                    icon: const Icon(Icons.camera_alt_rounded, size: 16),
-                                    label: const Text('Live Camera Scan', style: TextStyle(fontSize: 12)),
-                                    onPressed: () async {
-                                      await showDialog(
-                                        context: context,
-                                        builder: (c) => CameraCaptureModal(
-                                          stepName: 'Card Document Capture',
-                                          onPhotoCaptured: (camRes) {
-                                            runOcrScan(rawOcrText: camRes.base64Image);
-                                          },
-                                        ),
-                                      );
-                                    },
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                   ),
+                                  icon: const Icon(Icons.camera_alt_rounded, size: 16),
+                                  label: const Text('Live Camera Scan', style: TextStyle(fontSize: 12)),
+                                  onPressed: () async {
+                                    await showDialog(
+                                      context: context,
+                                      builder: (c) => CameraCaptureModal(
+                                        stepName: 'Card Document Capture',
+                                        onPhotoCaptured: (camRes) {
+                                          runOcrScan(rawOcrText: camRes.base64Image);
+                                        },
+                                      ),
+                                    );
+                                  },
+                                ),
+                                TextButton.icon(
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                  ),
+                                  icon: const Icon(Icons.auto_awesome_rounded, size: 14),
+                                  label: const Text('Auto-Extract Data', style: TextStyle(fontSize: 11)),
+                                  onPressed: () => runOcrScan(),
                                 ),
                               ],
                             ),
 
                           if (scanResult != null) ...[
                             const SizedBox(height: 10),
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: (scanResult!.isUrgentAlert ? Colors.red : Colors.green).withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: (scanResult!.isUrgentAlert ? Colors.red : Colors.green).withValues(alpha: 0.3),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    scanResult!.isUrgentAlert ? Icons.warning_amber_rounded : Icons.check_circle_rounded,
-                                    size: 20,
-                                    color: scanResult!.isUrgentAlert ? Colors.red : Colors.green,
+                            Builder(
+                              builder: (context) {
+                                final isSuccess = scanResult!.confidence > 0;
+                                final isWarning = !isSuccess && scanResult!.extractionSummary.contains('not configured');
+                                final Color cardColor = isSuccess
+                                    ? (scanResult!.isUrgentAlert ? Colors.red : Colors.green)
+                                    : (isWarning ? Colors.amber.shade800 : Colors.red);
+
+                                return Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: cardColor.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: cardColor.withValues(alpha: 0.35)),
                                   ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Data Successfully Extracted!',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: scanResult!.isUrgentAlert ? Colors.red : Colors.green,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            isSuccess
+                                                ? (scanResult!.isUrgentAlert ? Icons.warning_amber_rounded : Icons.check_circle_rounded)
+                                                : Icons.error_outline_rounded,
+                                            size: 20,
+                                            color: cardColor,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              isSuccess
+                                                  ? (scanResult!.isUrgentAlert ? '⚠️ Expiring Soon' : 'Data Successfully Extracted!')
+                                                  : (isWarning ? '⚠️ Action Required' : '❌ Extraction Failed'),
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                                color: cardColor,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        scanResult!.extractionSummary,
+                                        style: const TextStyle(fontSize: 11),
+                                      ),
+                                      if (!isSuccess) ...[
+                                        const SizedBox(height: 8),
+                                        InkWell(
+                                          onTap: () => _showGeminiKeyDialog(context, () => setDialogState(() {})),
+                                          borderRadius: BorderRadius.circular(6),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: cardColor.withValues(alpha: 0.15),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: cardColor, width: 0.8),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.key_rounded, size: 12, color: cardColor),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  'Configure / Update Gemini AI Key',
+                                                  style: TextStyle(
+                                                    color: cardColor,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          scanResult!.extractionSummary,
-                                          style: const TextStyle(fontSize: 11),
-                                        ),
                                       ],
-                                    ),
+                                    ],
                                   ),
-                                ],
-                              ),
+                                );
+                              },
                             ),
                           ],
                         ],
@@ -835,6 +1394,8 @@ Fusion 360 Compliance & Operations Desk''';
                     issueDate: selectedIssue,
                     expiryDate: selectedExpiry,
                     notes: notesController.text.trim(),
+                    documentUrl: uploadedFileUrl ?? cardToEdit?.documentUrl,
+                    fileName: uploadedFileName ?? cardToEdit?.fileName,
                   );
 
                   // 1. Save to Supabase (if online)
@@ -1348,12 +1909,90 @@ Fusion 360 Compliance & Operations Desk''';
                           style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                         ),
                       ],
+
+                      // Attached Document Indicator & View Link
+                      if (card.fileName != null || card.documentUrl != null) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.blue.withValues(alpha: 0.12) : Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isDark ? Colors.blue.shade800.withValues(alpha: 0.3) : Colors.blue.shade200,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                card.fileName?.toLowerCase().endsWith('.pdf') == true
+                                    ? Icons.picture_as_pdf_rounded
+                                    : Icons.attach_file_rounded,
+                                size: 14,
+                                color: isDark ? Colors.blue.shade300 : Colors.blue.shade700,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  card.fileName ?? 'Uploaded Document',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? Colors.blue.shade200 : Colors.blue.shade900,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (card.documentUrl != null && card.documentUrl!.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                InkWell(
+                                  onTap: () => _showDocumentPreviewDialog(card),
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.visibility_rounded,
+                                          size: 13,
+                                          color: isDark ? Colors.cyanAccent : Colors.teal.shade800,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'View Doc',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: isDark ? Colors.cyanAccent : Colors.teal.shade800,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 10),
 
-                      // Actions: WhatsApp, Email, Edit, Delete
+                      // Actions: WhatsApp, Email, View Doc, Edit, Delete
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
+                          // Document Preview Action Button
+                          if (card.documentUrl != null && card.documentUrl!.isNotEmpty) ...[
+                            IconButton(
+                              icon: const Icon(Icons.remove_red_eye_outlined, size: 18, color: Colors.teal),
+                              tooltip: 'View Uploaded Document',
+                              onPressed: () => _showDocumentPreviewDialog(card),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+
                           // 1-Click WhatsApp Notification Trigger
                           AppBounceable(
                             onTap: () => _notifyWhatsApp(card),

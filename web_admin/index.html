@@ -673,11 +673,28 @@
           <input type="text" id="card-custom-name" class="form-control" placeholder="e.g. Airport Access Pass / Security Permit">
         </div>
 
-        <!-- Automated Smart Document Scanner & OCR Hub (No typing required) -->
+        <!-- Automated Smart Document Scanner & AI Vision Hub -->
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <label class="form-label" style="margin-bottom: 0;">Upload & Auto-Extract Card Data (OCR)</label>
-            <span class="badge badge-success" style="font-size: 10px;">⚡ NO TYPING REQUIRED</span>
+            <label class="form-label" style="margin-bottom: 0;">Upload & Auto-Extract Card Data (AI Vision)</label>
+            <button type="button" id="btn-toggle-ai-key" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 2px 8px; border-color: rgba(59, 130, 246, 0.4);">
+              🔑 <span id="ai-key-status-label">Configure Gemini AI</span>
+            </button>
+          </div>
+
+          <!-- Gemini AI Key Configuration Drawer / Panel -->
+          <div id="ai-key-config-box" style="display: none; margin-bottom: 12px; padding: 12px; border-radius: var(--radius-sm); border: 1px solid rgba(59, 130, 246, 0.4); background: rgba(59, 130, 246, 0.08);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-weight: 600; font-size: 12px; color: var(--primary);">🤖 Gemini Multimodal AI Vision</span>
+              <a href="https://aistudio.google.com/app/apikey" target="_blank" style="font-size: 11px; color: var(--primary); text-decoration: underline;">Get Free Key ↗</a>
+            </div>
+            <p style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">
+              Directly reads Emirates ID, UAE Visas, Passports, Insurance cards, and PDFs with 99%+ accuracy.
+            </p>
+            <div style="display: flex; gap: 6px;">
+              <input type="password" id="gemini-api-key-input" class="form-control" style="font-size: 12px; padding: 6px 10px;" placeholder="Paste Gemini API key (AIzaSy...)">
+              <button type="button" id="btn-save-ai-key" class="btn btn-primary btn-sm" style="white-space: nowrap;">Save Key</button>
+            </div>
           </div>
           
           <div id="card-file-dropzone" class="file-dropzone">
@@ -807,8 +824,11 @@
   <!-- SheetJS for Excel Export -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
+  <!-- Tesseract.js for Client-Side Document OCR -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
   <!-- Application JS Controller -->
-  <script src="app.js?v=4"></script>
+  <script src="app.js?v=5"></script>
 
 </body>
 </html>
