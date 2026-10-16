@@ -1521,4 +1521,72 @@ class LocalDatabaseService {
       debugPrint('Error saving Gemini API key to Hive: $e');
     }
   }
+
+  // --------------------------------------------------------------------------
+  // Automated Compliance Robot Settings (Resend + CallMeBot WhatsApp)
+  // --------------------------------------------------------------------------
+  String? getResendApiKey() {
+    return _settingsBox?.get('compliance_resend_api_key') as String?;
+  }
+
+  Future<void> saveResendApiKey(String? key) async {
+    try {
+      if (key == null || key.trim().isEmpty) {
+        await _settingsBox?.delete('compliance_resend_api_key');
+      } else {
+        await _settingsBox?.put('compliance_resend_api_key', key.trim());
+      }
+    } catch (e) {
+      debugPrint('Error saving Resend API key to Hive: $e');
+    }
+  }
+
+  String? getCallMeBotApiKey() {
+    return _settingsBox?.get('compliance_callmebot_api_key') as String?;
+  }
+
+  Future<void> saveCallMeBotApiKey(String? key) async {
+    try {
+      if (key == null || key.trim().isEmpty) {
+        await _settingsBox?.delete('compliance_callmebot_api_key');
+      } else {
+        await _settingsBox?.put('compliance_callmebot_api_key', key.trim());
+      }
+    } catch (e) {
+      debugPrint('Error saving CallMeBot API key to Hive: $e');
+    }
+  }
+
+  bool isAutoNotificationRobotEnabled() {
+    return _settingsBox?.get('compliance_robot_enabled', defaultValue: true) ?? true;
+  }
+
+  Future<void> setAutoNotificationRobotEnabled(bool enabled) async {
+    await _settingsBox?.put('compliance_robot_enabled', enabled);
+  }
+
+  String? getLastRobotDispatchDate() {
+    return _settingsBox?.get('compliance_robot_last_date') as String?;
+  }
+
+  Future<void> setLastRobotDispatchDate(String dateStr) async {
+    await _settingsBox?.put('compliance_robot_last_date', dateStr);
+  }
+
+  String getNotificationTargetEmail() {
+    return _settingsBox?.get('compliance_target_email', defaultValue: 'sr.irshath@gmail.com, nasuru@fusionmaint.com') ?? 'sr.irshath@gmail.com, nasuru@fusionmaint.com';
+  }
+
+  Future<void> saveNotificationTargetEmail(String? email) async {
+    try {
+      if (email == null || email.trim().isEmpty) {
+        await _settingsBox?.delete('compliance_target_email');
+      } else {
+        await _settingsBox?.put('compliance_target_email', email.trim());
+      }
+    } catch (e) {
+      debugPrint('Error saving compliance target email to Hive: $e');
+    }
+  }
 }
+

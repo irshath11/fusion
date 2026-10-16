@@ -474,6 +474,9 @@
       renderCardsTable();
       if (leafletMap) renderMapMarkers();
 
+      // Trigger daily automated compliance robot check in background
+      checkAndRunAutomatedRobot();
+
     } catch (e) {
       console.error('Error fetching cloud data:', e);
     }
@@ -1214,6 +1217,19 @@
 
     // Update Urgent 3-Day Alert Banner
     const totalUrgent = criticalCount + expiredCount;
+    const banner = document.getElementById('urgent-cards-banner');
+    const bannerTitle = document.getElementById('urgent-cards-banner-title');
+    if (banner) {
+      if (totalUrgent > 0) {
+        banner.style.display = 'block';
+        if (bannerTitle) {
+          bannerTitle.textContent = `🚨 Urgent Renewal Notice: ${totalUrgent} Document${totalUrgent === 1 ? '' : 's'} Expiring within ≤ 3 Days`;
+        }
+      } else {
+        banner.style.display = 'none';
+      }
+    }
+
     if (cardsAlertBanner) {
       if (totalUrgent > 0) {
         cardsAlertBanner.style.display = 'flex';
@@ -1229,6 +1245,274 @@
     }
 
     renderOverviewCardsAlerts();
+  }
+
+  window.notifyAdminWhatsAppDigest = function() {
+    const urgentCards = cardsData.filter(c => {
+      const st = calculateExpiryStatus(c.expiry_date);
+      return st.isCritical || st.status === 'EXPIRED';
+    });
+
+    if (urgentCards.length === 0) {
+      showToast('All documents are valid. No cards expiring within 3 days.', 'info');
+      return;
+    }
+
+    let text = `🚨 *URGENT COMPLIANCE NOTICE: CARD EXPIRATION (≤ 3 DAYS)*\n`;
+    text += `════════════════════════════════════════\n`;
+    text += `Attention: Compliance & Operations Control\n`;
+    text += `The following *${urgentCards.length} document(s)* require immediate renewal:\n\n`;
+
+    urgentCards.forEach((c, idx) => {
+      const emp = employeesData.find(e => e.id === c.employee_id) || { name: 'Staff', employeeCode: 'EMP' };
+      const st = calculateExpiryStatus(c.expiry_date);
+      text += `*${idx + 1}. ${c.card_name.toUpperCase()}*\n`;
+      text += `  👤 Employee: ${emp.name} (${emp.employeeCode})\n`;
+      text += `  🔢 Card No: ${c.card_number}\n`;
+      text += `  📅 Expiry: ${formatDisplayDate(c.expiry_date)}\n`;
+      text += `  ⏳ Status: ${st.label}\n`;
+      if (idx < urgentCards.length - 1) text += `────────────────────────────────────────\n`;
+    });
+
+    text += `\n⚠️ *Action Required:*\n`;
+    text += `Please coordinate immediately to submit renewals or processing receipts.\n`;
+    text += `════════════════════════════════════════\n`;
+    text += `_Fusion 360 Workforce Document Control_`;
+
+    const url = `https://wa.me/971586939371?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+    showToast('Launched WhatsApp with 3-day renewal alerts for +971586939371', 'success');
+  };
+
+  window.notifyAdminEmailDigest = function() {
+    const urgentCards = cardsData.filter(c => {
+      const st = calculateExpiryStatus(c.expiry_date);
+      return st.isCritical || st.status === 'EXPIRED';
+    });
+
+    if (urgentCards.length === 0) {
+      showToast('All documents are valid. No cards expiring within 3 days.', 'info');
+      return;
+    }
+
+    const subject = encodeURIComponent(`[URGENT] Compliance Alert: ${urgentCards.length} Document(s) Expiring Within 3 Days`);
+    let body = `Dear Administrator & HR Operations Team,\n\n`;
+    body += `This is an automated compliance notification from Fusion 360 Document Control.\n`;
+    body += `The following employee credential(s) have reached the critical 3-day expiration threshold:\n\n`;
+
+    urgentCards.forEach((c, idx) => {
+      const emp = employeesData.find(e => e.id === c.employee_id) || { name: 'Staff', employeeCode: 'EMP' };
+      const st = calculateExpiryStatus(c.expiry_date);
+      body += `Document #${idx + 1}: ${c.card_name}\n`;
+      body += `• Employee: ${emp.name} (${emp.employeeCode})\n`;
+      body += `• Card Number: ${c.card_number}\n`;
+      body += `• Expiry Date: ${formatDisplayDate(c.expiry_date)}\\n`;
+      body += `• Urgency: ${st.label}\\n\\n`;
+    });
+
+    body += `ACTION REQUIRED:\\n`;
+    body += `Please initiate or verify the renewal procedure immediately to avoid site access deactivation.\\n\\n`;
+    body += `Best regards,\\nFusion 360 Workforce Compliance Desk`;
+
+    const mailtoUrl = `mailto:sr.irshath@gmail.com?subject=${subject}&body=${encodeURIComponent(body)}`;
+    window.location.href = mailtoUrl;
+    showToast('Prepared 3-day renewal email alert for sr.irshath@gmail.com', 'success');
+  };
+
+  // --------------------------------------------------------------------------
+  // Automated Compliance Robot Functions (Background Free Email & WhatsApp)
+  // --------------------------------------------------------------------------
+  window.openRobotConfigModal = function() {
+    const resendKey = localStorage.getItem('fusion_compliance_resend_key') || '';
+    const callmebotKey = localStorage.getItem('fusion_compliance_callmebot_key') || '';
+    const isEnabled = localStorage.getItem('fusion_compliance_robot_enabled') !== 'false';
+    const targetEmail = localStorage.getItem('fusion_compliance_target_email') || 'sr.irshath@gmail.com, nasuru@fusionmaint.com';
+
+    const inputResend = document.getElementById('robot-resend-key');
+    const inputCallmebot = document.getElementById('robot-callmebot-key');
+    const switchEnabled = document.getElementById('robot-enabled-switch');
+    const inputTargetEmail = document.getElementById('robot-target-email');
+
+    if (inputResend) inputResend.value = resendKey;
+    if (inputCallmebot) inputCallmebot.value = callmebotKey;
+    if (switchEnabled) switchEnabled.checked = isEnabled;
+    if (inputTargetEmail) inputTargetEmail.value = targetEmail;
+
+    const modal = document.getElementById('robot-config-modal');
+    const backdrop = document.getElementById('robot-config-modal-backdrop');
+    if (modal) modal.style.display = 'block';
+    if (backdrop) backdrop.style.display = 'block';
+  };
+
+  window.closeRobotConfigModal = function() {
+    const modal = document.getElementById('robot-config-modal');
+    const backdrop = document.getElementById('robot-config-modal-backdrop');
+    if (modal) modal.style.display = 'none';
+    if (backdrop) backdrop.style.display = 'none';
+  };
+
+  window.saveRobotConfig = async function() {
+    const resendKey = (document.getElementById('robot-resend-key')?.value || '').trim();
+    const callmebotKey = (document.getElementById('robot-callmebot-key')?.value || '').trim();
+    const isEnabled = document.getElementById('robot-enabled-switch')?.checked ?? true;
+    const targetEmail = (document.getElementById('robot-target-email')?.value || '').trim() || 'sr.irshath@gmail.com, nasuru@fusionmaint.com';
+
+    localStorage.setItem('fusion_compliance_resend_key', resendKey);
+    localStorage.setItem('fusion_compliance_callmebot_key', callmebotKey);
+    localStorage.setItem('fusion_compliance_robot_enabled', isEnabled ? 'true' : 'false');
+    localStorage.setItem('fusion_compliance_target_email', targetEmail);
+
+    // Sync to Supabase if connected
+    if (supabaseClient) {
+      try {
+        await supabaseClient.from('compliance_notification_settings').upsert({
+          resend_api_key: resendKey,
+          callmebot_api_key: callmebotKey,
+          target_email: targetEmail,
+          target_phone: '971586939371',
+          is_automated_enabled: isEnabled,
+          updated_at: new Date().toISOString()
+        });
+      } catch (err) {
+        console.warn('Could not sync robot settings to Supabase:', err);
+      }
+    }
+
+    closeRobotConfigModal();
+    showToast('✅ Compliance Robot settings saved & synced successfully!', 'success');
+    checkAndRunAutomatedRobot();
+  };
+
+  window.testRobotEmail = async function() {
+    const resendKey = (document.getElementById('robot-resend-key')?.value || '').trim();
+    if (!resendKey) {
+      showToast('Please enter your Resend API key first', 'warning');
+      return;
+    }
+    const targetEmailStr = (document.getElementById('robot-target-email')?.value || '').trim() || localStorage.getItem('fusion_compliance_target_email') || 'sr.irshath@gmail.com, nasuru@fusionmaint.com';
+    const recipients = targetEmailStr.split(',').map(e => e.trim()).filter(Boolean);
+    const toList = recipients.length > 0 ? recipients : ['sr.irshath@gmail.com', 'nasuru@fusionmaint.com'];
+
+    showToast(`Dispatching test email to ${toList.join(', ')}...`, 'info');
+    try {
+      const resp = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: 'Fusion Compliance <compliance@fusionmaint.org>',
+          to: toList,
+          subject: 'Fusion 360: Email Robot Test Connection',
+          html: '<h3>Connection Successful!</h3><p>Your automated 3-day card expiry background email robot is properly configured and operational via <strong>fusionmaint.org</strong> for all recipients.</p>'
+        })
+      });
+      if (resp.ok) {
+        showToast(`✅ Test email delivered to ${toList.join(', ')}!`, 'success');
+      } else {
+        const err = await resp.json();
+        showToast('Resend Error: ' + (err.message || resp.statusText), 'error');
+      }
+    } catch (e) {
+      showToast('Network error testing email: ' + e.message, 'error');
+    }
+  };
+
+  window.testRobotWhatsApp = async function() {
+    const callmebotKey = (document.getElementById('robot-callmebot-key')?.value || '').trim();
+    if (!callmebotKey) {
+      showToast('Please enter your CallMeBot API key first', 'warning');
+      return;
+    }
+    showToast('Dispatching test WhatsApp alert to +971586939371...', 'info');
+    try {
+      const msg = encodeURIComponent('🤖 *Fusion 360 Robot Test*: Background automated WhatsApp alerts are connected and active!');
+      const url = `https://api.callmebot.com/whatsapp.php?phone=971586939371&text=${msg}&apikey=${callmebotKey}`;
+      await fetch(url, { mode: 'no-cors' });
+      showToast('✅ Test WhatsApp triggered for +971586939371!', 'success');
+    } catch (e) {
+      showToast('Error testing WhatsApp: ' + e.message, 'error');
+    }
+  };
+
+  async function checkAndRunAutomatedRobot() {
+    const isEnabled = localStorage.getItem('fusion_compliance_robot_enabled') !== 'false';
+    if (!isEnabled) return;
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const lastRun = localStorage.getItem('fusion_compliance_robot_last_run');
+    if (lastRun === todayStr) return; // already ran today
+
+    const urgentCards = cardsData.filter(c => {
+      const st = calculateExpiryStatus(c.expiry_date);
+      return st.isCritical || st.status === 'EXPIRED';
+    });
+    if (urgentCards.length === 0) return;
+
+    const resendKey = localStorage.getItem('fusion_compliance_resend_key');
+    const callmebotKey = localStorage.getItem('fusion_compliance_callmebot_key');
+    if (!resendKey && !callmebotKey) return;
+
+    let emailSent = false;
+    let waSent = false;
+
+    // Send background email if Resend key present
+    if (resendKey) {
+      try {
+        let tableRows = '';
+        urgentCards.forEach(c => {
+          const emp = employeesData.find(e => e.id === c.employee_id) || { name: 'Staff', employeeCode: 'EMP' };
+          const st = calculateExpiryStatus(c.expiry_date);
+          tableRows += `<tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 10px;">${c.card_name}</td><td style="padding: 10px; font-family: monospace;">${c.card_number}</td><td style="padding: 10px;">${emp.name} (${emp.employeeCode})</td><td style="padding: 10px;">${formatDisplayDate(c.expiry_date)}</td><td style="padding: 10px;"><span style="background: #ef4444; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px;">${st.label}</span></td></tr>`;
+        });
+        const html = `<html><body style="font-family: sans-serif; background: #f8fafc; padding: 20px;"><div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0;"><div style="background: #0f172a; padding: 18px; color: white; border-bottom: 3px solid #ef4444;"><h3 style="margin: 0;">Critical Document Expiry Notice (≤ 3 Days)</h3></div><div style="padding: 18px;"><table style="width: 100%; border-collapse: collapse; font-size: 12px;"><thead><tr style="background: #f1f5f9; text-align: left;"><th style="padding: 8px;">Document</th><th style="padding: 8px;">Number</th><th style="padding: 8px;">Employee</th><th style="padding: 8px;">Expiry</th><th style="padding: 8px;">Status</th></tr></thead><tbody>${tableRows}</tbody></table></div></div></body></html>`;
+
+        const targetEmailStr = localStorage.getItem('fusion_compliance_target_email') || 'sr.irshath@gmail.com, nasuru@fusionmaint.com';
+        const recipients = targetEmailStr.split(',').map(e => e.trim()).filter(Boolean);
+
+        const resp = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${resendKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            from: 'Fusion Compliance <compliance@fusionmaint.org>',
+            to: recipients.length > 0 ? recipients : ['sr.irshath@gmail.com', 'nasuru@fusionmaint.com'],
+            subject: `[URGENT] Compliance Alert: ${urgentCards.length} Document(s) Expiring Within 3 Days`,
+            html: html
+          })
+        });
+        emailSent = resp.ok;
+      } catch (e) {
+        console.warn('Auto email dispatch error:', e);
+      }
+    }
+
+    // Send background WhatsApp if CallMeBot key present
+    if (callmebotKey) {
+      try {
+        let text = `🚨 *URGENT COMPLIANCE NOTICE: CARD EXPIRATION (≤ 3 DAYS)*\n════════════════════════════════════════\nAttention: Compliance & Operations Control\nThe following *${urgentCards.length} document(s)* require immediate renewal:\n\n`;
+        urgentCards.forEach((c, idx) => {
+          const emp = employeesData.find(e => e.id === c.employee_id) || { name: 'Staff', employeeCode: 'EMP' };
+          const st = calculateExpiryStatus(c.expiry_date);
+          text += `*${idx + 1}. ${c.card_name.toUpperCase()}*\n  👤 ${emp.name} (${emp.employeeCode})\n  🔢 No: ${c.card_number}\n  📅 Expiry: ${formatDisplayDate(c.expiry_date)}\n  ⏳ Status: ${st.label}\n`;
+        });
+        text += `\n⚠️ *Action Required:* Please coordinate renewal immediately.\n════════════════════════════════════════\n_Fusion 360 Document Control_`;
+
+        const url = `https://api.callmebot.com/whatsapp.php?phone=971586939371&text=${encodeURIComponent(text)}&apikey=${callmebotKey}`;
+        await fetch(url, { mode: 'no-cors' });
+        waSent = true;
+      } catch (e) {
+        console.warn('Auto WhatsApp dispatch error:', e);
+      }
+    }
+
+    if (emailSent || waSent) {
+      localStorage.setItem('fusion_compliance_robot_last_run', todayStr);
+      showToast(`🤖 Daily Compliance Robot dispatched alerts for ${urgentCards.length} document(s).`, 'info');
+    }
   }
 
   function renderOverviewCardsAlerts() {

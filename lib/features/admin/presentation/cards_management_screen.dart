@@ -21,6 +21,7 @@ import '../../attendance/presentation/camera_capture_modal.dart';
 import '../../../core/widgets/app_bounceable.dart';
 import '../../../core/widgets/app_glass_card.dart';
 import '../../../core/widgets/employee_avatar.dart';
+import '../../../core/services/card_expiry_notification_service.dart';
 
 class CardsManagementScreen extends StatefulWidget {
   const CardsManagementScreen({super.key});
@@ -172,6 +173,41 @@ class _CardsManagementScreenState extends State<CardsManagementScreen>
 
     if (mounted) {
       setState(() => _isLoading = false);
+    }
+
+    // Trigger silent automated compliance check in background
+    _checkAutomatedComplianceRobot();
+  }
+
+  Future<void> _checkAutomatedComplianceRobot() async {
+    try {
+      final res = await CardExpiryNotificationService.runAutomatedDailyCheck(
+        cards: _cards,
+        employeeMap: _getEmployeeMap(),
+      );
+      if (res['triggered'] == true && mounted) {
+        final count = res['count'] ?? 0;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.smart_toy_rounded, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '🤖 Compliance Robot: Dispatched $count renewal notice(s) to sr.irshath@gmail.com & +971586939371.',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF6366F1),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Background compliance robot check error: $e');
     }
   }
 
@@ -828,37 +864,411 @@ Fusion 360 Compliance & Operations Desk''';
     );
   }
 
-  // Consolidated Broadcast Digest via WhatsApp
-  Future<void> _notifyBroadcastDigest() async {
-    final critical = _cards.where((c) => c.isCritical || c.isExpired).toList();
-    if (critical.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('All documents are valid. No critical expirations.')),
-      );
+  Map<String, EmployeeEntity> _getEmployeeMap() {
+    final map = <String, EmployeeEntity>{};
+    for (final e in _employees) {
+      map[e.id] = e;
+    }
+    return map;
+  }
+
+  void _markCardsNotified(List<EmployeeCard> notifiedCards) {
+    setState(() {
+      final now = DateTime.now();
+      for (final c in notifiedCards) {
+        final idx = _cards.indexWhere((item) => item.id == c.id);
+        if (idx != -1) {
+          _cards[idx] = _cards[idx].copyWith(lastNotifiedAt: now);
+        }
+      }
+      _persistCardsLocally();
+    });
+  }
+
+  // 1-Click Automated WhatsApp to +971586939371
+  Future<void> _notifyAdminWhatsAppDigest() async {
+    final expiring = CardExpiryNotificationService.getExpiringCardsWithinDays(_cards, days: 3);
+    if (expiring.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('All documents are valid. No cards expiring within 3 days.')),
+        );
+      }
       return;
     }
 
-    final buffer = StringBuffer();
-    buffer.writeln('🚨 *FUSION 360: CRITICAL CARD EXPIRATION COMPLIANCE DIGEST*');
-    buffer.writeln('Date: ${_dateFormat.format(DateTime.now())}');
-    buffer.writeln('Total Urgent Items: ${critical.length}');
-    buffer.writeln('----------------------------------------');
+    final success = await CardExpiryNotificationService.launchWhatsAppClient(
+      cards: expiring,
+      employeeMap: _getEmployeeMap(),
+      targetPhone: CardExpiryNotificationService.defaultAdminPhone,
+    );
 
-    for (int i = 0; i < critical.length; i++) {
-      final c = critical[i];
-      final emp = _getEmployee(c.employeeId);
-      buffer.writeln('${i + 1}. *${emp?.name ?? 'Staff'}* - ${c.cardName}');
-      buffer.writeln('   Card #: ${c.cardNumber}');
-      buffer.writeln('   Expiry: ${_dateFormat.format(c.expiryDate)} (${c.statusLabel})');
-      buffer.writeln('');
+    if (success) {
+      _markCardsNotified(expiring);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Launched WhatsApp with 3-day renewal alerts for +971586939371'),
+            backgroundColor: Color(0xFF25D366),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not launch WhatsApp.')),
+        );
+      }
     }
-    buffer.writeln('----------------------------------------');
-    buffer.writeln('⚠️ Immediate renewal required.');
+  }
 
-    final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(buffer.toString())}');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+  // 1-Click Automated Email to sr.irshath@gmail.com
+  Future<void> _notifyAdminEmailDigest() async {
+    final expiring = CardExpiryNotificationService.getExpiringCardsWithinDays(_cards, days: 3);
+    if (expiring.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('All documents are valid. No cards expiring within 3 days.')),
+        );
+      }
+      return;
     }
+
+    final success = await CardExpiryNotificationService.launchEmailClient(
+      cards: expiring,
+      employeeMap: _getEmployeeMap(),
+      targetEmail: CardExpiryNotificationService.defaultAdminEmail,
+    );
+
+    if (success) {
+      _markCardsNotified(expiring);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Prepared 3-day renewal email alert for sr.irshath@gmail.com'),
+            backgroundColor: Colors.blueAccent,
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open email client.')),
+        );
+      }
+    }
+  }
+
+  // Automated Compliance Robot Configuration Modal
+  void _showRobotConfigDialog() {
+    final resendController = TextEditingController(text: _db.getResendApiKey() ?? '');
+    final callMeBotController = TextEditingController(text: _db.getCallMeBotApiKey() ?? '');
+    final targetEmailController = TextEditingController(text: _db.getNotificationTargetEmail());
+    bool isRobotEnabled = _db.isAutoNotificationRobotEnabled();
+    bool isTestingEmail = false;
+    bool isTestingWhatsApp = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+
+            return AlertDialog(
+              backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.smart_toy_rounded, color: Color(0xFF6366F1), size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Background Robot Config',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          'Automated 3-day silent alerts (Email & WhatsApp)',
+                          style: TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 520,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Target Email(s) Input
+                      const Text(
+                        '📬 Recipient Email Address(es)',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Separate multiple emails with commas. Verified domain: fusionmaint.org',
+                        style: TextStyle(fontSize: 10.5, color: Colors.grey.shade500),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: targetEmailController,
+                        style: const TextStyle(fontSize: 12),
+                        decoration: InputDecoration(
+                          hintText: 'sr.irshath@gmail.com, nasuru@fusionmaint.com',
+                          isDense: true,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          prefixIcon: const Icon(Icons.email_outlined, size: 16),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // WhatsApp Summary
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.chat_outlined, size: 14, color: Color(0xFF25D366)),
+                            SizedBox(width: 8),
+                            Text(
+                              'Target WhatsApp: +971 58 693 9371',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      const SizedBox(height: 16),
+
+                      // Enable Toggle
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Enable Daily Automated Robot', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        subtitle: const Text('Silently triggers check at startup & via daily cloud cron', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                        value: isRobotEnabled,
+                        activeThumbColor: const Color(0xFF6366F1),
+                        onChanged: (val) => setDialogState(() => isRobotEnabled = val),
+                      ),
+                      const Divider(height: 20),
+
+                      // 1. Resend Free API Key
+                      Row(
+                        children: [
+                          const Icon(Icons.mark_email_read_rounded, size: 16, color: Colors.blueAccent),
+                          const SizedBox(width: 6),
+                          const Text('Resend API Key (Free Email Robot)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                          const Spacer(),
+                          const Text('3,000 Free/Mo', style: TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Get your free key from resend.com/api-keys. Sends formatted HTML alerts silently.',
+                        style: TextStyle(fontSize: 10.5, color: Colors.grey.shade500),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: resendController,
+                              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                              decoration: InputDecoration(
+                                hintText: 're_123456789...',
+                                isDense: true,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                prefixIcon: const Icon(Icons.key, size: 16),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blueAccent,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: isTestingEmail
+                                ? null
+                                : () async {
+                                    final key = resendController.text.trim();
+                                    if (key.isEmpty) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Please enter a Resend API key first')),
+                                      );
+                                      return;
+                                    }
+                                    setDialogState(() => isTestingEmail = true);
+                                    final res = await CardExpiryNotificationService.testResendEmailConnection(
+                                      resendApiKey: key,
+                                      targetEmail: targetEmailController.text.trim(),
+                                    );
+                                    setDialogState(() => isTestingEmail = false);
+
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(res['message'] ?? ''),
+                                          backgroundColor: res['success'] == true ? Colors.green : Colors.redAccent,
+                                        ),
+                                      );
+                                    }
+                                  },
+                            child: isTestingEmail
+                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                : const Text('Test Email', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+
+                      // 2. CallMeBot Free WhatsApp API Key
+                      Row(
+                        children: [
+                          const Icon(Icons.chat_bubble_rounded, size: 16, color: Color(0xFF25D366)),
+                          const SizedBox(width: 6),
+                          const Text('CallMeBot API Key (Free WhatsApp Robot)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                          const Spacer(),
+                          const Text('100% Free', style: TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'To get free key: Text "I allow callmebot to send me messages" to +34 911 98 05 60 on WhatsApp.',
+                        style: TextStyle(fontSize: 10.5, color: Colors.grey.shade500),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: callMeBotController,
+                              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                              decoration: InputDecoration(
+                                hintText: 'CallMeBot apikey...',
+                                isDense: true,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                prefixIcon: const Icon(Icons.vpn_key_outlined, size: 16),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF25D366),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: isTestingWhatsApp
+                                ? null
+                                : () async {
+                                    final key = callMeBotController.text.trim();
+                                    if (key.isEmpty) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Please enter a CallMeBot API key first')),
+                                      );
+                                      return;
+                                    }
+                                    setDialogState(() => isTestingWhatsApp = true);
+                                    final res = await CardExpiryNotificationService.testCallMeBotConnection(callMeBotApiKey: key);
+                                    setDialogState(() => isTestingWhatsApp = false);
+
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(res['message'] ?? ''),
+                                          backgroundColor: res['success'] == true ? Colors.green : Colors.redAccent,
+                                        ),
+                                      );
+                                    }
+                                  },
+                            child: isTestingWhatsApp
+                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                : const Text('Test WA', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6366F1),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () async {
+                    final resendKey = resendController.text.trim();
+                    final callMeBotKey = callMeBotController.text.trim();
+                    final targetEmail = targetEmailController.text.trim();
+
+                    await _db.saveResendApiKey(resendKey);
+                    await _db.saveCallMeBotApiKey(callMeBotKey);
+                    await _db.saveNotificationTargetEmail(targetEmail);
+                    await _db.setAutoNotificationRobotEnabled(isRobotEnabled);
+
+                    // Sync to Supabase compliance_notification_settings if online
+                    try {
+                      final supabase = Supabase.instance.client;
+                      await supabase.from('compliance_notification_settings').upsert({
+                        'resend_api_key': resendKey,
+                        'callmebot_api_key': callMeBotKey,
+                        'target_email': targetEmail.isNotEmpty ? targetEmail : CardExpiryNotificationService.defaultAdminEmail,
+                        'target_phone': CardExpiryNotificationService.defaultAdminPhone.replaceAll(RegExp(r'[^0-9]'), ''),
+                        'is_automated_enabled': isRobotEnabled,
+                        'updated_at': DateTime.now().toIso8601String(),
+                      });
+                    } catch (e) {
+                      debugPrint('Supabase settings sync error: $e');
+                    }
+
+                    if (ctx.mounted) Navigator.pop(ctx);
+
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('✅ Compliance Robot settings saved & synced successfully!'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                      // Trigger immediate check with new credentials
+                      _checkAutomatedComplianceRobot();
+                    }
+                  },
+                  child: const Text('Save Settings', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   // Upload or Edit Card Dialog with active tab pre-selection
@@ -1887,48 +2297,162 @@ Fusion 360 Compliance & Operations Desk''';
                           margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           decoration: BoxDecoration(
-                            color: Colors.red.withValues(alpha: 0.12),
-                            border: Border.all(color: Colors.red.withValues(alpha: 0.4)),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 20),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  'Compliance Alert: $totalCriticalCount expiring ≤ 3 days, $totalExpiredCount expired documents.',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.redAccent,
-                                  ),
-                                ),
+                            color: isDark ? const Color(0xFF450A0A) : const Color(0xFFFEF2F2),
+                            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6), width: 1.2),
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.red.withValues(alpha: isDark ? 0.25 : 0.08),
+                                blurRadius: 10,
+                                offset: const Offset(0, 3),
                               ),
-                              AppBounceable(
-                                onTap: _notifyBroadcastDigest,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF25D366),
-                                    borderRadius: BorderRadius.circular(8),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.redAccent.withValues(alpha: 0.2),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 18),
                                   ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.chat_rounded, color: Colors.white, size: 13),
-                                      SizedBox(width: 5),
-                                      Text(
-                                        'WhatsApp Digest',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '🚨 Urgent Renewal Notice: $totalUrgentCount document(s) expiring within 3 days!',
+                                          style: const TextStyle(
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w800,
+                                            color: Colors.redAccent,
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                        Text(
+                                          'Automated alerts configured for sr.irshath@gmail.com and +971586939371',
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: [
+                                  // WhatsApp Action to +971586939371
+                                  AppBounceable(
+                                    onTap: _notifyAdminWhatsAppDigest,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF25D366),
+                                        borderRadius: BorderRadius.circular(8),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(0xFF25D366).withValues(alpha: 0.3),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.chat_rounded, color: Colors.white, size: 13),
+                                          SizedBox(width: 5),
+                                          Text(
+                                            'WhatsApp Alert (+971 58 693 9371)',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+
+                                  // Email Action to sr.irshath@gmail.com
+                                  AppBounceable(
+                                    onTap: _notifyAdminEmailDigest,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blueAccent,
+                                        borderRadius: BorderRadius.circular(8),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.blueAccent.withValues(alpha: 0.3),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.email_rounded, color: Colors.white, size: 13),
+                                          SizedBox(width: 5),
+                                          Text(
+                                            'Email Alert (sr.irshath@gmail.com)',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+
+                                  // Robot Config Action
+                                  AppBounceable(
+                                    onTap: _showRobotConfigDialog,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF6366F1),
+                                        borderRadius: BorderRadius.circular(8),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.smart_toy_rounded, color: Colors.white, size: 13),
+                                          SizedBox(width: 5),
+                                          Text(
+                                            'Robot Config (Auto-Send)',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
