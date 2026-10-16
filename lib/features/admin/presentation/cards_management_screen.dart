@@ -346,17 +346,21 @@ Fusion 360 Compliance & Operations Desk''';
   }
 
   // Preview Uploaded Document
-  void _showDocumentPreviewDialog(EmployeeCard card) {
-    final docUrl = card.documentUrl;
+  void _showDocumentPreviewDialog(EmployeeCard card) async {
+    final rawDocUrl = card.documentUrl;
     final fileName = card.fileName ?? 'Document';
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    if (docUrl == null || docUrl.isEmpty) {
+    if (rawDocUrl == null || rawDocUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No document attachment found for this card.')),
       );
       return;
     }
+
+    // Generate time-limited signed URL for zero-trust security
+    final docUrl = await SupabaseService().getSignedEmployeeCardUrl(rawDocUrl) ?? rawDocUrl;
+    if (!mounted) return;
 
     Uint8List? imageBytes;
     final isPdf = fileName.toLowerCase().endsWith('.pdf') || docUrl.startsWith('data:application/pdf');
@@ -437,6 +441,27 @@ Fusion 360 Compliance & Operations Desk''';
                       child: Image.memory(
                         imageBytes,
                         fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                )
+              else if (docUrl.startsWith('http') && !isPdf)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    constraints: const BoxConstraints(maxHeight: 380),
+                    color: Colors.black12,
+                    child: InteractiveViewer(
+                      panEnabled: true,
+                      minScale: 0.8,
+                      maxScale: 4.0,
+                      child: Image.network(
+                        docUrl,
+                        fit: BoxFit.contain,
+                        errorBuilder: (ctx, err, stack) => const Padding(
+                          padding: EdgeInsets.all(24.0),
+                          child: Icon(Icons.broken_image_rounded, size: 48, color: Colors.grey),
+                        ),
                       ),
                     ),
                   ),
@@ -551,7 +576,8 @@ Fusion 360 Compliance & Operations Desk''';
           }
           return;
         } else if (docUrl.startsWith('http://') || docUrl.startsWith('https://')) {
-          final uri = Uri.parse(docUrl);
+          final secureUrl = await SupabaseService().getSignedEmployeeCardUrl(docUrl) ?? docUrl;
+          final uri = Uri.parse(secureUrl);
           if (await canLaunchUrl(uri)) {
             await launchUrl(uri, mode: LaunchMode.externalApplication);
             return;

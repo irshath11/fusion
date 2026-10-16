@@ -2476,8 +2476,32 @@ OUTPUT RULES
     renderCardsTable();
   };
 
+  // Generate a secure time-limited signed URL (3600 seconds = 1 hour) for confidential documents
+  async function getSignedCardDocumentUrl(docUrl, expiresIn = 3600) {
+    if (!docUrl || docUrl.startsWith('data:') || !supabaseClient) return docUrl;
+    try {
+      let storagePath = docUrl.trim();
+      if (storagePath.includes('/employee_documents/')) {
+        storagePath = storagePath.split('/employee_documents/')[1];
+      }
+      if (storagePath.includes('?')) {
+        storagePath = storagePath.split('?')[0];
+      }
+      const { data, error } = await supabaseClient.storage
+        .from('employee_documents')
+        .createSignedUrl(storagePath, expiresIn);
+
+      if (!error && data && data.signedUrl) {
+        return data.signedUrl;
+      }
+    } catch (err) {
+      console.warn('Could not generate signed URL, using fallback:', err);
+    }
+    return docUrl;
+  }
+
   // Card Document Viewer Lightbox Modal
-  window.openCardViewer = function(cardId) {
+  window.openCardViewer = async function(cardId) {
     const card = cardsData.find(c => c.id === cardId);
     if (!card) return;
     const emp = employeesData.find(e => e.id === card.employee_id) || { name: 'Staff', employeeCode: 'N/A' };
@@ -2493,18 +2517,24 @@ OUTPUT RULES
 
     if (titleEl) titleEl.textContent = `${card.card_name} — ${emp.name}`;
 
+    // Generate secure time-limited signed URL (1 hour) for zero-trust security
+    let secureDocUrl = card.document_url || '';
+    if (secureDocUrl.startsWith('http')) {
+      secureDocUrl = await getSignedCardDocumentUrl(secureDocUrl, 3600);
+    }
+
     const isPdf = (card.file_name || '').toLowerCase().endsWith('.pdf') || (card.document_url || '').startsWith('data:application/pdf');
 
     if (isPdf) {
       if (imgEl) imgEl.style.display = 'none';
       if (pdfEl) {
-        pdfEl.src = card.document_url || '';
+        pdfEl.src = secureDocUrl || '';
         pdfEl.style.display = 'block';
       }
     } else {
       if (pdfEl) pdfEl.style.display = 'none';
       if (imgEl) {
-        imgEl.src = card.document_url || 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=600&q=80';
+        imgEl.src = secureDocUrl || 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=600&q=80';
         imgEl.style.display = 'inline-block';
       }
     }
@@ -2546,7 +2576,7 @@ OUTPUT RULES
   }
 
   // Download specific card file or generated summary pass
-  window.downloadCardFile = function(cardId) {
+  window.downloadCardFile = async function(cardId) {
     const card = cardsData.find(c => c.id === cardId);
     if (!card) return;
     const emp = employeesData.find(e => e.id === card.employee_id) || { name: 'Staff' };
@@ -2565,8 +2595,10 @@ OUTPUT RULES
       document.body.removeChild(a);
       showToast(`Downloading ${fileName}`, 'success');
     } else if (card.document_url && card.document_url.startsWith('http')) {
-      window.open(card.document_url, '_blank');
-      showToast('Opening document file...', 'info');
+      showToast('Generating secure time-limited download link...', 'info');
+      const secureUrl = await getSignedCardDocumentUrl(card.document_url, 3600);
+      window.open(secureUrl, '_blank');
+      showToast('Opening secure document file...', 'success');
     } else {
       // Generate official text summary pass download
       const content = 

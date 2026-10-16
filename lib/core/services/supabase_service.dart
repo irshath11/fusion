@@ -1393,6 +1393,33 @@ class SupabaseService {
     }
   }
 
+  /// Generates a time-limited signed URL (default 3600 seconds = 1 hour) for confidential card documents
+  /// Ensures zero-trust security so document URLs cannot be permanently shared or accessed.
+  Future<String?> getSignedEmployeeCardUrl(String? documentUrlOrPath, {int expiresIn = 3600}) async {
+    if (!_isInitialized || client == null || documentUrlOrPath == null) return null;
+    final trimmed = documentUrlOrPath.trim();
+    if (trimmed.isEmpty || trimmed.startsWith('data:')) return trimmed;
+
+    try {
+      String storagePath = trimmed;
+      if (storagePath.contains('/employee_documents/')) {
+        storagePath = storagePath.split('/employee_documents/').last;
+      }
+      if (storagePath.contains('?')) {
+        storagePath = storagePath.split('?').first;
+      }
+
+      final signedUrl = await client!.storage.from('employee_documents').createSignedUrl(
+        storagePath,
+        expiresIn,
+      );
+      return signedUrl;
+    } catch (e) {
+      debugPrint('Error generating signed URL for card document: $e');
+      return trimmed;
+    }
+  }
+
   /// Helper to guarantee that a valid employee record exists in public.employees in Supabase
   Future<String?> ensureEmployeeExistsInCloud(
       String employeeIdOrUid, String employeeName) async {
