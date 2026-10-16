@@ -41,6 +41,13 @@
 
   // Cards & Documents DOM Cache
   const cardsTableBody = document.getElementById('cards-table-body');
+  const cardsWalletGrid = document.getElementById('cards-wallet-grid');
+  const cardsWalletView = document.getElementById('cards-wallet-view');
+  const cardsTableContainer = document.getElementById('cards-table-container');
+  const btnCardsViewWallet = document.getElementById('btn-cards-view-wallet');
+  const btnCardsViewTable = document.getElementById('btn-cards-view-table');
+  let currentCardsViewMode = localStorage.getItem('f360_cards_view_mode') || 'wallet';
+
   const cardsSearchInput = document.getElementById('cards-search-input');
   const cardsFilterType = document.getElementById('cards-filter-type');
   const cardsFilterStatus = document.getElementById('cards-filter-status');
@@ -1092,7 +1099,15 @@
 
   function calculateExpiryStatus(expiryDateStr) {
     if (!expiryDateStr) {
-      return { status: 'UNKNOWN', badgeClass: 'badge-neutral', label: 'No Date Set', isCritical: false, daysLeft: 999 };
+      return { 
+        status: 'UNKNOWN', 
+        badgeClass: 'badge-neutral', 
+        statusGlowClass: 'glow-valid', 
+        walletStatusText: 'NO EXPIRY', 
+        label: 'No Date Set', 
+        isCritical: false, 
+        daysLeft: 999 
+      };
     }
 
     const now = new Date();
@@ -1101,7 +1116,15 @@
     // Parse Date
     const parts = expiryDateStr.split('-');
     if (parts.length < 3) {
-      return { status: 'UNKNOWN', badgeClass: 'badge-neutral', label: 'Invalid Date', isCritical: false, daysLeft: 999 };
+      return { 
+        status: 'UNKNOWN', 
+        badgeClass: 'badge-neutral', 
+        statusGlowClass: 'glow-valid', 
+        walletStatusText: 'INVALID DATE', 
+        label: 'Invalid Date', 
+        isCritical: false, 
+        daysLeft: 999 
+      };
     }
     const expDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
     
@@ -1113,6 +1136,8 @@
       return {
         status: 'EXPIRED',
         badgeClass: 'badge-expiry-expired',
+        statusGlowClass: 'glow-critical',
+        walletStatusText: `EXPIRED (${absDays}d ago)`,
         label: `❌ Expired (${absDays}d ago)`,
         isCritical: true,
         daysLeft: diffDays
@@ -1121,6 +1146,8 @@
       return {
         status: 'CRITICAL',
         badgeClass: 'badge-expiry-critical',
+        statusGlowClass: 'glow-critical',
+        walletStatusText: 'EXPIRES TODAY',
         label: '🚨 Expires Today!',
         isCritical: true,
         daysLeft: 0
@@ -1129,6 +1156,8 @@
       return {
         status: 'CRITICAL',
         badgeClass: 'badge-expiry-critical',
+        statusGlowClass: 'glow-critical',
+        walletStatusText: `${diffDays} DAY${diffDays === 1 ? '' : 'S'} LEFT`,
         label: `⚠️ Expires in ${diffDays} day${diffDays === 1 ? '' : 's'}`,
         isCritical: true,
         daysLeft: diffDays
@@ -1137,6 +1166,8 @@
       return {
         status: 'SOON',
         badgeClass: 'badge-expiry-soon',
+        statusGlowClass: 'glow-soon',
+        walletStatusText: `${diffDays} DAYS LEFT`,
         label: `⚠️ ${diffDays} days left`,
         isCritical: false,
         daysLeft: diffDays
@@ -1145,6 +1176,8 @@
       return {
         status: 'VALID',
         badgeClass: 'badge-expiry-valid',
+        statusGlowClass: 'glow-valid',
+        walletStatusText: `VALID (${diffDays}d)`,
         label: `✅ Valid (${diffDays}d left)`,
         isCritical: false,
         daysLeft: diffDays
@@ -1185,6 +1218,124 @@
         return `<span class="badge-doc-type badge-custom-pass">🏷️ ${name || 'Private Pass'}</span>`;
     }
   }
+
+  function formatCardNumberDisplay(num, type) {
+    if (!num) return '•••• •••• ••••';
+    const clean = String(num).trim();
+    if (type === 'EMIRATES_ID') {
+      const digits = clean.replace(/\D/g, '');
+      if (digits.length === 15) {
+        return `${digits.slice(0, 3)} • ${digits.slice(3, 7)} • ${digits.slice(7, 14)} • ${digits.slice(14)}`;
+      }
+    }
+    const digitsOnly = clean.replace(/\s+/g, '');
+    if (/^[A-Za-z0-9]{12,19}$/.test(digitsOnly)) {
+      return digitsOnly.match(/.{1,4}/g).join(' • ');
+    }
+    return clean;
+  }
+
+  function getWalletCardConfig(card) {
+    const type = card.card_type || 'CUSTOM_PASS';
+    switch (type) {
+      case 'EMIRATES_ID':
+        return {
+          typeClass: 'wallet-card-emirates_id',
+          pillClass: 'pill-emirates-id',
+          icon: '🪪',
+          brandTitle: 'UNITED ARAB EMIRATES',
+          badgeText: 'EMIRATES ID'
+        };
+      case 'VISA':
+        return {
+          typeClass: 'wallet-card-visa',
+          pillClass: 'pill-visa',
+          icon: '🛂',
+          brandTitle: 'UAE IMMIGRATION',
+          badgeText: 'RESIDENCE VISA'
+        };
+      case 'PASSPORT':
+        return {
+          typeClass: 'wallet-card-passport',
+          pillClass: 'pill-passport',
+          icon: '📘',
+          brandTitle: 'OFFICIAL PASSPORT',
+          badgeText: 'PASSPORT'
+        };
+      case 'INSURANCE':
+        return {
+          typeClass: 'wallet-card-insurance',
+          pillClass: 'pill-insurance',
+          icon: '🏥',
+          brandTitle: 'HEALTH COMPLIANCE',
+          badgeText: 'HEALTH INSURANCE'
+        };
+      case 'MOPA_PASS':
+        return {
+          typeClass: 'wallet-card-mopa_pass',
+          pillClass: 'pill-mopa',
+          icon: '🎖️',
+          brandTitle: 'EXECUTIVE CLEARANCE',
+          badgeText: 'MOPA PASS'
+        };
+      case 'CISPA_PASS':
+        return {
+          typeClass: 'wallet-card-cispa_pass',
+          pillClass: 'pill-cispa',
+          icon: '🔒',
+          brandTitle: 'CRITICAL INFRASTRUCTURE',
+          badgeText: 'CISPA PASS'
+        };
+      case 'CUSTOM_PASS':
+      default:
+        return {
+          typeClass: 'wallet-card-custom_pass',
+          pillClass: 'pill-custom',
+          icon: '🏷️',
+          brandTitle: 'CORPORATE PASS',
+          badgeText: card.card_name || 'PRIVATE PASS'
+        };
+    }
+  }
+
+  window.setCardsViewMode = function(mode) {
+    currentCardsViewMode = mode;
+    try {
+      localStorage.setItem('f360_cards_view_mode', mode);
+    } catch (e) {}
+
+    const walletView = document.getElementById('cards-wallet-view');
+    const tableView = document.getElementById('cards-table-container');
+    const btnWallet = document.getElementById('btn-cards-view-wallet');
+    const btnTable = document.getElementById('btn-cards-view-table');
+
+    if (btnWallet) btnWallet.classList.toggle('active', mode === 'wallet');
+    if (btnTable) btnTable.classList.toggle('active', mode === 'table');
+
+    if (walletView && tableView) {
+      if (mode === 'wallet') {
+        walletView.style.display = 'block';
+        tableView.style.display = 'none';
+      } else {
+        walletView.style.display = 'none';
+        tableView.style.display = 'block';
+      }
+    }
+  };
+
+  window.copyCardNumber = function(number, evt) {
+    if (evt) evt.stopPropagation();
+    if (!number) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(number).then(() => {
+        showToast(`Copied card number: ${number}`, 'success');
+      }).catch(() => {
+        showToast(`Card number: ${number}`, 'info');
+      });
+    } else {
+      showToast(`Card number: ${number}`, 'info');
+    }
+  };
 
   function updateCardsOverviewMetrics() {
     const totalCount = cardsData.length;
@@ -1629,7 +1780,7 @@
   }
 
   function renderCardsTable() {
-    if (!cardsTableBody) return;
+    if (!cardsTableBody && !cardsWalletGrid) return;
 
     const query = (cardsSearchInput?.value || '').toLowerCase().trim();
     const typeFilter = cardsFilterType?.value || 'ALL';
@@ -1663,105 +1814,261 @@
       return true;
     });
 
+    // Update Counter Badge
+    const elBadge = document.getElementById('cards-count-badge');
+    if (elBadge) {
+      elBadge.textContent = `${filtered.length} Document${filtered.length === 1 ? '' : 's'}`;
+    }
+
+    // 1. Render Empty State if no cards match
     if (filtered.length === 0) {
-      cardsTableBody.innerHTML = `
-        <tr>
-          <td colspan="8" style="text-align: center; padding: 40px; color: var(--text-tertiary);">
-            <div style="font-size: 32px; margin-bottom: 8px;">🪪</div>
-            <div style="font-size: 14px; font-weight: 500; color: var(--text-secondary);">No employee cards or passes match your filters</div>
-            <div style="font-size: 12px; margin-top: 4px;">Click "+ Upload Employee Card" above to add new cards or clear your search criteria.</div>
-          </td>
-        </tr>
-      `;
+      if (cardsTableBody) {
+        cardsTableBody.innerHTML = `
+          <tr>
+            <td colspan="8" style="text-align: center; padding: 40px; color: var(--text-tertiary);">
+              <div style="font-size: 32px; margin-bottom: 8px;">🪪</div>
+              <div style="font-size: 14px; font-weight: 500; color: var(--text-secondary);">No employee cards or passes match your filters</div>
+              <div style="font-size: 12px; margin-top: 4px;">Click "+ Upload Employee Card" above to add new cards or clear your search criteria.</div>
+            </td>
+          </tr>
+        `;
+      }
+      if (cardsWalletGrid) {
+        cardsWalletGrid.innerHTML = `
+          <div class="wallet-empty-state">
+            <div class="empty-icon">🪪</div>
+            <div class="empty-title">No Matching Employee Passes Found</div>
+            <div class="empty-desc">No cards match your filter criteria or search keyword. Try adjusting filters or upload a new employee pass.</div>
+            <button class="btn btn-primary" onclick="openCardDrawer()">
+              + Upload Employee Card
+            </button>
+          </div>
+        `;
+      }
+      setCardsViewMode(currentCardsViewMode);
       return;
     }
 
-    cardsTableBody.innerHTML = filtered.map(card => {
-      const emp = employeesData.find(e => e.id === card.employee_id) || { 
-        name: 'Unknown Staff', 
-        employeeCode: 'N/A', 
-        department: 'Operations',
-        phone: '',
-        email: ''
-      };
-      const st = calculateExpiryStatus(card.expiry_date);
-      const typeBadge = getCardTypeBadge(card.card_type, card.card_name);
+    // 2. Render Compact Table View
+    if (cardsTableBody) {
+      cardsTableBody.innerHTML = filtered.map(card => {
+        const emp = employeesData.find(e => e.id === card.employee_id) || { 
+          name: 'Unknown Staff', 
+          employeeCode: 'N/A', 
+          department: 'Operations',
+          phone: '',
+          email: ''
+        };
+        const st = calculateExpiryStatus(card.expiry_date);
+        const typeBadge = getCardTypeBadge(card.card_type, card.card_name);
 
-      const hasDoc = !!card.document_url;
-      const docBtn = `
-        <div style="display: flex; gap: 4px; align-items: center;">
-          ${hasDoc ? `
-            <button class="doc-thumbnail-btn" onclick="openCardViewer('${card.id}')" title="Preview Attached Document">
-              <span>📄</span>
-              <span>View</span>
+        const hasDoc = !!card.document_url;
+        const docBtn = `
+          <div style="display: flex; gap: 4px; align-items: center;">
+            ${hasDoc ? `
+              <button class="doc-thumbnail-btn" onclick="openCardViewer('${card.id}')" title="Preview Attached Document">
+                <span>📄</span>
+                <span>View</span>
+              </button>
+            ` : `<span style="color: var(--text-tertiary); font-size: 11px;">No scan</span>`}
+            <button class="btn-action" onclick="downloadCardFile('${card.id}')" title="Download Card Document / Pass" style="padding: 4px 6px; font-size: 12px;">
+              ⬇️
             </button>
-          ` : `<span style="color: var(--text-tertiary); font-size: 11px;">No scan</span>`}
-          <button class="btn-action" onclick="downloadCardFile('${card.id}')" title="Download Card Document / Pass" style="padding: 4px 6px; font-size: 12px;">
-            ⬇️
-          </button>
-        </div>
-      `;
+          </div>
+        `;
 
-      return `
-        <tr>
-          <td>
-            <div class="employee-meta">
-              <div class="emp-avatar">${(emp.name || 'E').charAt(0).toUpperCase()}</div>
-              <div class="emp-details">
-                <span class="emp-name">${emp.name}</span>
-                <span class="emp-code">${emp.employeeCode} • ${emp.department}</span>
+        return `
+          <tr>
+            <td>
+              <div class="employee-meta">
+                <div class="emp-avatar">${(emp.name || 'E').charAt(0).toUpperCase()}</div>
+                <div class="emp-details">
+                  <span class="emp-name">${emp.name}</span>
+                  <span class="emp-code">${emp.employeeCode} • ${emp.department}</span>
+                </div>
+              </div>
+            </td>
+            <td>
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                ${typeBadge}
+                <span style="font-size: 11px; color: var(--text-secondary);">${card.card_name}</span>
+              </div>
+            </td>
+            <td>
+              <span class="detail-pill">${card.card_number}</span>
+            </td>
+            <td>
+              <span style="font-weight: 500;">${formatDisplayDate(card.expiry_date)}</span>
+              ${card.issue_date ? `<div style="font-size: 10px; color: var(--text-tertiary);">Issued: ${formatDisplayDate(card.issue_date)}</div>` : ''}
+            </td>
+            <td>
+              <span class="badge ${st.badgeClass}">
+                ${st.label}
+              </span>
+              ${card.last_notified_at ? `
+                <div style="font-size: 10px; color: var(--text-tertiary); margin-top: 2px;">
+                  Notified: ${new Date(card.last_notified_at).toLocaleDateString()}
+                </div>
+              ` : ''}
+            </td>
+            <td>
+              ${docBtn}
+            </td>
+            <td style="text-align: center;">
+              <div style="display: inline-flex; gap: 6px; align-items: center;">
+                <button class="btn-whatsapp btn-action-compact" onclick="notifyCardWhatsApp('${card.id}')" title="Send WhatsApp Expiry Alert">
+                  <span>💬</span> WhatsApp
+                </button>
+                <button class="btn-email btn-action-compact" onclick="notifyCardEmail('${card.id}')" title="Send Email Expiry Alert">
+                  <span>✉️</span> Email
+                </button>
+              </div>
+            </td>
+            <td style="text-align: right;">
+              <div class="action-btn-group" style="justify-content: flex-end;">
+                <button class="btn-action edit" onclick="editCard('${card.id}')" title="Edit Card Details">
+                  ✏️
+                </button>
+                <button class="btn-action delete" onclick="deleteCard('${card.id}')" title="Delete Card">
+                  🗑️
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // 3. Render Digital ID & Executive Wallet Cards Grid
+    if (cardsWalletGrid) {
+      cardsWalletGrid.innerHTML = filtered.map(card => {
+        const emp = employeesData.find(e => e.id === card.employee_id) || { 
+          name: 'Unknown Staff', 
+          employeeCode: 'N/A', 
+          department: 'Operations',
+          phone: '',
+          email: ''
+        };
+        const st = calculateExpiryStatus(card.expiry_date);
+        const cfg = getWalletCardConfig(card);
+        const formattedNum = formatCardNumberDisplay(card.card_number, card.card_type);
+        const avatarLetter = (emp.name || 'E').charAt(0).toUpperCase();
+        const hasDoc = !!card.document_url;
+
+        return `
+          <div class="wallet-pass-card ${cfg.typeClass} ${st.isCritical ? 'is-critical-pass' : ''}">
+            
+            <!-- Card Header: EMV Smart Chip + Contactless Wave + Pass Type Pill -->
+            <div class="wallet-card-header">
+              <div class="wallet-card-chip-group">
+                <div class="emv-chip" title="EMV Smart Contactless Security Chip">
+                  <div class="emv-chip-lines"></div>
+                </div>
+                <div class="nfc-signal" title="NFC Contactless Compliant">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                    <path d="M8.5 16.5a5 5 0 0 1 0-7"/>
+                    <path d="M12 19a8.5 8.5 0 0 0 0-14"/>
+                    <path d="M15.5 21.5a12 12 0 0 0 0-19"/>
+                  </svg>
+                </div>
+              </div>
+              <div class="wallet-pass-pill">
+                <span>${cfg.icon}</span>
+                <span>${cfg.badgeText}</span>
               </div>
             </div>
-          </td>
-          <td>
-            <div style="display: flex; flex-direction: column; gap: 3px;">
-              ${typeBadge}
-              <span style="font-size: 11px; color: var(--text-secondary);">${card.card_name}</span>
-            </div>
-          </td>
-          <td>
-            <span class="detail-pill">${card.card_number}</span>
-          </td>
-          <td>
-            <span style="font-weight: 500;">${formatDisplayDate(card.expiry_date)}</span>
-            ${card.issue_date ? `<div style="font-size: 10px; color: var(--text-tertiary);">Issued: ${formatDisplayDate(card.issue_date)}</div>` : ''}
-          </td>
-          <td>
-            <span class="badge ${st.badgeClass}">
-              ${st.label}
-            </span>
-            ${card.last_notified_at ? `
-              <div style="font-size: 10px; color: var(--text-tertiary); margin-top: 2px;">
-                Notified: ${new Date(card.last_notified_at).toLocaleDateString()}
+
+            <!-- Card Body: Employee Identity & Embossed Monospace Number -->
+            <div class="wallet-card-body">
+              <div class="wallet-emp-row">
+                <div class="wallet-emp-avatar">${avatarLetter}</div>
+                <div class="wallet-emp-info">
+                  <div class="wallet-emp-name" title="${emp.name}">${emp.name}</div>
+                  <div class="wallet-emp-meta">
+                    <span class="wallet-emp-code">${emp.employeeCode}</span>
+                    <span class="wallet-dot">•</span>
+                    <span class="wallet-emp-dept">${emp.department}</span>
+                  </div>
+                </div>
               </div>
-            ` : ''}
-          </td>
-          <td>
-            ${docBtn}
-          </td>
-          <td style="text-align: center;">
-            <div style="display: inline-flex; gap: 6px; align-items: center;">
-              <button class="btn-whatsapp btn-action-compact" onclick="notifyCardWhatsApp('${card.id}')" title="Send WhatsApp Expiry Alert">
-                <span>💬</span> WhatsApp
+
+              <!-- Embossed Monospace Number Box with Click-to-Copy -->
+              <div class="wallet-number-row" onclick="copyCardNumber('${card.card_number}', event)" title="Click to copy card number">
+                <span class="wallet-card-number">${formattedNum}</span>
+                <span class="wallet-copy-icon" title="Copy Number">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  </svg>
+                </span>
+              </div>
+            </div>
+
+            <!-- Card Expiry & Urgency Status Glow Banner -->
+            <div class="wallet-card-footer">
+              <div class="wallet-date-block">
+                <span class="wallet-date-label">VALID THRU</span>
+                <span class="wallet-date-value">${formatDisplayDate(card.expiry_date)}</span>
+              </div>
+              <div class="wallet-status-glow-pill ${st.statusGlowClass}" title="${st.label}">
+                <span class="status-glow-dot"></span>
+                <span class="status-glow-text">${st.walletStatusText}</span>
+              </div>
+            </div>
+
+            <!-- Frosted Glass Interactive Actions Dock -->
+            <div class="wallet-actions-dock">
+              ${hasDoc ? `
+                <button class="wallet-dock-btn preview" onclick="openCardViewer('${card.id}')" title="Preview Attached Document">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                  <span>Preview</span>
+                </button>
+              ` : `
+                <button class="wallet-dock-btn disabled" disabled title="No Document Scan Attached">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  </svg>
+                  <span>No Scan</span>
+                </button>
+              `}
+              <button class="wallet-dock-btn download" onclick="downloadCardFile('${card.id}')" title="Download Document / Record">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
               </button>
-              <button class="btn-email btn-action-compact" onclick="notifyCardEmail('${card.id}')" title="Send Email Expiry Alert">
-                <span>✉️</span> Email
+              <button class="wallet-dock-btn whatsapp" onclick="notifyCardWhatsApp('${card.id}')" title="1-Click WhatsApp Expiry Reminder">
+                <span>💬</span>
+              </button>
+              <button class="wallet-dock-btn email" onclick="notifyCardEmail('${card.id}')" title="1-Click Email Expiry Reminder">
+                <span>✉️</span>
+              </button>
+              <button class="wallet-dock-btn edit" onclick="editCard('${card.id}')" title="Edit Card Details">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </button>
+              <button class="wallet-dock-btn delete" onclick="deleteCard('${card.id}')" title="Delete Card">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
               </button>
             </div>
-          </td>
-          <td style="text-align: right;">
-            <div class="action-btn-group" style="justify-content: flex-end;">
-              <button class="btn-action edit" onclick="editCard('${card.id}')" title="Edit Card Details">
-                ✏️
-              </button>
-              <button class="btn-action delete" onclick="deleteCard('${card.id}')" title="Delete Card">
-                🗑️
-              </button>
-            </div>
-          </td>
-        </tr>
-      `;
-    }).join('');
+
+          </div>
+        `;
+      }).join('');
+    }
+
+    // 4. Ensure Active View Mode is synchronized
+    setCardsViewMode(currentCardsViewMode);
   }
 
   // Card Drawer Open / Close / File Handlers
@@ -1821,6 +2128,9 @@
     if (cardDrawerBackdrop) cardDrawerBackdrop.classList.remove('active');
     clearCardPendingFile();
   }
+
+  window.openCardDrawer = openCardDrawer;
+  window.closeCardDrawer = closeCardDrawer;
 
   // Gemini AI Key Management
   function getGeminiApiKey() {

@@ -393,6 +393,18 @@
                   <option value="VALID">✅ Valid (> 30 Days)</option>
                 </select>
 
+                <!-- Digital ID Wallet vs Compact Table View Toggle -->
+                <div class="view-mode-pill-group">
+                  <button id="btn-cards-view-wallet" class="view-pill-btn active" onclick="setCardsViewMode('wallet')" title="Digital ID Wallet Passes">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                    <span>Wallet Passes</span>
+                  </button>
+                  <button id="btn-cards-view-table" class="view-pill-btn" onclick="setCardsViewMode('table')" title="Compact Data Table">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    <span>Compact Table</span>
+                  </button>
+                </div>
+
                 <button id="btn-export-cards" class="btn btn-secondary">
                   📥 Export
                 </button>
@@ -403,7 +415,15 @@
               </div>
             </div>
 
-            <div class="data-table-container">
+            <!-- Digital ID Wallet Passes View -->
+            <div id="cards-wallet-view" class="wallet-passes-container">
+              <div id="cards-wallet-grid" class="wallet-cards-grid">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
+            <!-- Compact Table View -->
+            <div id="cards-table-container" class="data-table-container" style="display: none;">
               <table class="data-table">
                 <thead>
                   <tr>

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io' as io;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -41,6 +42,7 @@ class _CardsManagementScreenState extends State<CardsManagementScreen>
   bool _isLoading = true;
   String _searchQuery = '';
   String _selectedStatusFilter = 'ALL';
+  bool _isGridView = true;
 
   // Dedicated tabs for: Emirates ID, Visa, Passport, Insurance, MOPA pass, CISPA pass + All
   final List<Map<String, dynamic>> _tabsConfig = const [
@@ -2536,11 +2538,12 @@ Fusion 360 Compliance & Operations Desk''';
                   ),
                 ),
 
-                // Tab Content View
+                // Tab Content View - Only build the currently active tab to prevent 7x layout overhead
                 Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: _tabsConfig.map((t) {
+                  child: AnimatedBuilder(
+                    animation: _tabController,
+                    builder: (context, _) {
+                      final t = _tabsConfig[_tabController.index];
                       return _buildTabView(
                         tabId: t['id'] as String,
                         tabName: t['label'] as String,
@@ -2549,7 +2552,7 @@ Fusion 360 Compliance & Operations Desk''';
                         tabColor: t['color'] as Color,
                         isDark: isDark,
                       );
-                    }).toList(),
+                    },
                   ),
                 ),
               ],
@@ -2636,54 +2639,116 @@ Fusion 360 Compliance & Operations Desk''';
             ),
             const SizedBox(height: 16),
 
-            // Search and Status Filter Bar
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.search_rounded),
-                      hintText: 'Search $tabName by employee name, code, or number...',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+            // Search and Status Filter Bar (Responsive to prevent RenderFlex overflow)
+            LayoutBuilder(
+              builder: (context, searchConstraints) {
+                final isCompact = searchConstraints.maxWidth < 680;
+                final searchField = TextField(
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    hintText: 'Search $tabName by employee name, code, or number...',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+                  ),
+                  onChanged: (val) => setState(() => _searchQuery = val),
+                );
+
+                final filterControls = Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButton<String>(
+                      value: _selectedStatusFilter,
+                      underline: const SizedBox(),
+                      items: const [
+                        DropdownMenuItem(value: 'ALL', child: Text('All Statuses')),
+                        DropdownMenuItem(value: 'CRITICAL', child: Text('🚨 ≤ 3 Days')),
+                        DropdownMenuItem(value: 'EXPIRED', child: Text('❌ Expired')),
+                        DropdownMenuItem(value: 'SOON', child: Text('⚠️ ≤ 30 Days')),
+                        DropdownMenuItem(value: 'VALID', child: Text('✅ Valid')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setState(() => _selectedStatusFilter = val);
+                      },
                     ),
-                    onChanged: (val) => setState(() => _searchQuery = val),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                DropdownButton<String>(
-                  value: _selectedStatusFilter,
-                  underline: const SizedBox(),
-                  items: const [
-                    DropdownMenuItem(value: 'ALL', child: Text('All Statuses')),
-                    DropdownMenuItem(value: 'CRITICAL', child: Text('🚨 ≤ 3 Days')),
-                    DropdownMenuItem(value: 'EXPIRED', child: Text('❌ Expired')),
-                    DropdownMenuItem(value: 'SOON', child: Text('⚠️ ≤ 30 Days')),
-                    DropdownMenuItem(value: 'VALID', child: Text('✅ Valid')),
+                    const SizedBox(width: 8),
+                    // View Mode Toggle (Grid vs List)
+                    Container(
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E293B) : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade300),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: Icon(
+                              Icons.grid_view_rounded,
+                              size: 18,
+                              color: _isGridView ? AppColors.primaryLight : (isDark ? Colors.grey : Colors.grey.shade600),
+                            ),
+                            tooltip: 'Digital ID Wallet Passes (Grid)',
+                            onPressed: () => setState(() => _isGridView = true),
+                            padding: const EdgeInsets.all(8),
+                            constraints: const BoxConstraints(),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              Icons.view_agenda_rounded,
+                              size: 18,
+                              color: !_isGridView ? AppColors.primaryLight : (isDark ? Colors.grey : Colors.grey.shade600),
+                            ),
+                            tooltip: 'Compact List View',
+                            onPressed: () => setState(() => _isGridView = false),
+                            padding: const EdgeInsets.all(8),
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                        foregroundColor: AppColors.primaryLight,
+                        side: const BorderSide(color: AppColors.primaryLight, width: 1.2),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      ),
+                      icon: const Icon(Icons.download_rounded, size: 16),
+                      label: const Text('Download All', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      onPressed: () => _downloadAllCardsReport(filtered, tabFullName),
+                    ),
                   ],
-                  onChanged: (val) {
-                    if (val != null) setState(() => _selectedStatusFilter = val);
-                  },
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-                    foregroundColor: AppColors.primaryLight,
-                    side: const BorderSide(color: AppColors.primaryLight, width: 1.2),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                  ),
-                  icon: const Icon(Icons.download_rounded, size: 16),
-                  label: const Text('Download All', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  onPressed: () => _downloadAllCardsReport(filtered, tabFullName),
-                ),
-              ],
+                );
+
+                if (isCompact) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      searchField,
+                      const SizedBox(height: 10),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: filterControls,
+                      ),
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    Expanded(child: searchField),
+                    const SizedBox(width: 10),
+                    filterControls,
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 16),
           ],
 
-          // 2. Cards List or Dedicated Empty State
+          // 2. Cards Grid / List or Dedicated Empty State
           if (filtered.isEmpty)
             _buildEmptyState(
               tabId: tabId,
@@ -2694,331 +2759,10 @@ Fusion 360 Compliance & Operations Desk''';
               isDark: isDark,
               isSearchFiltered: totalCount > 0,
             )
+          else if (_isGridView)
+            _buildCardsGrid(filtered, isDark, tabIcon, tabColor)
           else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: filtered.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final card = filtered[index];
-                final emp = _getEmployee(card.employeeId);
-                final cardColor = _getCardTypeColor(card.cardType);
-
-                Color statusBg = Colors.teal.withValues(alpha: 0.15);
-                Color statusFg = Colors.teal;
-                if (card.isExpired) {
-                  statusBg = Colors.red.withValues(alpha: 0.18);
-                  statusFg = Colors.redAccent;
-                } else if (card.isCritical) {
-                  statusBg = Colors.orange.withValues(alpha: 0.2);
-                  statusFg = Colors.deepOrange;
-                } else if (card.isExpiringSoon) {
-                  statusBg = Colors.amber.withValues(alpha: 0.15);
-                  statusFg = Colors.amber.shade800;
-                }
-
-                return AppGlassCard(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          // Employee Avatar
-                          EmployeeAvatar(
-                            photoUrl: emp?.photoUrl,
-                            fullName: emp?.name ?? 'Staff',
-                            radius: 20,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  emp?.name ?? 'Staff Member',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                ),
-                                Text(
-                                  '${emp?.employeeCode ?? 'EMP'} • ${emp?.department ?? 'Operations'}',
-                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                                ),
-                              ],
-                            ),
-                          ),
-                          // Status Badge
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: statusBg,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: statusFg.withValues(alpha: 0.4)),
-                            ),
-                            child: Text(
-                              card.statusLabel,
-                              style: TextStyle(
-                                color: statusFg,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Divider(height: 18),
-
-                      // Document Info Row
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: cardColor.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: cardColor.withValues(alpha: 0.3)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(tabIcon, size: 12, color: cardColor),
-                                const SizedBox(width: 5),
-                                Text(
-                                  card.cardName,
-                                  style: TextStyle(
-                                    color: cardColor,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              '# ${card.cardNumber}',
-                              style: const TextStyle(
-                                fontFamily: 'monospace',
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            'Expiry: ${_dateFormat.format(card.expiryDate)}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.grey[300] : Colors.grey[800],
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      if (card.notes != null && card.notes!.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          'Note: ${card.notes}',
-                          style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                        ),
-                      ],
-
-                      // Attached Document Indicator & View Link
-                      if (card.fileName != null || card.documentUrl != null) ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.blue.withValues(alpha: 0.12) : Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: isDark ? Colors.blue.shade800.withValues(alpha: 0.3) : Colors.blue.shade200,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                card.fileName?.toLowerCase().endsWith('.pdf') == true
-                                    ? Icons.picture_as_pdf_rounded
-                                    : Icons.attach_file_rounded,
-                                size: 14,
-                                color: isDark ? Colors.blue.shade300 : Colors.blue.shade700,
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  card.fileName ?? 'Uploaded Document',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: isDark ? Colors.blue.shade200 : Colors.blue.shade900,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (card.documentUrl != null && card.documentUrl!.isNotEmpty) ...[
-                                const SizedBox(width: 8),
-                                InkWell(
-                                  onTap: () => _showDocumentPreviewDialog(card),
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.visibility_rounded,
-                                          size: 13,
-                                          color: isDark ? Colors.cyanAccent : Colors.teal.shade800,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'View',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: isDark ? Colors.cyanAccent : Colors.teal.shade800,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                              ],
-                              InkWell(
-                                onTap: () => _downloadCardDocument(card),
-                                borderRadius: BorderRadius.circular(4),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.download_rounded,
-                                        size: 13,
-                                        color: isDark ? Colors.amberAccent : Colors.amber.shade900,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Download',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: isDark ? Colors.amberAccent : Colors.amber.shade900,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 10),
-
-                      // Actions: Download, WhatsApp, Email, View Doc, Edit, Delete
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          // Download Action Button
-                          IconButton(
-                            icon: const Icon(Icons.download_rounded, size: 18, color: AppColors.primaryLight),
-                            tooltip: 'Download Document / Card Pass',
-                            onPressed: () => _downloadCardDocument(card),
-                          ),
-                          const SizedBox(width: 4),
-
-                          // Document Preview Action Button
-                          if (card.documentUrl != null && card.documentUrl!.isNotEmpty) ...[
-                            IconButton(
-                              icon: const Icon(Icons.remove_red_eye_outlined, size: 18, color: Colors.teal),
-                              tooltip: 'View Uploaded Document',
-                              onPressed: () => _showDocumentPreviewDialog(card),
-                            ),
-                            const SizedBox(width: 4),
-                          ],
-
-                          // 1-Click WhatsApp Notification Trigger
-                          AppBounceable(
-                            onTap: () => _notifyWhatsApp(card),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF25D366),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.chat_rounded, color: Colors.white, size: 13),
-                                  SizedBox(width: 5),
-                                  Text(
-                                    'WhatsApp',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-
-                          // 1-Click Email Notification Trigger
-                          AppBounceable(
-                            onTap: () => _notifyEmail(card),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.blueAccent,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.email_rounded, color: Colors.white, size: 13),
-                                  SizedBox(width: 5),
-                                  Text(
-                                    'Email',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-
-                          // Edit Button
-                          IconButton(
-                            icon: const Icon(Icons.edit_rounded, size: 18),
-                            tooltip: 'Edit Document',
-                            onPressed: () => _showAddEditCardDialog(cardToEdit: card),
-                          ),
-
-                          // Delete Button
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
-                            tooltip: 'Delete Document',
-                            onPressed: () => _deleteCard(card),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+            _buildCardsList(filtered, isDark, tabIcon, tabColor),
 
           const SizedBox(height: 80),
         ],
@@ -3105,6 +2849,1059 @@ Fusion 360 Compliance & Operations Desk''';
     );
   }
 
+  Color _getCardColor(String cardType, bool isDark) {
+    if (isDark) {
+      switch (cardType) {
+        case 'EMIRATES_ID':
+          return const Color(0xFF13221C); // Deep muted emerald
+        case 'VISA':
+          return const Color(0xFF121B2B); // Deep muted navy
+        case 'PASSPORT':
+          return const Color(0xFF24151B); // Deep muted wine
+        case 'INSURANCE':
+          return const Color(0xFF102424); // Deep muted teal
+        case 'MOPA_PASS':
+          return const Color(0xFF211D12); // Deep muted slate-gold
+        case 'CISPA_PASS':
+          return const Color(0xFF241618); // Deep muted crimson-slate
+        case 'CUSTOM_PASS':
+        default:
+          return const Color(0xFF1B1B26); // Deep muted slate
+      }
+    } else {
+      switch (cardType) {
+        case 'EMIRATES_ID':
+          return const Color(0xFFF0FDF4); // Softest emerald tint
+        case 'VISA':
+          return const Color(0xFFF0F7FF); // Softest sky tint
+        case 'PASSPORT':
+          return const Color(0xFFFFF1F2); // Softest rose tint
+        case 'INSURANCE':
+          return const Color(0xFFF0FDFA); // Softest teal tint
+        case 'MOPA_PASS':
+          return const Color(0xFFFEFCE8); // Softest warm amber tint
+        case 'CISPA_PASS':
+          return const Color(0xFFFFF7ED); // Softest warm orange tint
+        case 'CUSTOM_PASS':
+        default:
+          return const Color(0xFFF8FAFC); // Clean enterprise neutral slate
+      }
+    }
+  }
+
+  Color _getCardAccentBorder(String cardType, bool isDark) {
+    switch (cardType) {
+      case 'EMIRATES_ID':
+        return const Color(0xFF059669);
+      case 'VISA':
+        return const Color(0xFF2563EB);
+      case 'PASSPORT':
+        return const Color(0xFFE11D48);
+      case 'INSURANCE':
+        return const Color(0xFF0D9488);
+      case 'MOPA_PASS':
+        return const Color(0xFFD97706);
+      case 'CISPA_PASS':
+        return const Color(0xFFEA580C);
+      case 'CUSTOM_PASS':
+      default:
+        return const Color(0xFF6366F1);
+    }
+  }
+
+  String _formatCardNumber(String number, String cardType) {
+    if (number.isEmpty) return '•••• •••• ••••';
+    final clean = number.trim();
+    if (cardType == 'EMIRATES_ID') {
+      final digits = clean.replaceAll(RegExp(r'\D'), '');
+      if (digits.length == 15) {
+        return '${digits.substring(0, 3)} • ${digits.substring(3, 7)} • ${digits.substring(7, 14)} • ${digits.substring(14)}';
+      }
+    }
+    final noSpaces = clean.replaceAll(' ', '');
+    if (RegExp(r'^[A-Za-z0-9]{12,19}$').hasMatch(noSpaces)) {
+      final buffer = StringBuffer();
+      for (int i = 0; i < noSpaces.length; i++) {
+        if (i > 0 && i % 4 == 0) buffer.write(' • ');
+        buffer.write(noSpaces[i]);
+      }
+      return buffer.toString();
+    }
+    return clean;
+  }
+
+  Widget _buildEmvChip() {
+    return Container(
+      width: 36,
+      height: 26,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(6),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFFDE68A),
+            Color(0xFFD97706),
+            Color(0xFFFBBF24),
+            Color(0xFFB45309),
+          ],
+        ),
+        border: Border.all(color: const Color(0xFFB45309), width: 0.6),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.45),
+            blurRadius: 4,
+            offset: const Offset(0, 1.5),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Container(
+          width: 26,
+          height: 16,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(
+              color: const Color(0xFF78350F).withValues(alpha: 0.5),
+              width: 0.8,
+            ),
+          ),
+          child: Stack(
+            children: [
+              Center(
+                child: Container(
+                  height: 0.8,
+                  color: const Color(0xFF78350F).withValues(alpha: 0.5),
+                ),
+              ),
+              Center(
+                child: Container(
+                  width: 0.8,
+                  color: const Color(0xFF78350F).withValues(alpha: 0.5),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardsGrid(
+    List<EmployeeCard> filtered,
+    bool isDark,
+    IconData tabIcon,
+    Color tabColor,
+  ) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final int crossAxisCount;
+        if (width >= 1150) {
+          crossAxisCount = 3;
+        } else if (width >= 650) {
+          crossAxisCount = 2;
+        } else {
+          crossAxisCount = 1;
+        }
+
+        if (crossAxisCount == 1) {
+          return ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: filtered.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 16),
+            itemBuilder: (context, index) {
+              return _buildProfessionalWalletCard(
+                filtered[index],
+                isDark,
+                tabIcon,
+                tabColor,
+              );
+            },
+          );
+        }
+
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: filtered.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            mainAxisExtent: 320,
+          ),
+          itemBuilder: (context, index) {
+            return _buildProfessionalWalletCard(
+              filtered[index],
+              isDark,
+              tabIcon,
+              tabColor,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildProfessionalWalletCard(
+    EmployeeCard card,
+    bool isDark,
+    IconData tabIcon,
+    Color tabColor,
+  ) {
+    final emp = _getEmployee(card.employeeId);
+    final cardBgColor = _getCardColor(card.cardType, isDark);
+    final accentBorder = _getCardAccentBorder(card.cardType, isDark);
+    final formattedNumber = _formatCardNumber(card.cardNumber, card.cardType);
+
+    Color statusGlowColor = const Color(0xFF10B981);
+    Color statusBg = isDark
+        ? const Color(0xFF10B981).withValues(alpha: 0.22)
+        : const Color(0xFF10B981).withValues(alpha: 0.12);
+    Color statusTextColor = isDark ? Colors.white : const Color(0xFF047857);
+    String statusText = 'VALID (${card.daysUntilExpiry}d)';
+    bool isAlertPulse = false;
+
+    if (card.isExpired) {
+      statusGlowColor = const Color(0xFFEF4444);
+      statusBg = isDark
+          ? const Color(0xFFEF4444).withValues(alpha: 0.32)
+          : const Color(0xFFEF4444).withValues(alpha: 0.12);
+      statusTextColor = isDark ? Colors.white : const Color(0xFFB91C1C);
+      statusText = 'EXPIRED (${card.daysUntilExpiry.abs()}d ago)';
+      isAlertPulse = true;
+    } else if (card.isCritical) {
+      statusGlowColor = const Color(0xFFEF4444);
+      statusBg = isDark
+          ? const Color(0xFFEF4444).withValues(alpha: 0.32)
+          : const Color(0xFFEF4444).withValues(alpha: 0.12);
+      statusTextColor = isDark ? Colors.white : const Color(0xFFB91C1C);
+      statusText = card.daysUntilExpiry == 0 ? 'EXPIRES TODAY' : '${card.daysUntilExpiry}D LEFT';
+      isAlertPulse = true;
+    } else if (card.isExpiringSoon) {
+      statusGlowColor = const Color(0xFFF59E0B);
+      statusBg = isDark
+          ? const Color(0xFFF59E0B).withValues(alpha: 0.26)
+          : const Color(0xFFF59E0B).withValues(alpha: 0.12);
+      statusTextColor = isDark ? Colors.white : const Color(0xFFB45309);
+      statusText = '${card.daysUntilExpiry} DAYS LEFT';
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cardBgColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isAlertPulse
+              ? const Color(0xFFEF4444).withValues(alpha: 0.85)
+              : accentBorder.withValues(alpha: 0.45),
+          width: isAlertPulse ? 1.8 : 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isAlertPulse
+                ? const Color(0xFFEF4444).withValues(alpha: isDark ? 0.35 : 0.2)
+                : (isDark ? Colors.black.withValues(alpha: 0.35) : Colors.black.withValues(alpha: 0.05)),
+            blurRadius: isDark ? 10 : 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          children: [
+            // Top specular shine
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                height: 2.5,
+                color: isAlertPulse ? const Color(0xFFEF4444) : accentBorder,
+              ),
+            ),
+
+
+
+            // Card Body
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 1. Header Row (EMV Chip + Contactless + Pass Pill)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                      child: Row(
+                        children: [
+                          _buildEmvChip(),
+                          const SizedBox(width: 10),
+                          Icon(
+                            Icons.wifi_tethering_rounded,
+                            size: 18,
+                            color: isDark ? Colors.white60 : Colors.blueGrey.shade400,
+                          ),
+                          const Spacer(),
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: accentBorder.withValues(alpha: isDark ? 0.4 : 0.3)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(tabIcon, size: 12, color: accentBorder),
+                                  const SizedBox(width: 5),
+                                  Flexible(
+                                    child: Text(
+                                      card.cardName.toUpperCase(),
+                                      style: TextStyle(
+                                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.5,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // 2. Employee Identity Row
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: accentBorder.withValues(alpha: 0.4),
+                                width: 1.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: isDark ? Colors.black38 : Colors.grey.withValues(alpha: 0.2),
+                                  blurRadius: 4,
+                                ),
+                              ],
+                            ),
+                            child: EmployeeAvatar(
+                              photoUrl: emp?.photoUrl,
+                              fullName: emp?.name ?? 'Staff',
+                              radius: 18,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  emp?.name ?? 'Staff Member',
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14.5,
+                                    letterSpacing: 0.2,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${emp?.employeeCode ?? 'EMP'} • ${emp?.department ?? 'Operations'}',
+                                  style: TextStyle(
+                                    color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
+                                    fontSize: 11,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // 3. Monospaced Embossed Number with Click-to-Copy
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: InkWell(
+                        onTap: () {
+                          Clipboard.setData(ClipboardData(text: card.cardNumber));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Copied card number: ${card.cardNumber}'),
+                              duration: const Duration(seconds: 2),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  formattedNumber,
+                                  style: TextStyle(
+                                    fontFamily: 'monospace',
+                                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12.5,
+                                    letterSpacing: 1.1,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Icon(
+                                Icons.copy_rounded,
+                                size: 12,
+                                color: isDark ? Colors.white60 : Colors.blueGrey.shade400,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // 4. Expiry Date & Urgency Status Glow Banner
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'VALID THRU',
+                                style: TextStyle(
+                                  color: isDark ? Colors.grey.shade400 : const Color(0xFF64748B),
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _dateFormat.format(card.expiryDate),
+                                style: TextStyle(
+                                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12.5,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: statusBg,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: statusGlowColor.withValues(alpha: 0.65)),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: statusGlowColor.withValues(alpha: isDark ? 0.3 : 0.15),
+                                  blurRadius: 6,
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 5,
+                                  height: 5,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: statusGlowColor,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: statusGlowColor,
+                                        blurRadius: 3,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  statusText,
+                                  style: TextStyle(
+                                    color: statusTextColor,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 10,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    if (card.notes != null && card.notes!.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          'Note: ${card.notes}',
+                          style: TextStyle(
+                            color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                            fontSize: 10.5,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+
+                    // 5. Attached Document Indicator
+                    if (card.documentUrl != null || card.fileName != null) ...[
+                      const SizedBox(height: 6),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: InkWell(
+                          onTap: card.documentUrl != null
+                              ? () => _showDocumentPreviewDialog(card)
+                              : null,
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.04),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.15) : Colors.black12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  card.fileName?.toLowerCase().endsWith('.pdf') == true
+                                      ? Icons.picture_as_pdf_rounded
+                                      : Icons.attach_file_rounded,
+                                  size: 11,
+                                  color: isDark ? Colors.cyanAccent : const Color(0xFF0284C7),
+                                ),
+                                const SizedBox(width: 5),
+                                Flexible(
+                                  child: Text(
+                                    card.fileName ?? 'Attached Document',
+                                    style: TextStyle(
+                                      color: isDark ? Colors.white70 : const Color(0xFF334155),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (card.documentUrl != null) ...[
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '• View',
+                                    style: TextStyle(
+                                      color: isDark ? Colors.cyanAccent : const Color(0xFF0284C7),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+
+                // 6. Actions Dock
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.black.withValues(alpha: 0.25)
+                        : Colors.black.withValues(alpha: 0.03),
+                    border: Border(
+                      top: BorderSide(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.06),
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (card.documentUrl != null && card.documentUrl!.isNotEmpty)
+                            IconButton(
+                              icon: Icon(
+                                Icons.visibility_rounded,
+                                size: 16,
+                                color: isDark ? Colors.cyanAccent : const Color(0xFF0284C7),
+                              ),
+                              tooltip: 'Preview Document',
+                              onPressed: () => _showDocumentPreviewDialog(card),
+                              padding: const EdgeInsets.all(6),
+                              constraints: const BoxConstraints(),
+                            ),
+                          IconButton(
+                            icon: Icon(
+                              Icons.download_rounded,
+                              size: 16,
+                              color: isDark ? Colors.white : const Color(0xFF475569),
+                            ),
+                            tooltip: 'Download Document / Pass',
+                            onPressed: () => _downloadCardDocument(card),
+                            padding: const EdgeInsets.all(6),
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              AppBounceable(
+                                onTap: () => _notifyWhatsApp(card),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF25D366),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.chat_rounded, color: Colors.white, size: 12),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'WhatsApp',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              AppBounceable(
+                                onTap: () => _notifyEmail(card),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF3B82F6),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.email_rounded, color: Colors.white, size: 12),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Email',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.edit_rounded,
+                                  size: 16,
+                                  color: isDark ? Colors.amberAccent : const Color(0xFFD97706),
+                                ),
+                                tooltip: 'Edit Card',
+                                onPressed: () => _showAddEditCardDialog(cardToEdit: card),
+                                padding: const EdgeInsets.all(6),
+                                constraints: const BoxConstraints(),
+                              ),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 16,
+                                  color: isDark ? Colors.redAccent : const Color(0xFFDC2626),
+                                ),
+                                tooltip: 'Delete Card',
+                                onPressed: () => _deleteCard(card),
+                                padding: const EdgeInsets.all(6),
+                                constraints: const BoxConstraints(),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardsList(
+    List<EmployeeCard> filtered,
+    bool isDark,
+    IconData tabIcon,
+    Color tabColor,
+  ) {
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: filtered.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final card = filtered[index];
+        final emp = _getEmployee(card.employeeId);
+        final cardColor = _getCardTypeColor(card.cardType);
+
+        Color statusBg = Colors.teal.withValues(alpha: 0.15);
+        Color statusFg = Colors.teal;
+        if (card.isExpired) {
+          statusBg = Colors.red.withValues(alpha: 0.18);
+          statusFg = Colors.redAccent;
+        } else if (card.isCritical) {
+          statusBg = Colors.orange.withValues(alpha: 0.2);
+          statusFg = Colors.deepOrange;
+        } else if (card.isExpiringSoon) {
+          statusBg = Colors.amber.withValues(alpha: 0.15);
+          statusFg = Colors.amber.shade800;
+        }
+
+        return AppGlassCard(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  EmployeeAvatar(
+                    photoUrl: emp?.photoUrl,
+                    fullName: emp?.name ?? 'Staff',
+                    radius: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          emp?.name ?? 'Staff Member',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        Text(
+                          '${emp?.employeeCode ?? 'EMP'} • ${emp?.department ?? 'Operations'}',
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusBg,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: statusFg.withValues(alpha: 0.4)),
+                    ),
+                    child: Text(
+                      card.statusLabel,
+                      style: TextStyle(
+                        color: statusFg,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 18),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: cardColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: cardColor.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(tabIcon, size: 12, color: cardColor),
+                        const SizedBox(width: 5),
+                        Text(
+                          card.cardName,
+                          style: TextStyle(
+                            color: cardColor,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '# ${card.cardNumber}',
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    'Expiry: ${_dateFormat.format(card.expiryDate)}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.grey[300] : Colors.grey[800],
+                    ),
+                  ),
+                ],
+              ),
+              if (card.notes != null && card.notes!.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Note: ${card.notes}',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                ),
+              ],
+              if (card.fileName != null || card.documentUrl != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.blue.withValues(alpha: 0.12) : Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isDark ? Colors.blue.shade800.withValues(alpha: 0.3) : Colors.blue.shade200,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        card.fileName?.toLowerCase().endsWith('.pdf') == true
+                            ? Icons.picture_as_pdf_rounded
+                            : Icons.attach_file_rounded,
+                        size: 14,
+                        color: isDark ? Colors.blue.shade300 : Colors.blue.shade700,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          card.fileName ?? 'Uploaded Document',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.blue.shade200 : Colors.blue.shade900,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (card.documentUrl != null && card.documentUrl!.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: () => _showDocumentPreviewDialog(card),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.visibility_rounded,
+                                  size: 13,
+                                  color: isDark ? Colors.cyanAccent : Colors.teal.shade800,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'View',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark ? Colors.cyanAccent : Colors.teal.shade800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      InkWell(
+                        onTap: () => _downloadCardDocument(card),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.download_rounded,
+                                size: 13,
+                                color: isDark ? Colors.amberAccent : Colors.amber.shade900,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Download',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.amberAccent : Colors.amber.shade900,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.download_rounded, size: 18, color: AppColors.primaryLight),
+                    tooltip: 'Download Document / Card Pass',
+                    onPressed: () => _downloadCardDocument(card),
+                  ),
+                  const SizedBox(width: 4),
+                  if (card.documentUrl != null && card.documentUrl!.isNotEmpty) ...[
+                    IconButton(
+                      icon: const Icon(Icons.remove_red_eye_outlined, size: 18, color: Colors.teal),
+                      tooltip: 'View Uploaded Document',
+                      onPressed: () => _showDocumentPreviewDialog(card),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  AppBounceable(
+                    onTap: () => _notifyWhatsApp(card),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF25D366),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.chat_rounded, color: Colors.white, size: 13),
+                          SizedBox(width: 5),
+                          Text(
+                            'WhatsApp',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  AppBounceable(
+                    onTap: () => _notifyEmail(card),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.blueAccent,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.email_rounded, color: Colors.white, size: 13),
+                          SizedBox(width: 5),
+                          Text(
+                            'Email',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.edit_rounded, size: 18),
+                    tooltip: 'Edit Document',
+                    onPressed: () => _showAddEditCardDialog(cardToEdit: card),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
+                    tooltip: 'Delete Document',
+                    onPressed: () => _deleteCard(card),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Color _getCardTypeColor(String cardType) {
     final conf = _tabsConfig.firstWhere(
       (t) => t['id'] == cardType,
@@ -3137,8 +3934,15 @@ Fusion 360 Compliance & Operations Desk''';
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title,
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontWeight: FontWeight.w600)),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 4),
               Icon(icon, size: 18, color: color),
             ],
           ),

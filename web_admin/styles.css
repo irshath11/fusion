@@ -1187,4 +1187,615 @@ html, body {
   to { transform: rotate(360deg); }
 }
 
+/* ==========================================================================
+   Digital ID & Executive Wallet Pass Design System
+   ========================================================================== */
+
+/* View Mode Switcher */
+.view-mode-pill-group {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 3px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  gap: 3px;
+}
+
+.view-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.view-pill-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.view-pill-btn.active {
+  background: var(--primary);
+  color: #FFFFFF;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.4);
+}
+
+/* Wallet Grid Container */
+.wallet-passes-container {
+  padding: 16px 0 8px 0;
+}
+
+.wallet-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 24px;
+}
+
+@media (max-width: 640px) {
+  .wallet-cards-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* Digital ID Card Surface */
+.wallet-pass-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 236px;
+  border-radius: 18px;
+  padding: 20px 22px 14px 22px;
+  color: #FFFFFF;
+  overflow: hidden;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s;
+  background-size: 160% 160%;
+}
+
+.wallet-pass-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1.5px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  pointer-events: none;
+}
+
+.wallet-pass-card::after {
+  content: '';
+  position: absolute;
+  top: -60%;
+  right: -40%;
+  width: 120%;
+  height: 120%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 65%);
+  pointer-events: none;
+  transform: rotate(25deg);
+}
+
+.wallet-pass-card:hover {
+  transform: translateY(-4px) scale(1.006);
+  box-shadow: 0 20px 35px -8px rgba(0, 0, 0, 0.65), 0 0 20px rgba(99, 102, 241, 0.22);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+/* Card Themes per Document Type */
+/* Emirates ID: UAE Emerald & Gold */
+.wallet-card-emirates_id {
+  background: linear-gradient(135deg, #064e3b 0%, #022c22 45%, #065f46 80%, #047857 100%);
+  border-color: rgba(245, 158, 11, 0.35);
+  box-shadow: 0 10px 25px -5px rgba(2, 44, 34, 0.65);
+}
+.wallet-card-emirates_id:hover {
+  border-color: rgba(245, 158, 11, 0.65);
+  box-shadow: 0 20px 35px -8px rgba(2, 44, 34, 0.85), 0 0 22px rgba(16, 185, 129, 0.35);
+}
+
+/* Residence Visa: Imperial Midnight Navy & Sapphire */
+.wallet-card-visa {
+  background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 50%, #1e40af 80%, #2563eb 100%);
+  border-color: rgba(56, 189, 248, 0.35);
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.65);
+}
+.wallet-card-visa:hover {
+  border-color: rgba(56, 189, 248, 0.65);
+  box-shadow: 0 20px 35px -8px rgba(15, 23, 42, 0.85), 0 0 22px rgba(56, 189, 248, 0.35);
+}
+
+/* Passport: Velvet Royal Burgundy & Gold */
+.wallet-card-passport {
+  background: linear-gradient(135deg, #4c0519 0%, #1c1917 50%, #881337 80%, #9f1239 100%);
+  border-color: rgba(251, 191, 36, 0.35);
+  box-shadow: 0 10px 25px -5px rgba(28, 25, 23, 0.65);
+}
+.wallet-card-passport:hover {
+  border-color: rgba(251, 191, 36, 0.65);
+  box-shadow: 0 20px 35px -8px rgba(28, 25, 23, 0.85), 0 0 22px rgba(244, 63, 94, 0.35);
+}
+
+/* Health Insurance: Petrol Teal & Cyan */
+.wallet-card-insurance {
+  background: linear-gradient(135deg, #0f766e 0%, #042f2e 50%, #115e59 80%, #0d9488 100%);
+  border-color: rgba(45, 212, 191, 0.35);
+  box-shadow: 0 10px 25px -5px rgba(4, 47, 46, 0.65);
+}
+.wallet-card-insurance:hover {
+  border-color: rgba(45, 212, 191, 0.65);
+  box-shadow: 0 20px 35px -8px rgba(4, 47, 46, 0.85), 0 0 22px rgba(45, 212, 191, 0.35);
+}
+
+/* MOPA Pass: Executive Obsidian Carbon with Gold Trim */
+.wallet-card-mopa_pass {
+  background: linear-gradient(135deg, #18181b 0%, #09090b 50%, #27272a 80%, #3f3f46 100%);
+  border-color: rgba(234, 179, 8, 0.5);
+  box-shadow: 0 10px 25px -5px rgba(9, 9, 11, 0.85);
+}
+.wallet-card-mopa_pass:hover {
+  border-color: rgba(234, 179, 8, 0.8);
+  box-shadow: 0 20px 35px -8px rgba(9, 9, 11, 0.95), 0 0 22px rgba(234, 179, 8, 0.35);
+}
+
+/* CISPA Pass: Obsidian Carbon with Rose/Crimson Trim */
+.wallet-card-cispa_pass {
+  background: linear-gradient(135deg, #18181b 0%, #09090b 50%, #27272a 80%, #4c0519 100%);
+  border-color: rgba(244, 63, 94, 0.5);
+  box-shadow: 0 10px 25px -5px rgba(9, 9, 11, 0.85);
+}
+.wallet-card-cispa_pass:hover {
+  border-color: rgba(244, 63, 94, 0.8);
+  box-shadow: 0 20px 35px -8px rgba(9, 9, 11, 0.95), 0 0 22px rgba(244, 63, 94, 0.35);
+}
+
+/* Custom Pass: Deep Indigo / Violet */
+.wallet-card-custom_pass {
+  background: linear-gradient(135deg, #3730a3 0%, #1e1b4b 50%, #4338ca 80%, #4f46e5 100%);
+  border-color: rgba(165, 180, 252, 0.35);
+  box-shadow: 0 10px 25px -5px rgba(30, 27, 75, 0.65);
+}
+.wallet-card-custom_pass:hover {
+  border-color: rgba(165, 180, 252, 0.65);
+  box-shadow: 0 20px 35px -8px rgba(30, 27, 75, 0.85), 0 0 22px rgba(99, 102, 241, 0.35);
+}
+
+/* Critical Urgency Card Pulsing Outline */
+.wallet-pass-card.is-critical-pass {
+  border-color: rgba(239, 68, 68, 0.75);
+  box-shadow: 0 0 24px rgba(239, 68, 68, 0.35);
+  animation: pulse-wallet-card-border 2.5s infinite ease-in-out;
+}
+
+@keyframes pulse-wallet-card-border {
+  0%, 100% {
+    border-color: rgba(239, 68, 68, 0.75);
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.35);
+  }
+  50% {
+    border-color: rgba(245, 158, 11, 0.9);
+    box-shadow: 0 0 28px rgba(239, 68, 68, 0.6);
+  }
+}
+
+/* Card Header: EMV Chip & NFC */
+.wallet-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  position: relative;
+  z-index: 2;
+}
+
+.wallet-card-chip-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.emv-chip {
+  width: 38px;
+  height: 28px;
+  background: linear-gradient(135deg, #fde68a 0%, #d97706 40%, #fbbf24 70%, #b45309 100%);
+  border-radius: 5px;
+  position: relative;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.7), 0 2px 5px rgba(0, 0, 0, 0.5);
+  border: 0.5px solid rgba(180, 83, 9, 0.7);
+  flex-shrink: 0;
+}
+
+.emv-chip-lines {
+  position: absolute;
+  inset: 4px;
+  border: 1px solid rgba(120, 53, 15, 0.55);
+  border-radius: 3px;
+}
+
+.emv-chip-lines::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -4px;
+  right: -4px;
+  height: 1px;
+  background: rgba(120, 53, 15, 0.55);
+}
+
+.emv-chip-lines::after {
+  content: '';
+  position: absolute;
+  left: 45%;
+  top: -4px;
+  bottom: -4px;
+  width: 1px;
+  background: rgba(120, 53, 15, 0.55);
+}
+
+.nfc-signal {
+  color: rgba(255, 255, 255, 0.75);
+  display: flex;
+  align-items: center;
+}
+
+.wallet-pass-pill {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 4px 11px;
+  border-radius: var(--radius-full);
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Card Body: Employee Meta */
+.wallet-card-body {
+  position: relative;
+  z-index: 2;
+  margin-bottom: 14px;
+}
+
+.wallet-emp-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.wallet-emp-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.wallet-emp-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.wallet-emp-name {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: #FFFFFF;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.wallet-emp-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.75);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wallet-emp-code {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.wallet-dot {
+  opacity: 0.5;
+}
+
+.wallet-emp-dept {
+  opacity: 0.9;
+}
+
+/* Embossed Monospace Card Number */
+.wallet-number-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  padding: 6px 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-top: 2px;
+}
+
+.wallet-number-row:hover {
+  background: rgba(0, 0, 0, 0.5);
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: scale(1.02);
+}
+
+.wallet-card-number {
+  font-family: 'SF Mono', 'Fira Code', 'Roboto Mono', var(--font-mono);
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: #FFFFFF;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8), 0 0 8px rgba(255, 255, 255, 0.2);
+}
+
+.wallet-copy-icon {
+  color: rgba(255, 255, 255, 0.55);
+  display: flex;
+  align-items: center;
+  transition: color var(--transition-fast);
+}
+
+.wallet-number-row:hover .wallet-copy-icon {
+  color: #FFFFFF;
+}
+
+/* Expiry Date & Urgency Glow Pill */
+.wallet-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  position: relative;
+  z-index: 2;
+}
+
+.wallet-date-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.wallet-date-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.65);
+  text-transform: uppercase;
+}
+
+.wallet-date-value {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #FFFFFF;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Glowing Urgency Pills */
+.wallet-status-glow-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.status-glow-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  position: relative;
+}
+
+/* Critical / Expired: Glowing Red */
+.wallet-status-glow-pill.glow-critical {
+  background: rgba(239, 68, 68, 0.28);
+  color: #FFA39E;
+  border: 1px solid rgba(239, 68, 68, 0.65);
+}
+.wallet-status-glow-pill.glow-critical .status-glow-dot {
+  background: #EF4444;
+  box-shadow: 0 0 10px #EF4444;
+  animation: ping-glow-red 1.5s infinite;
+}
+
+/* Expiring Soon (30d): Glowing Amber */
+.wallet-status-glow-pill.glow-soon {
+  background: rgba(245, 158, 11, 0.24);
+  color: #FDE68A;
+  border: 1px solid rgba(245, 158, 11, 0.55);
+}
+.wallet-status-glow-pill.glow-soon .status-glow-dot {
+  background: #F59E0B;
+  box-shadow: 0 0 10px #F59E0B;
+  animation: ping-glow-amber 1.8s infinite;
+}
+
+/* Valid: Steady Emerald */
+.wallet-status-glow-pill.glow-valid {
+  background: rgba(16, 185, 129, 0.22);
+  color: #A7F3D0;
+  border: 1px solid rgba(16, 185, 129, 0.5);
+}
+.wallet-status-glow-pill.glow-valid .status-glow-dot {
+  background: #10B981;
+  box-shadow: 0 0 8px #10B981;
+}
+
+@keyframes ping-glow-red {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.65; }
+}
+
+@keyframes ping-glow-amber {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.7; }
+}
+
+/* Frosted Interactive Actions Dock */
+.wallet-actions-dock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  position: relative;
+  z-index: 2;
+}
+
+.wallet-dock-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #FFFFFF;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  line-height: 1;
+}
+
+.wallet-dock-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: translateY(-1px);
+}
+
+.wallet-dock-btn.preview {
+  background: rgba(99, 102, 241, 0.35);
+  border-color: rgba(99, 102, 241, 0.55);
+  flex: 1;
+}
+.wallet-dock-btn.preview:hover {
+  background: rgba(99, 102, 241, 0.6);
+  border-color: #818CF8;
+}
+
+.wallet-dock-btn.whatsapp {
+  background: rgba(37, 211, 102, 0.22);
+  border-color: rgba(37, 211, 102, 0.45);
+  color: #4ADE80;
+}
+.wallet-dock-btn.whatsapp:hover {
+  background: #25D366;
+  color: #FFFFFF;
+}
+
+.wallet-dock-btn.email {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: rgba(59, 130, 246, 0.45);
+  color: #60A5FA;
+}
+.wallet-dock-btn.email:hover {
+  background: #3B82F6;
+  color: #FFFFFF;
+}
+
+.wallet-dock-btn.download:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.wallet-dock-btn.edit:hover {
+  background: rgba(245, 158, 11, 0.3);
+  border-color: rgba(245, 158, 11, 0.6);
+  color: #FDE68A;
+}
+
+.wallet-dock-btn.delete:hover {
+  background: rgba(239, 68, 68, 0.35);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #FFA39E;
+}
+
+.wallet-dock-btn.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Wallet Empty State */
+.wallet-empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 60px 20px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1.5px dashed var(--border-subtle);
+  border-radius: 18px;
+  color: var(--text-secondary);
+}
+.wallet-empty-state .empty-icon {
+  font-size: 44px;
+  margin-bottom: 12px;
+}
+.wallet-empty-state .empty-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.wallet-empty-state .empty-desc {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  max-width: 440px;
+  margin: 0 auto 18px auto;
+}
+
 
