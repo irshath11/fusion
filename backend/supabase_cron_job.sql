@@ -44,7 +44,38 @@ INSERT INTO public.compliance_notification_settings (
 SELECT 'sr.irshath@gmail.com, nasuru@fusionmaint.com', '971586939371', true
 WHERE NOT EXISTS (SELECT 1 FROM public.compliance_notification_settings LIMIT 1);
 
--- 3. Stored Procedure to Check Expiries and Trigger Headless Alerts
+-- 3. URL Encode Helper for CallMeBot WhatsApp Query Parameters (RFC 3986)
+CREATE OR REPLACE FUNCTION public.url_encode(data text) 
+RETURNS text 
+LANGUAGE plpgsql 
+IMMUTABLE STRICT 
+AS $$
+DECLARE
+    res text := '';
+    i int;
+    b bytea;
+    byte_val int;
+BEGIN
+    IF data IS NULL THEN
+        RETURN '';
+    END IF;
+    b := convert_to(data, 'UTF8');
+    FOR i IN 0..octet_length(b) - 1 LOOP
+        byte_val := get_byte(b, i);
+        IF (byte_val >= 48 AND byte_val <= 57) OR -- 0-9
+           (byte_val >= 65 AND byte_val <= 90) OR -- A-Z
+           (byte_val >= 97 AND byte_val <= 122) OR -- a-z
+           byte_val IN (45, 95, 46, 126) THEN     -- - _ . ~
+            res := res || chr(byte_val);
+        ELSE
+            res := res || '%' || lpad(upper(to_hex(byte_val)), 2, '0');
+        END IF;
+    END LOOP;
+    RETURN res;
+END;
+$$;
+
+-- 4. Stored Procedure to Check Expiries and Trigger Headless Alerts
 CREATE OR REPLACE FUNCTION public.check_and_send_card_expiry_alerts()
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -89,9 +120,9 @@ BEGIN
     END IF;
 
     -- Build WhatsApp & Email Bodies
-    wa_msg := '🚨 *URGENT COMPLIANCE NOTICE: CARD EXPIRATION (≤ 3 DAYS)*' || chr(10);
-    wa_msg := wa_msg || '════════════════════════════════════════' || chr(10);
-    wa_msg := wa_msg || 'Attention: Compliance & Operations Control' || chr(10);
+    wa_msg := '🚨 *URGENT COMPLIANCE NOTICE: CARD EXPIRATION (<= 3 DAYS)*' || chr(10);
+    wa_msg := wa_msg || '----------------------------------------' || chr(10);
+    wa_msg := wa_msg || 'Attention: Compliance and Operations Control' || chr(10);
 
     FOR card_rec IN
         SELECT 
@@ -155,7 +186,7 @@ BEGIN
 
     -- Complete WhatsApp text
     wa_msg := wa_msg || chr(10) || '⚠️ *Action Required:* Please coordinate renewal immediately.' || chr(10);
-    wa_msg := wa_msg || '════════════════════════════════════════' || chr(10);
+    wa_msg := wa_msg || '----------------------------------------' || chr(10);
     wa_msg := wa_msg || '_Fusion 360 Document Control System_';
 
     -- Complete HTML Email
@@ -189,11 +220,11 @@ BEGIN
         ) INTO resend_response_id;
     END IF;
 
-    -- 5. Dispatch WhatsApp via CallMeBot if API Key configured
+    -- 5. Dispatch WhatsApp via CallMeBot if API Key configured (properly URL-encoded)
     IF settings_rec.callmebot_api_key IS NOT NULL AND length(settings_rec.callmebot_api_key) > 2 THEN
         SELECT net.http_get(
             url := 'https://api.callmebot.com/whatsapp.php?phone=' || clean_phone ||
-                   '&text=' || replace(replace(wa_msg, ' ', '%20'), chr(10), '%0A') ||
+                   '&text=' || public.url_encode(wa_msg) ||
                    '&apikey=' || settings_rec.callmebot_api_key
         ) INTO callmebot_response_id;
     END IF;
