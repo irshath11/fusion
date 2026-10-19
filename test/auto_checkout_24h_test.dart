@@ -40,8 +40,11 @@ void main() {
 
     test('Unclosed shift crossing 24 hours is automatically capped at 8.0 regular hours and 0.0 OT', () {
       final now = DateTime.now();
-      // Checked in 26 hours ago
-      final checkInTime = now.subtract(const Duration(hours: 26));
+      // Checked in 26 hours ago (guarded against Sunday rest day)
+      DateTime checkInTime = now.subtract(const Duration(hours: 26));
+      if (checkInTime.weekday == DateTime.sunday) {
+        checkInTime = checkInTime.subtract(const Duration(hours: 24));
+      }
 
       final records = [
         AttendanceRecord(
