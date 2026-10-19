@@ -1322,7 +1322,17 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     final sortedDateKeys = groupedByDate.keys.toList()
       ..sort((a, b) => b.compareTo(a));
 
-    final timesheets = TimesheetCalculator.calculateDailyTimesheets(empRecords);
+    final timesheets = TimesheetCalculator.calculateDailyTimesheets(
+      empRecords,
+      targetEmployeeId: emp.id,
+      targetEmployeeName: emp.name,
+    );
+
+    final Map<String, DailyTimesheetEntry> timesheetsByDate = {};
+    for (final entry in timesheets) {
+      final key = DateFormat('yyyy-MM-dd').format(entry.date.toLocal());
+      timesheetsByDate[key] = entry;
+    }
 
     double totalRegHours = 0.0;
     double totalOtHours = 0.0;
@@ -2006,13 +2016,24 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                           .join(', ')
                       : null;
 
-                  final dayTimesheets =
-                      TimesheetCalculator.calculateDailyTimesheets(dateRecords);
-                  final dayEntry =
-                      dayTimesheets.isNotEmpty ? dayTimesheets.first : null;
+                  final dayEntry = timesheetsByDate[dateKey] ??
+                      (TimesheetCalculator.calculateDailyTimesheets(
+                        dateRecords,
+                        targetEmployeeId: emp.id,
+                        targetEmployeeName: emp.name,
+                      ).isNotEmpty
+                          ? TimesheetCalculator.calculateDailyTimesheets(
+                              dateRecords,
+                              targetEmployeeId: emp.id,
+                              targetEmployeeName: emp.name,
+                            ).first
+                          : null);
                   final dayReg = dayEntry?.regularHours ?? 0.0;
                   final dayOt = dayEntry?.overtimeHours ?? 0.0;
                   final dayBreakMin = dayEntry?.breakDuration.inMinutes ?? 0;
+                  final dayTravelTolMin =
+                      dayEntry?.travelToleranceDuration.inMinutes ?? 0;
+                  final dayIsAutoCompleted = dayEntry?.isAutoCompleted ?? false;
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -2112,6 +2133,54 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                   ),
                                 ),
                               ],
+                              if (dayTravelTolMin > 0) ...[
+                                const SizedBox(width: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.blue.withValues(alpha: 0.2)
+                                        : Colors.blue.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: isDark
+                                        ? Border.all(color: Colors.blue.shade800)
+                                        : null,
+                                  ),
+                                  child: Text(
+                                    '🚗 ${dayTravelTolMin}m Tol.',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark
+                                            ? Colors.blue.shade300
+                                            : Colors.blue.shade900),
+                                  ),
+                                ),
+                              ],
+                              if (dayIsAutoCompleted) ...[
+                                const SizedBox(width: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.withValues(
+                                        alpha: isDark ? 0.2 : 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                        color: Colors.red.shade400),
+                                  ),
+                                  child: Text(
+                                    'Auto (8h)',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark
+                                            ? Colors.red.shade300
+                                            : Colors.red.shade700),
+                                  ),
+                                ),
+                              ],
                             ],
                           )
                         ],
@@ -2130,7 +2199,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                         : Colors.grey.shade600),
                                 const SizedBox(width: 4),
                                 Text(
-                                  '$firstTime - $lastTime (${dateRecords.length} Step Logs)',
+                                  dayIsAutoCompleted
+                                      ? '$firstTime - $lastTime (Auto Check-Out - 8h Regular Shift)'
+                                      : '$firstTime - $lastTime (${dateRecords.length} Step Logs)',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: isDark
@@ -4289,19 +4360,46 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     final formattedDateTitle =
         DateFormat('EEEE, dd MMMM yyyy').format(_selectedDate!);
 
-    final dayTimesheets =
-        TimesheetCalculator.calculateDailyTimesheets(dateRecords);
+    final allEmpRecords = _db
+        .getAttendanceRecords()
+        .where((r) => _recordMatchesEmployee(r, emp))
+        .toList();
+    final allEmpTimesheets = TimesheetCalculator.calculateDailyTimesheets(
+      allEmpRecords,
+      targetEmployeeId: emp.id,
+      targetEmployeeName: emp.name,
+    );
+
+    DailyTimesheetEntry? tEntry;
+    for (final t in allEmpTimesheets) {
+      if (DateFormat('yyyy-MM-dd').format(t.date.toLocal()) == selectedDateStr) {
+        tEntry = t;
+        break;
+      }
+    }
+    if (tEntry == null) {
+      final dayTimesheets = TimesheetCalculator.calculateDailyTimesheets(
+        dateRecords,
+        targetEmployeeId: emp.id,
+        targetEmployeeName: emp.name,
+      );
+      if (dayTimesheets.isNotEmpty) tEntry = dayTimesheets.first;
+    }
+
     double totalHrs = 0.0;
     double regHrs = 0.0;
     double otHrs = 0.0;
     int breakMin = 0;
+    int travelTolMin = 0;
+    bool isAutoCompleted = false;
 
-    if (dayTimesheets.isNotEmpty) {
-      final tEntry = dayTimesheets.first;
+    if (tEntry != null) {
       regHrs = tEntry.regularHours;
       otHrs = tEntry.overtimeHours;
       totalHrs = tEntry.totalHours;
       breakMin = tEntry.breakDuration.inMinutes;
+      travelTolMin = tEntry.travelToleranceDuration.inMinutes;
+      isAutoCompleted = tEntry.isAutoCompleted;
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -4349,7 +4447,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               ),
               ElevatedButton.icon(
                 onPressed: () async {
-                  final tEntry = dayTimesheets.isNotEmpty ? dayTimesheets.first : null;
                   final ok = await AdminEditAttendanceDialog.show(
                     context,
                     employeeId: emp.id,
@@ -4402,16 +4499,39 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Icon(Icons.timer_rounded, color: activePrimary, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Daily Timesheet Hours Summary',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: activePrimary),
+                    Row(
+                      children: [
+                        Icon(Icons.timer_rounded, color: activePrimary, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Daily Timesheet Hours Summary',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: activePrimary),
+                        ),
+                      ],
                     ),
+                    if (isAutoCompleted)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: isDark ? 0.2 : 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.red.shade400),
+                        ),
+                        child: Text(
+                          'Auto Check-Out (8h)',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.red.shade300 : Colors.red.shade700,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -4524,7 +4644,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Break',
+                              Text('Food Break',
                                   style: TextStyle(
                                       fontSize: 10,
                                       color: isDark
@@ -4539,7 +4659,53 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                       color: isDark
                                           ? Colors.amber.shade300
                                           : Colors.amber.shade900)),
-                              Text('Excluded',
+                              Text('Default 1.0h',
+                                  style: TextStyle(
+                                      fontSize: 8.5,
+                                      color: isDark
+                                          ? AppColors.textSecondaryDark
+                                          : Colors.grey)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (travelTolMin > 0) ...[
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.blue.withValues(alpha: 0.2)
+                                : Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.blue.shade800
+                                  : Colors.blue.shade200,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Travel Tol.',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      color: isDark
+                                          ? Colors.blue.shade300
+                                          : Colors.blue.shade900,
+                                      fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 2),
+                              Text('${travelTolMin}m',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: isDark
+                                          ? Colors.blue.shade300
+                                          : Colors.blue.shade900)),
+                              Text('Max 1.0h',
                                   style: TextStyle(
                                       fontSize: 8.5,
                                       color: isDark

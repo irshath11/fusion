@@ -1156,19 +1156,23 @@ class LocalDatabaseService {
 
       for (int i = 0; i < records.length; i++) {
         final rec = records[i];
-        if (rec.workflowStep == WorkflowStep.officeCheckIn) {
+        if (rec.workflowStep == WorkflowStep.officeCheckIn ||
+            rec.workflowStep == WorkflowStep.siteCheckIn) {
           final checkInTime = rec.eventTimestamp;
           final elapsed = now.difference(checkInTime);
 
           if (elapsed >= const Duration(hours: 24)) {
-            // Check if there is an officeCheckOut occurring after this checkIn and before any subsequent officeCheckIn
+            // Check if there is any checkout occurring after this checkIn and before any subsequent checkIn
             bool hasMatchingCheckOut = false;
             for (int j = i + 1; j < records.length; j++) {
               final nextRec = records[j];
-              if (nextRec.workflowStep == WorkflowStep.officeCheckOut) {
+              if (nextRec.workflowStep == WorkflowStep.officeCheckOut ||
+                  nextRec.workflowStep == WorkflowStep.siteCheckOut ||
+                  nextRec.workflowStep == WorkflowStep.emergencyCheckOut) {
                 hasMatchingCheckOut = true;
                 break;
-              } else if (nextRec.workflowStep == WorkflowStep.officeCheckIn) {
+              } else if (nextRec.workflowStep == WorkflowStep.officeCheckIn ||
+                  nextRec.workflowStep == WorkflowStep.siteCheckIn) {
                 // Next checkIn session started
                 break;
               }
