@@ -93,7 +93,10 @@ void main() {
         'Unclosed shift crossing 48 hours is also capped at exactly 8.0 hours with 0 OT',
         () {
       final now = DateTime.now();
-      final checkInTime = now.subtract(const Duration(hours: 48));
+      DateTime checkInTime = now.subtract(const Duration(hours: 48));
+      if (checkInTime.weekday == DateTime.sunday) {
+        checkInTime = checkInTime.subtract(const Duration(hours: 24));
+      }
 
       final records = [
         AttendanceRecord(

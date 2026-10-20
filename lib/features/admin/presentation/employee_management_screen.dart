@@ -65,6 +65,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
           List<UserEntity> users = [];
           if (state is UserManagementLoaded) {
             users = state.users;
+          } else if (state is UserManagementLoading) {
+            users = state.previousUsers;
           }
 
           // Apply filters
@@ -217,7 +219,10 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                   ),
                 ),
 
-                if (state is UserManagementLoading)
+                if (state is UserManagementLoading && users.isNotEmpty)
+                  const LinearProgressIndicator(minHeight: 2.5),
+
+                if (state is UserManagementLoading && users.isEmpty)
                   const Expanded(
                     child: Center(child: CircularProgressIndicator()),
                   )
@@ -232,10 +237,14 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                   )
                 else
                   Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: filteredUsers.length,
-                      itemBuilder: (ctx, index) {
+                    child: RefreshIndicator(
+                      onRefresh: () => context
+                          .read<UserManagementCubit>()
+                          .fetchUsers(showLoading: false),
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: filteredUsers.length,
+                        itemBuilder: (ctx, index) {
                         final user = filteredUsers[index];
                         final isSelf = user.id == currentUser?.id;
                         final completeFullName =
@@ -693,6 +702,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                       },
                     ),
                   ),
+                ),
               ],
             ),
           );

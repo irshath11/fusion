@@ -181,18 +181,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 index: _currentNavIndex,
                 children: [
                   AdminOverviewTab(
-                    key: ValueKey('overview_$_currentNavIndex'),
+                    key: const ValueKey('admin_overview_tab'),
                     onNavigateTab: (index) {
                       setState(() => _currentNavIndex = index);
                       adminCtx.read<AdminCubit>().loadDashboardData();
                     },
                   ),
-                  EmployeeManagementScreen(key: ValueKey('employee_$_currentNavIndex')),
-                  CardsManagementScreen(key: ValueKey('cards_$_currentNavIndex')),
-                  OfficeManagementScreen(key: ValueKey('office_$_currentNavIndex')),
-                  WorkSiteManagementScreen(key: ValueKey('worksite_$_currentNavIndex')),
-                  LiveTrackingMapScreen(key: ValueKey('live_map_$_currentNavIndex')),
-                  ReportsAnalyticsScreen(key: ValueKey('reports_$_currentNavIndex')),
+                  const EmployeeManagementScreen(key: ValueKey('employee_management_tab')),
+                  const CardsManagementScreen(key: ValueKey('cards_management_tab')),
+                  const OfficeManagementScreen(key: ValueKey('office_management_tab')),
+                  const WorkSiteManagementScreen(key: ValueKey('worksite_management_tab')),
+                  const LiveTrackingMapScreen(key: ValueKey('live_map_tab')),
+                  const ReportsAnalyticsScreen(key: ValueKey('reports_analytics_tab')),
                 ],
               ),
             ),
