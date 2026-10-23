@@ -664,6 +664,28 @@ class LocalDatabaseService {
   void deleteAttendanceRecord(String id) {
     _attendanceRecords.removeWhere((r) => r.id == id);
     _persistAttendanceRecords();
+    SupabaseService().deleteAttendanceRecords([id]);
+  }
+
+  /// Delete all attendance records for an employee on a given date (both locally and in Supabase)
+  Future<bool> deleteAttendanceRecordsForDate({
+    required String employeeId,
+    required String employeeName,
+    required DateTime date,
+    required List<String> recordIds,
+  }) async {
+    final idSet = recordIds.toSet();
+    _attendanceRecords.removeWhere((r) => idSet.contains(r.id));
+    _persistAttendanceRecords();
+
+    // Trigger Cloud DB deletion
+    try {
+      final cloudOk = await SupabaseService().deleteAttendanceRecords(recordIds);
+      return cloudOk;
+    } catch (e) {
+      debugPrint('Cloud sync note during attendance deletion: $e');
+      return false;
+    }
   }
 
   /// Admin method to update or insert Check-In, Check-Out, and Overtime (OT) with Remarks for an employee on a given date.

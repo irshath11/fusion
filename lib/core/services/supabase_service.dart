@@ -1697,6 +1697,26 @@ class SupabaseService {
     return allSuccess;
   }
 
+  /// Delete attendance records by their IDs from Supabase cloud database
+  Future<bool> deleteAttendanceRecords(List<String> recordIds) async {
+    if (!_isInitialized || client == null || recordIds.isEmpty) return false;
+    try {
+      await client!.from('attendance_records').delete().inFilter('id', recordIds);
+      return true;
+    } catch (e) {
+      debugPrint('Supabase deleteAttendanceRecords inFilter error: $e. Retrying per id...');
+      try {
+        for (final id in recordIds) {
+          await client!.from('attendance_records').delete().eq('id', id);
+        }
+        return true;
+      } catch (inner) {
+        debugPrint('Supabase deleteAttendanceRecords per id error: $inner');
+        return false;
+      }
+    }
+  }
+
   /// Fetch all attendance records from Supabase cloud database with automatic pagination
   Future<List<AttendanceRecord>> fetchAttendanceRecordsFromSupabase({
     int maxRecords = 20000,

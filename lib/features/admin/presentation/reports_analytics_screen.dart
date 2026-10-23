@@ -1057,6 +1057,304 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
   }
 
+  Future<void> _confirmAndDeleteDateLog(
+    EmployeeEntity emp,
+    String dateKey,
+    List<AttendanceRecord> dateRecords, {
+    bool isFromDetailView = false,
+  }) async {
+    final parsedDate = DateTime.tryParse(dateKey) ??
+        (dateRecords.isNotEmpty
+            ? dateRecords.first.eventTimestamp
+            : DateTime.now());
+    final formattedDateStr =
+        DateFormat('EEEE, dd MMMM yyyy').format(parsedDate);
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = AppTheme.currentColors;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: isDark ? palette.surfaceDark : Colors.white,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.delete_forever_rounded,
+                  color: Colors.red, size: 22),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Delete Date Log?',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to permanently delete the attendance log for:',
+              style: TextStyle(
+                fontSize: 13,
+                color:
+                    isDark ? palette.textSecondaryDark : Colors.grey.shade700,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? palette.surfaceDark : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isDark ? palette.cardBorderDark : Colors.grey.shade300,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.person_rounded,
+                          size: 14, color: Colors.grey),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${emp.name} (${emp.employeeCode})',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.calendar_today_rounded,
+                          size: 14, color: Colors.red),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          formattedDateStr,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Colors.red,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${dateRecords.length} Step Log(s) recorded on this day',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark
+                          ? palette.textSecondaryDark
+                          : Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '⚠️ Warning: This will delete all check-in/out records, location logs, and timesheet hours for this date from local database and cloud storage. This action cannot be undone.',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: Colors.red.shade700,
+                height: 1.3,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color:
+                    isDark ? palette.textSecondaryDark : Colors.grey.shade700,
+              ),
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            icon: const Icon(Icons.delete_forever_rounded, size: 16),
+            label: const Text('Delete Log',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final recordIds =
+        dateRecords.map((r) => r.id).where((id) => id.isNotEmpty).toList();
+    await _db.deleteAttendanceRecordsForDate(
+      employeeId: emp.id,
+      employeeName: emp.name,
+      date: parsedDate,
+      recordIds: recordIds,
+    );
+
+    if (isFromDetailView) {
+      setState(() {
+        _selectedDate = null;
+      });
+    } else {
+      setState(() {});
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_outline_rounded,
+                  color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                    'Attendance log for $formattedDateStr has been deleted.'),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _confirmAndDeleteSingleStepRecord(
+    EmployeeEntity emp,
+    AttendanceRecord record,
+  ) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = AppTheme.currentColors;
+    final timeStr =
+        DateFormat('hh:mm:ss a').format(record.eventTimestamp.toLocal());
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: isDark ? palette.surfaceDark : Colors.white,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.delete_outline_rounded,
+                  color: Colors.red, size: 22),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Delete Step Log?',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to delete this specific log?',
+              style: TextStyle(
+                fontSize: 13,
+                color:
+                    isDark ? palette.textSecondaryDark : Colors.grey.shade700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isDark ? palette.surfaceDark : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Step: ${record.workflowStep.displayName}',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  const SizedBox(height: 2),
+                  Text('Time: $timeStr',
+                      style: const TextStyle(fontSize: 12)),
+                  if (record.siteName != null && record.siteName!.isNotEmpty)
+                    Text('Location: ${record.siteName}',
+                        style: const TextStyle(fontSize: 12)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    _db.deleteAttendanceRecord(record.id);
+    await SupabaseService().deleteAttendanceRecords([record.id]);
+    setState(() {});
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${record.workflowStep.displayName} log deleted.'),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+    }
+  }
+
   Widget _buildMisattributedLogsBanner(EmployeeEntity currentEmp, List<AttendanceRecord> records) {
     final users = _db.getUsers();
     final suspiciousRecords = <AttendanceRecord>[];
@@ -2380,7 +2678,23 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                           ],
                         ),
                       ),
-                      trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline_rounded,
+                                color: Colors.redAccent, size: 21),
+                            tooltip: 'Delete Date Log',
+                            onPressed: () => _confirmAndDeleteDateLog(
+                              emp,
+                              dateKey,
+                              dateRecords,
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right_rounded,
+                              color: Colors.grey),
+                        ],
+                      ),
                       onTap: () {
                         setState(() {
                           _selectedDate = parsedDate;
@@ -4445,36 +4759,64 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   ],
                 ),
               ),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final ok = await AdminEditAttendanceDialog.show(
-                    context,
-                    employeeId: emp.id,
-                    employeeName: emp.name,
-                    date: _selectedDate!,
-                    initialCheckIn: tEntry?.checkInTime,
-                    initialCheckOut: tEntry?.checkOutTime,
-                    initialOtHours: tEntry?.manualOvertimeHours ?? tEntry?.overtimeHours,
-                    initialRemarks: tEntry?.remarks,
-                  );
-                  if (ok == true && mounted) {
-                    setState(() {});
-                  }
-                },
-                icon: const Icon(Icons.edit_calendar_rounded, size: 18),
-                label: const Text('Adjust Shift & OT',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: activePrimary,
-                  foregroundColor: Colors.white,
-                  elevation: 3,
-                  shadowColor: activePrimary.withValues(alpha: 0.4),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      final ok = await AdminEditAttendanceDialog.show(
+                        context,
+                        employeeId: emp.id,
+                        employeeName: emp.name,
+                        date: _selectedDate!,
+                        initialCheckIn: tEntry?.checkInTime,
+                        initialCheckOut: tEntry?.checkOutTime,
+                        initialOtHours: tEntry?.manualOvertimeHours ?? tEntry?.overtimeHours,
+                        initialRemarks: tEntry?.remarks,
+                      );
+                      if (ok == true && mounted) {
+                        setState(() {});
+                      }
+                    },
+                    icon: const Icon(Icons.edit_calendar_rounded, size: 16),
+                    label: const Text('Adjust Shift & OT',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: activePrimary,
+                      foregroundColor: Colors.white,
+                      elevation: 2,
+                      shadowColor: activePrimary.withValues(alpha: 0.4),
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
                   ),
-                ),
+                  ElevatedButton.icon(
+                    onPressed: () => _confirmAndDeleteDateLog(
+                      emp,
+                      selectedDateStr,
+                      dateRecords,
+                      isFromDetailView: true,
+                    ),
+                    icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                    label: const Text('Delete Date Log',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                      foregroundColor: Colors.white,
+                      elevation: 2,
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -5058,27 +5400,42 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 ),
                               ],
                             ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: (r.isGeofenceValid
-                                        ? AppColors.success
-                                        : AppColors.error)
-                                    .withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                r.isGeofenceValid ? 'VALID' : 'VIOLATION',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: r.isGeofenceValid
-                                      ? AppColors.success
-                                      : AppColors.error,
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: (r.isGeofenceValid
+                                            ? AppColors.success
+                                            : AppColors.error)
+                                        .withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    r.isGeofenceValid ? 'VALID' : 'VIOLATION',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: r.isGeofenceValid
+                                          ? AppColors.success
+                                          : AppColors.error,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            )
+                                const SizedBox(width: 4),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline_rounded,
+                                      color: Colors.redAccent, size: 20),
+                                  tooltip: 'Delete this log entry',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () =>
+                                      _confirmAndDeleteSingleStepRecord(emp, r),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                         const Divider(height: 20),

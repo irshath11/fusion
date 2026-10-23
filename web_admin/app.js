@@ -9,6 +9,237 @@
   const SUPABASE_URL = 'https://agkuybibzrjqcxtlnlrm.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFna3V5YmlienJqcWN4dGxubHJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5Njc1OTgsImV4cCI6MjA5ODU0MzU5OH0.lmhZ8TIklkj7I9oSRawuitWvnsZ6jMaL-95raMVLNTA';
 
+  // Official enterprise master directory of employees (exact sync with company records)
+  const MASTER_EMPLOYEES_DIRECTORY = [
+    // --- Fusion Neo Division ---
+    {
+      employeeId: 'N-1003',
+      fullName: 'Muhammed Riyas Hussain Hussain Kasim',
+      email: 'riyas@gmail.com',
+      designation: 'Technician',
+      department: 'Neo',
+      aliases: ['riyas', 'muhammed riyas', 'emp-riyas']
+    },
+    {
+      employeeId: 'N-1004',
+      fullName: 'Shabi Bismillah Bismillah',
+      email: 'shabi@gmail.com',
+      designation: 'Technician',
+      department: 'Neo',
+      aliases: ['shabi', 'emp-shabi', 'emp-n-1004']
+    },
+    {
+      employeeId: 'N-1005',
+      fullName: 'Adham Bismilla Bismilla',
+      email: 'adham@gmail.com',
+      designation: 'Technician',
+      department: 'Neo',
+      aliases: ['adham', 'emp-adham', 'emp-n-1005']
+    },
+    {
+      employeeId: 'N-1006',
+      fullName: 'Irshath Ahamed Shaik Allavudin Shaik Allavudin',
+      email: 'sr.irshath@gmail.com',
+      designation: 'Managing Director',
+      department: 'Neo',
+      aliases: ['irshath', 'irshath ahamed', 'emp-irshath', 'emp-n-1006']
+    },
+    {
+      employeeId: 'N-1007',
+      fullName: 'Saji Kumar Thankamani Thankamani',
+      email: 'saji@gmail.com',
+      designation: 'Electrician',
+      department: 'Neo',
+      aliases: ['saji', 'saji kumar']
+    },
+    {
+      employeeId: 'N-1008',
+      fullName: 'Kajamohideen Samsudeen Samsudeen',
+      email: 'kaja@gmail.com',
+      designation: 'ELV Technician',
+      department: 'Neo',
+      aliases: ['kaja', 'kaja mohideen', 'kajamohideen']
+    },
+    {
+      employeeId: 'N-1009',
+      fullName: 'Abdul Kabarkhan Abdul Gafoor Abdul Gafoor',
+      email: 'kabar@gmail.com',
+      designation: 'Technician',
+      department: 'Neo',
+      aliases: ['kabar', 'kabar khan', 'abdul kabarkhan']
+    },
+    {
+      employeeId: 'N-1010',
+      fullName: 'Krishnan Mahavishnu Mahavishnu',
+      email: 'krishnan@gmail.com',
+      designation: 'Technician',
+      department: 'Neo',
+      aliases: ['krishnan']
+    },
+    {
+      employeeId: 'N-1011',
+      fullName: 'Kuthoos Abthul Kani Abthul Kani',
+      email: 'kuththus@gmail.com',
+      designation: 'Technician',
+      department: 'Neo',
+      aliases: ['kuththus', 'kuthoos']
+    },
+    {
+      employeeId: 'N-1012',
+      fullName: 'Javeedu Rahuman Hameed Sulthan Hameed Sulthan',
+      email: 'javeed@gmail.com',
+      designation: 'Technician',
+      department: 'Neo',
+      aliases: ['javeed', 'javeedu', 'javeedu rahuman']
+    },
+    {
+      employeeId: 'N-1013',
+      fullName: 'Abhishek Sharma Aniruddh Sharma',
+      email: 'abishek@gmail.com',
+      designation: 'A/C Technician',
+      department: 'Neo',
+      aliases: ['abishek', 'abhishek']
+    },
+
+    // --- Fusion Maintenance Division ---
+    {
+      employeeId: '1004',
+      fullName: 'Mohammed Iburahim Baseer Ahamed',
+      email: 'ib@fusionmaint.com',
+      designation: 'Operations Engineer',
+      department: 'Fusion',
+      aliases: ['mohammed ibrahim', 'ibrahim', 'ib', 'emp-ibrahim', 'emp-1004']
+    },
+    {
+      employeeId: '1008',
+      fullName: 'Ibramsha Sathar Sathar',
+      email: 'ibramsha@gmail.com',
+      designation: 'Supervisor',
+      department: 'Fusion',
+      aliases: ['ibramsha', 'emp-ibramsha', 'emp-1008']
+    },
+    {
+      employeeId: '1012',
+      fullName: 'Raja Mohammed Mohammed Ali',
+      email: 'raja@gmail.com',
+      designation: 'Supervisor',
+      department: 'Fusion',
+      aliases: ['raja', 'emp-raja', 'emp-1012']
+    },
+    {
+      employeeId: '1021',
+      fullName: 'Mohamed Azarudheen Anvar Ali',
+      email: 'azar@gmail.com',
+      designation: 'A/C Technician',
+      department: 'Fusion',
+      aliases: ['azar', 'azhar', 'azarudeen', 'azharudeen', 'mohamed azarudheen', 'mohamed azharudeen', 'emp-azar', 'emp-1021']
+    },
+    {
+      employeeId: '1024',
+      fullName: 'Ramesh Gopal Gopal',
+      email: 'ramesh@gmail.com',
+      designation: 'Plumber',
+      department: 'Fusion',
+      aliases: ['ramesh', 'emp-ramesh', 'emp-1024']
+    },
+    {
+      employeeId: '1031',
+      fullName: 'Mohamed Rifaye Abdul Jabar Abdul Jabar',
+      email: 'rifaye@gmail.com',
+      designation: 'A/C Technician',
+      department: 'Fusion',
+      aliases: ['rifaye', 'mohamed rifaye', 'emp-rifaye', 'emp-1031']
+    },
+    {
+      employeeId: '1036',
+      fullName: 'Mahatheer Mohamed Jamal Mohamed Jamal Mohamed',
+      email: 'mahatheer@gmail.com',
+      designation: 'Coordinator',
+      department: 'Fusion',
+      aliases: ['mahatheer', 'mohamed jamal', 'emp-mahatheer', 'emp-1036']
+    },
+    {
+      employeeId: '1038',
+      fullName: 'Mohamed Ali Shaik Mohamed Mohamed Ali',
+      email: 'shaik@gmail.com',
+      designation: 'Technician',
+      department: 'Fusion',
+      aliases: ['shaik', 'mohamed ali shaik', 'emp-shaik', 'emp-1038']
+    },
+    {
+      employeeId: '1047',
+      fullName: 'Ramakrishnan Kulangaravalappil Kuttan',
+      email: 'rama@gmail.com',
+      designation: 'Painter',
+      department: 'Fusion',
+      aliases: ['rama', 'ramakrishnan', 'emp-rama', 'emp-1047']
+    },
+    {
+      employeeId: '1048',
+      fullName: 'Muhammad Irfan Faqeer Hussain',
+      email: 'irfan@gmail.com',
+      designation: 'Painter',
+      department: 'Fusion',
+      aliases: ['irfan', 'muhammad irfan', 'emp-irfan', 'emp-1048']
+    },
+    {
+      employeeId: '1049',
+      fullName: 'Sanjay Kumar Shrawan Kumar',
+      email: 'sanjay@gmail.com',
+      designation: 'Mason',
+      department: 'Fusion',
+      aliases: ['sanjay', 'sanjay kumar', 'emp-sanjay', 'emp-1049']
+    },
+    {
+      employeeId: '1054',
+      fullName: 'Nowfal Rizwan Naina Mohamed Naina Mohamed',
+      email: 'nowfal@gmail.com',
+      designation: 'Helper',
+      department: 'Fusion',
+      aliases: ['nowfal', 'emp-nowfal', 'emp-1054']
+    },
+    {
+      employeeId: '1056',
+      fullName: 'Rafi Ullah Khan Aman Ullah Khan',
+      email: 'rafi@gmail.com',
+      designation: 'Driver',
+      department: 'Fusion',
+      aliases: ['rafi', 'rafi ullah', 'rafiullah', 'rafi ullah khan', 'emp-rafi', 'emp-1056']
+    },
+    {
+      employeeId: '1057',
+      fullName: 'Anandh Veeramani Veeramani',
+      email: 'anand@gmail.com',
+      designation: 'Technician',
+      department: 'Fusion',
+      aliases: ['anand', 'anandh', 'anandh veeramani', 'anand veeramani', 'emp-anan', 'emp-ana', 'emp-1057']
+    },
+    {
+      employeeId: '1058',
+      fullName: 'Alnaser Samsudeen',
+      email: 'naser@gmail.com',
+      designation: 'Technician',
+      department: 'Fusion',
+      aliases: ['naser', 'al naser', 'alnaser', 'emp-naser', 'emp-1058']
+    },
+    {
+      employeeId: '1059',
+      fullName: 'Saleem Allapitchai Allapitchai',
+      email: 'saleem@gmail.com',
+      designation: 'Helper',
+      department: 'Fusion',
+      aliases: ['saleem', 'emp-saleem', 'emp-1059']
+    },
+    {
+      employeeId: '1060',
+      fullName: 'Silambarasan Rajamanikkam Rajamanikkam',
+      email: 'silambu@gmail.com',
+      designation: 'Mason',
+      department: 'Fusion',
+      aliases: ['silambu', 'silambarasan', 'emp-silambu', 'emp-1060']
+    }
+  ];
+
   // State Management
   let supabaseClient = null;
   let currentUser = null;
@@ -410,6 +641,10 @@
   async function loadAllCloudData() {
     if (!supabaseClient) return;
 
+    if (employeesData.length === 0) {
+      employeesData = combineUserEmployeeRecords([], []);
+    }
+
     try {
       // 1. Fetch Employees & Users
       const { data: users } = await supabaseClient.from('users').select('*').eq('is_deleted', false);
@@ -490,21 +725,202 @@
   }
 
   function combineUserEmployeeRecords(users, employees) {
-    return users.map(u => {
-      const emp = employees.find(e => e.user_id === u.id) || {};
+    const list = users.map(u => {
+      const emp = employees.find(e => e.user_id === u.id || (e.email && u.email && e.email.toLowerCase() === u.email.toLowerCase())) || {};
+      
+      // Cross-reference against master directory to resolve official full name
+      const official = MASTER_EMPLOYEES_DIRECTORY.find(m => 
+        (u.email && m.email.toLowerCase() === u.email.toLowerCase()) ||
+        (emp.employee_code && (m.employeeId.toUpperCase() === emp.employee_code.toUpperCase() || emp.employee_code.toUpperCase() === `EMP-${m.employeeId.toUpperCase()}`)) ||
+        (u.full_name && m.fullName.toLowerCase() === u.full_name.toLowerCase()) ||
+        (m.aliases && u.full_name && m.aliases.some(a => u.full_name.toLowerCase().includes(a.toLowerCase())))
+      );
+
       return {
         id: u.id,
-        name: u.full_name || 'Unknown',
-        email: u.email || '',
-        phone: u.phone_number || '',
+        userId: u.id,
+        employeeTableId: emp.id || null,
+        name: (official && official.fullName) || (u.full_name && u.full_name !== 'Staff' && u.full_name !== 'Staff Member' ? u.full_name : (emp.full_name || (official ? official.fullName : 'Team Member'))),
+        email: u.email || emp.email || (official ? official.email : ''),
+        phone: u.phone_number || emp.phone_number || '',
         role: u.role || 'EMPLOYEE',
         isActive: u.is_active,
-        employeeCode: emp.employee_code || `EMP-${u.id.substring(0, 4).toUpperCase()}`,
-        designation: emp.designation || 'Staff',
-        department: emp.department || 'Operations',
+        employeeCode: emp.employee_code || (official ? official.employeeId : `EMP-${u.id.substring(0, 4).toUpperCase()}`),
+        designation: emp.designation || (official ? official.designation : 'Staff'),
+        department: emp.department || (official ? official.department : 'Operations'),
         assignedOfficeId: emp.assigned_office_id
       };
     });
+
+    // Also include any standalone records from `employees` table that were not linked to a user account
+    employees.forEach(emp => {
+      const already = list.some(item => (emp.id && item.employeeTableId === emp.id) || (emp.user_id && item.userId === emp.user_id));
+      if (!already) {
+        const official = MASTER_EMPLOYEES_DIRECTORY.find(m => 
+          (emp.employee_code && (m.employeeId.toUpperCase() === emp.employee_code.toUpperCase() || emp.employee_code.toUpperCase() === `EMP-${m.employeeId.toUpperCase()}`)) ||
+          (emp.email && m.email.toLowerCase() === emp.email.toLowerCase()) ||
+          (emp.full_name && m.fullName.toLowerCase() === emp.full_name.toLowerCase()) ||
+          (m.aliases && emp.full_name && m.aliases.some(a => emp.full_name.toLowerCase().includes(a.toLowerCase())))
+        );
+
+        list.push({
+          id: emp.id,
+          userId: emp.user_id || null,
+          employeeTableId: emp.id,
+          name: (official && official.fullName) || emp.full_name || emp.name || 'Team Member',
+          email: emp.email || (official ? official.email : ''),
+          phone: emp.phone_number || emp.phone || '',
+          role: 'EMPLOYEE',
+          isActive: emp.is_active !== false,
+          employeeCode: emp.employee_code || (official ? official.employeeId : `EMP-${emp.id.substring(0, 4).toUpperCase()}`),
+          designation: emp.designation || (official ? official.designation : 'Staff'),
+          department: emp.department || (official ? official.department : 'Operations'),
+          assignedOfficeId: emp.assigned_office_id
+        });
+      }
+    });
+
+    // Ensure all master directory records exist so card lookup never misses an employee
+    MASTER_EMPLOYEES_DIRECTORY.forEach(m => {
+      const exists = list.some(item => 
+        (item.employeeCode && item.employeeCode.toUpperCase() === m.employeeId.toUpperCase()) ||
+        (item.email && item.email.toLowerCase() === m.email.toLowerCase()) ||
+        (item.name && item.name.toLowerCase() === m.fullName.toLowerCase())
+      );
+      if (!exists) {
+        list.push({
+          id: m.employeeId,
+          userId: null,
+          employeeTableId: m.employeeId,
+          name: m.fullName,
+          email: m.email,
+          phone: '',
+          role: 'EMPLOYEE',
+          isActive: true,
+          employeeCode: m.employeeId,
+          designation: m.designation,
+          department: m.department,
+          assignedOfficeId: null
+        });
+      }
+    });
+
+    return list;
+  }
+
+  // Multi-tier employee resolver: finds full official employee details across all identifiers and cards
+  function findEmployee(empId, card = null) {
+    const cleanId = (empId || '').trim();
+    const cleanIdLower = cleanId.toLowerCase();
+
+    // 1. Direct match in loaded employeesData by id, employeeTableId, userId, code, email, or name
+    if (cleanId) {
+      const match = employeesData.find(e => {
+        if (!e) return false;
+        if (e.id === cleanId) return true;
+        if (e.employeeTableId && e.employeeTableId === cleanId) return true;
+        if (e.userId && e.userId === cleanId) return true;
+        if (e.employeeCode && e.employeeCode.toLowerCase() === cleanIdLower) return true;
+        if (cleanIdLower.startsWith('emp-') && e.employeeCode && e.employeeCode.toLowerCase() === cleanIdLower.replace('emp-', '')) return true;
+        if (e.email && e.email.toLowerCase() === cleanIdLower) return true;
+        if (e.name && e.name.toLowerCase() === cleanIdLower) return true;
+        return false;
+      });
+      if (match && match.name && match.name !== 'Unknown' && match.name !== 'Staff' && match.name !== 'Staff Member' && match.name !== 'Unknown Staff') {
+        return match;
+      }
+    }
+
+    // 2. Direct lookup in MASTER_EMPLOYEES_DIRECTORY by ID, code, email, name, or alias
+    if (cleanId) {
+      const normId = cleanIdLower.replace(/^emp-/, '');
+      const masterMatch = MASTER_EMPLOYEES_DIRECTORY.find(m => 
+        m.employeeId.toLowerCase() === cleanIdLower ||
+        m.employeeId.toLowerCase() === normId ||
+        m.email.toLowerCase() === cleanIdLower ||
+        m.fullName.toLowerCase() === cleanIdLower ||
+        (m.aliases && m.aliases.some(a => a.toLowerCase() === cleanIdLower || a.toLowerCase() === normId))
+      );
+      if (masterMatch) {
+        return {
+          id: cleanId,
+          employeeTableId: cleanId,
+          userId: null,
+          employeeCode: masterMatch.employeeId,
+          name: masterMatch.fullName,
+          department: masterMatch.department,
+          designation: masterMatch.designation,
+          email: masterMatch.email,
+          phone: ''
+        };
+      }
+    }
+
+    // 3. Fallback: inspect card document details (fileName, notes) against company directory
+    if (card) {
+      const fileName = (card.file_name || card.document_url || '').toLowerCase();
+      const notes = (card.notes || '').toLowerCase();
+      const combined = `${fileName} ${notes}`;
+
+      for (const m of MASTER_EMPLOYEES_DIRECTORY) {
+        const hasAlias = m.aliases && m.aliases.some(a => combined.includes(a.toLowerCase()));
+        if (combined.includes(m.employeeId.toLowerCase()) || combined.includes(m.fullName.toLowerCase()) || hasAlias) {
+          return {
+            id: cleanId || m.employeeId,
+            employeeTableId: cleanId || m.employeeId,
+            userId: null,
+            employeeCode: m.employeeId,
+            name: m.fullName,
+            department: m.department,
+            designation: m.designation,
+            email: m.email,
+            phone: ''
+          };
+        }
+      }
+
+      // Check if we can derive a clean person name from file_name (e.g., Irshath_Ahamed_EMIRATES_ID.pdf)
+      if (card.file_name) {
+        let cleanName = card.file_name
+          .replace(/\.(pdf|png|jpg|jpeg|webp)$/i, '')
+          .replace(/[_-]/g, ' ')
+          .replace(/\b(emirates|id|eid|passport|visa|card|labor|insurance|medical|driving|license|doc|document|scan|front|back|fusion|neo)\b/gi, '')
+          .trim();
+        cleanName = cleanName.split(/\s+/).filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+        if (cleanName.length >= 3) {
+          return {
+            id: cleanId,
+            employeeTableId: cleanId,
+            userId: null,
+            employeeCode: cleanId ? cleanId.substring(0, 8) : 'EMP',
+            name: cleanName,
+            department: 'Operations',
+            designation: 'Staff',
+            email: '',
+            phone: ''
+          };
+        }
+      }
+    }
+
+    // 4. Return any partial match from employeesData if available
+    if (cleanId) {
+      const partial = employeesData.find(e => e.id === cleanId || e.employeeTableId === cleanId);
+      if (partial && partial.name && partial.name !== 'Unknown') return partial;
+    }
+
+    // 5. Final fallback - never display "Staff Member" or "Unknown Staff"
+    return {
+      id: cleanId,
+      employeeTableId: cleanId,
+      userId: null,
+      name: 'Team Member',
+      employeeCode: cleanId ? (cleanId.length > 8 ? cleanId.substring(0, 8) : cleanId) : 'EMP',
+      department: 'Operations',
+      designation: 'Staff',
+      phone: '',
+      email: ''
+    };
   }
 
   function updateOverviewMetrics() {
@@ -1415,7 +1831,7 @@
     text += `The following *${urgentCards.length} document(s)* require immediate renewal:\n\n`;
 
     urgentCards.forEach((c, idx) => {
-      const emp = employeesData.find(e => e.id === c.employee_id) || { name: 'Staff', employeeCode: 'EMP' };
+      const emp = findEmployee(c.employee_id, c);
       const st = calculateExpiryStatus(c.expiry_date);
       text += `*${idx + 1}. ${c.card_name.toUpperCase()}*\n`;
       text += `  👤 Employee: ${emp.name} (${emp.employeeCode})\n`;
@@ -1452,7 +1868,7 @@
     body += `The following employee credential(s) have reached the critical 3-day expiration threshold:\n\n`;
 
     urgentCards.forEach((c, idx) => {
-      const emp = employeesData.find(e => e.id === c.employee_id) || { name: 'Staff', employeeCode: 'EMP' };
+      const emp = findEmployee(c.employee_id, c);
       const st = calculateExpiryStatus(c.expiry_date);
       body += `Document #${idx + 1}: ${c.card_name}\n`;
       body += `• Employee: ${emp.name} (${emp.employeeCode})\n`;
@@ -1613,7 +2029,7 @@
       try {
         let tableRows = '';
         urgentCards.forEach(c => {
-          const emp = employeesData.find(e => e.id === c.employee_id) || { name: 'Staff', employeeCode: 'EMP' };
+          const emp = findEmployee(c.employee_id, c);
           const st = calculateExpiryStatus(c.expiry_date);
           tableRows += `<tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 10px;">${c.card_name}</td><td style="padding: 10px; font-family: monospace;">${c.card_number}</td><td style="padding: 10px;">${emp.name} (${emp.employeeCode})</td><td style="padding: 10px;">${formatDisplayDate(c.expiry_date)}</td><td style="padding: 10px;"><span style="background: #ef4444; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px;">${st.label}</span></td></tr>`;
         });
@@ -1646,7 +2062,7 @@
       try {
         let text = `🚨 *URGENT COMPLIANCE NOTICE: CARD EXPIRATION (≤ 3 DAYS)*\n════════════════════════════════════════\nAttention: Compliance & Operations Control\nThe following *${urgentCards.length} document(s)* require immediate renewal:\n\n`;
         urgentCards.forEach((c, idx) => {
-          const emp = employeesData.find(e => e.id === c.employee_id) || { name: 'Staff', employeeCode: 'EMP' };
+          const emp = findEmployee(c.employee_id, c);
           const st = calculateExpiryStatus(c.expiry_date);
           text += `*${idx + 1}. ${c.card_name.toUpperCase()}*\n  👤 ${emp.name} (${emp.employeeCode})\n  🔢 No: ${c.card_number}\n  📅 Expiry: ${formatDisplayDate(c.expiry_date)}\n  ⏳ Status: ${st.label}\n`;
         });
@@ -1700,12 +2116,7 @@
 
     if (criticalCards.length > 0) {
       const cardsHtml = criticalCards.slice(0, 4).map(card => {
-        const emp = employeesData.find(e => e.id === card.employee_id) || {
-          name: 'Staff Member',
-          employeeCode: 'EMP',
-          department: 'Operations',
-          phone: ''
-        };
+        const emp = findEmployee(card.employee_id, card);
         const typeBadge = getCardTypeBadge(card.card_type);
 
         return `
@@ -1787,7 +2198,7 @@
     const statusFilter = cardsFilterStatus?.value || 'ALL';
 
     const filtered = cardsData.filter(card => {
-      const emp = employeesData.find(e => e.id === card.employee_id) || { name: 'Unknown', employeeCode: '', department: '' };
+      const emp = findEmployee(card.employee_id, card);
       const st = calculateExpiryStatus(card.expiry_date);
 
       // Search query filter
@@ -1852,13 +2263,7 @@
     // 2. Render Compact Table View
     if (cardsTableBody) {
       cardsTableBody.innerHTML = filtered.map(card => {
-        const emp = employeesData.find(e => e.id === card.employee_id) || { 
-          name: 'Unknown Staff', 
-          employeeCode: 'N/A', 
-          department: 'Operations',
-          phone: '',
-          email: ''
-        };
+        const emp = findEmployee(card.employee_id, card);
         const st = calculateExpiryStatus(card.expiry_date);
         const typeBadge = getCardTypeBadge(card.card_type, card.card_name);
 
@@ -1942,13 +2347,7 @@
     // 3. Render Digital ID & Executive Wallet Cards Grid
     if (cardsWalletGrid) {
       cardsWalletGrid.innerHTML = filtered.map(card => {
-        const emp = employeesData.find(e => e.id === card.employee_id) || { 
-          name: 'Unknown Staff', 
-          employeeCode: 'N/A', 
-          department: 'Operations',
-          phone: '',
-          email: ''
-        };
+        const emp = findEmployee(card.employee_id, card);
         const st = calculateExpiryStatus(card.expiry_date);
         const cfg = getWalletCardConfig(card);
         const formattedNum = formatCardNumberDisplay(card.card_number, card.card_type);
@@ -2078,7 +2477,7 @@
     // Populate employee select dropdown
     if (cardEmpSelect) {
       cardEmpSelect.innerHTML = employeesData.map(e => `
-        <option value="${e.id}">${e.name} (${e.employeeCode}) - ${e.department}</option>
+        <option value="${e.employeeTableId || e.id}">${e.name} (${e.employeeCode}) - ${e.department}</option>
       `).join('');
     }
 
@@ -2087,7 +2486,14 @@
     if (cardToEdit) {
       document.getElementById('card-drawer-title').textContent = 'Edit Employee Card / Pass';
       if (cardEditId) cardEditId.value = cardToEdit.id;
-      if (cardEmpSelect) cardEmpSelect.value = cardToEdit.employee_id;
+      if (cardEmpSelect) {
+        const empMatch = findEmployee(cardToEdit.employee_id, cardToEdit);
+        const targetVal = empMatch ? (empMatch.employeeTableId || empMatch.id) : cardToEdit.employee_id;
+        cardEmpSelect.value = targetVal;
+        if (!cardEmpSelect.value && cardToEdit.employee_id) {
+          cardEmpSelect.value = cardToEdit.employee_id;
+        }
+      }
       if (cardTypeSelect) cardTypeSelect.value = cardToEdit.card_type;
       if (cardCustomName) cardCustomName.value = cardToEdit.card_name || '';
       if (cardNumberInput) cardNumberInput.value = cardToEdit.card_number || '';
@@ -2374,14 +2780,14 @@ OUTPUT RULES
           }
 
           // Try matching employee by name if holder_name exists
-          if (aiResult.holder_name && cardEmpSelect && employeesData.length > 0) {
-            const hLower = aiResult.holder_name.toLowerCase();
-            const matchedEmp = employeesData.find(e => {
+          if (aiResult.holder_name && cardEmpSelect) {
+            const matchedEmp = findEmployee(null, { notes: aiResult.holder_name, file_name: aiResult.holder_name }) || employeesData.find(e => {
               const eLower = (e.name || '').toLowerCase();
+              const hLower = aiResult.holder_name.toLowerCase();
               return eLower.includes(hLower) || hLower.includes(eLower);
             });
             if (matchedEmp) {
-              cardEmpSelect.value = matchedEmp.id;
+              cardEmpSelect.value = matchedEmp.employeeTableId || matchedEmp.id;
             }
           }
 
@@ -2814,7 +3220,7 @@ OUTPUT RULES
   window.openCardViewer = async function(cardId) {
     const card = cardsData.find(c => c.id === cardId);
     if (!card) return;
-    const emp = employeesData.find(e => e.id === card.employee_id) || { name: 'Staff', employeeCode: 'N/A' };
+    const emp = findEmployee(card.employee_id, card);
     const st = calculateExpiryStatus(card.expiry_date);
 
     const titleEl = document.getElementById('card-viewer-title');
@@ -2889,7 +3295,7 @@ OUTPUT RULES
   window.downloadCardFile = async function(cardId) {
     const card = cardsData.find(c => c.id === cardId);
     if (!card) return;
-    const emp = employeesData.find(e => e.id === card.employee_id) || { name: 'Staff' };
+    const emp = findEmployee(card.employee_id, card);
     const defaultName = `${(emp.name || 'Staff').replace(/\s+/g, '_')}_${(card.card_name || 'Card').replace(/\s+/g, '_')}`;
 
     if (card.document_url && card.document_url.startsWith('data:')) {
@@ -2943,13 +3349,7 @@ Generated Date : ${new Date().toLocaleString()}
   window.notifyCardWhatsApp = function(cardId) {
     const card = cardsData.find(c => c.id === cardId);
     if (!card) return;
-    const emp = employeesData.find(e => e.id === card.employee_id) || { 
-      name: 'Employee', 
-      employeeCode: 'N/A', 
-      department: 'General', 
-      designation: 'Staff', 
-      phone: '' 
-    };
+    const emp = findEmployee(card.employee_id, card);
     const st = calculateExpiryStatus(card.expiry_date);
 
     const cleanPhone = (emp.phone || '').replace(/[^0-9]/g, '');
@@ -2983,13 +3383,7 @@ _Fusion 360 Workforce Document Control_`;
   window.notifyCardEmail = function(cardId) {
     const card = cardsData.find(c => c.id === cardId);
     if (!card) return;
-    const emp = employeesData.find(e => e.id === card.employee_id) || { 
-      name: 'Employee', 
-      employeeCode: 'N/A', 
-      department: 'General', 
-      designation: 'Staff', 
-      email: '' 
-    };
+    const emp = findEmployee(card.employee_id, card);
     const st = calculateExpiryStatus(card.expiry_date);
 
     const recipient = emp.email || '';
@@ -3050,7 +3444,7 @@ Fusion 360 Compliance & Operations Desk`;
     } else {
       if (listEl) {
         listEl.innerHTML = criticalCards.map((c, i) => {
-          const emp = employeesData.find(e => e.id === c.employee_id) || { name: 'Staff' };
+          const emp = findEmployee(c.employee_id, c);
           const st = calculateExpiryStatus(c.expiry_date);
           return `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border-subtle); font-size: 12px;">
@@ -3072,7 +3466,7 @@ Date: ${new Date().toLocaleDateString('en-GB')}
 Total Urgent Items: ${criticalCards.length}
 ----------------------------------------
 ${criticalCards.map((c, i) => {
-  const emp = employeesData.find(e => e.id === c.employee_id) || { name: 'Staff' };
+  const emp = findEmployee(c.employee_id, c);
   const st = calculateExpiryStatus(c.expiry_date);
   return `${i + 1}. *${emp.name}* - ${c.card_name}\n   Card #: ${c.card_number}\n   Expiry: ${formatDisplayDate(c.expiry_date)} (${st.label})`;
 }).join('\n\n')}
@@ -3113,7 +3507,7 @@ ${criticalCards.map((c, i) => {
     }
 
     const rows = cardsData.map(c => {
-      const emp = employeesData.find(e => e.id === c.employee_id) || {};
+      const emp = findEmployee(c.employee_id, c);
       const st = calculateExpiryStatus(c.expiry_date);
       return {
         'Employee Code': emp.employeeCode || '',
