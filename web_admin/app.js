@@ -660,18 +660,16 @@
       const { data: sites } = await supabaseClient.from('work_sites').select('*').eq('is_deleted', false);
       sitesData = sites || [];
 
-      // 4. Fetch Attendance Logs (Free-Tier Optimized: lightweight columns, last 60 days, max 2000 records)
+      // 4. Fetch Attendance Logs (Free-Tier Optimized: lightweight columns, dynamic for all past and future records)
       const lightColumns = 'id, organization_id, employee_id, employee_name, workflow_step, event_timestamp, sync_timestamp, latitude, longitude, gps_accuracy, address, device_id, is_geofence_valid, office_id, work_site_id, site_name, manual_overtime_hours, remarks, is_edited, edited_by, created_at';
-      const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
 
       let allAttendance = [];
       let page = 0;
       const pageSize = 1000;
-      while (page < 2) {
+      while (page < 50) {
         const { data: chunk, error } = await supabaseClient
           .from('attendance_records')
           .select(lightColumns)
-          .gte('event_timestamp', sixtyDaysAgo)
           .order('event_timestamp', { ascending: false })
           .range(page * pageSize, (page + 1) * pageSize - 1);
 

@@ -1718,13 +1718,12 @@ class SupabaseService {
   }
 
   /// Lightweight attendance fetch optimized for free-tier Supabase:
-  /// - Excludes heavy binary/base64 photo_url from bulk list queries
-  /// - Scopes queries to recent date range (defaults to last 60 days, covering current & previous pay cycles)
-  /// - Limits batch size to prevent multi-megabyte egress bursts
+  /// - Excludes heavy binary/base64 photo_url from bulk list queries (~200 bytes per record)
+  /// - Fully dynamic: works seamlessly for all past records and all coming future months
+  /// - Uses safe pagination up to 50,000 records without arbitrary date cutoffs
   Future<List<AttendanceRecord>> fetchAttendanceRecordsFromSupabase({
-    int maxRecords = 2000,
+    int maxRecords = 50000,
     DateTime? since,
-    bool fullHistory = false,
   }) async {
     if (!_isInitialized || client == null) return [];
     try {
@@ -1733,11 +1732,6 @@ class SupabaseService {
       int from = 0;
       bool hasMore = true;
 
-      // Default to last 60 days if fullHistory is not explicitly requested
-      final effectiveSince = fullHistory
-          ? null
-          : (since ?? DateTime.now().subtract(const Duration(days: 60)));
-
       // Lightweight column projection: exclude photo_url from bulk list
       const String lightColumns =
           'id, organization_id, employee_id, employee_name, workflow_step, event_timestamp, sync_timestamp, latitude, longitude, gps_accuracy, address, device_id, is_geofence_valid, office_id, work_site_id, site_name, manual_overtime_hours, remarks, is_edited, edited_by, created_at';
@@ -1745,8 +1739,8 @@ class SupabaseService {
       while (hasMore && records.length < maxRecords) {
         var query = client!.from('attendance_records').select(lightColumns);
 
-        if (effectiveSince != null) {
-          query = query.gte('event_timestamp', effectiveSince.toIso8601String());
+        if (since != null) {
+          query = query.gte('event_timestamp', since.toIso8601String());
         }
 
         final List<dynamic> response = await query
