@@ -62,9 +62,9 @@ class SyncEngine {
       debugPrint('SyncEngine connectivity listener error: $e');
     }
 
-    // 2. Periodic background flush timer (every 2 minutes)
+    // 2. Periodic background flush timer (relaxed to every 15 minutes to preserve Supabase free-tier log ingestion)
     _periodicSyncTimer?.cancel();
-    _periodicSyncTimer = Timer.periodic(const Duration(minutes: 2), (_) {
+    _periodicSyncTimer = Timer.periodic(const Duration(minutes: 15), (_) {
       if (_db.getAllPendingSyncRecords().isNotEmpty) {
         triggerAutoSync();
       }

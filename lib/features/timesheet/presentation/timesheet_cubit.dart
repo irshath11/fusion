@@ -65,7 +65,6 @@ class TimesheetCubit extends Cubit<TimesheetState> {
       try {
         final cloudRecords = await SupabaseService().fetchAttendanceRecordsFromSupabase();
         if (cloudRecords.isNotEmpty) {
-          _db.clearAttendanceCache();
           _db.saveAttendanceRecordsBatch(cloudRecords);
         }
       } catch (_) {}

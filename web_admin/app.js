@@ -660,14 +660,18 @@
       const { data: sites } = await supabaseClient.from('work_sites').select('*').eq('is_deleted', false);
       sitesData = sites || [];
 
-      // 4. Fetch Attendance Logs (with pagination)
+      // 4. Fetch Attendance Logs (Free-Tier Optimized: lightweight columns, last 60 days, max 2000 records)
+      const lightColumns = 'id, organization_id, employee_id, employee_name, workflow_step, event_timestamp, sync_timestamp, latitude, longitude, gps_accuracy, address, device_id, is_geofence_valid, office_id, work_site_id, site_name, manual_overtime_hours, remarks, is_edited, edited_by, created_at';
+      const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+
       let allAttendance = [];
       let page = 0;
       const pageSize = 1000;
-      while (page < 10) {
+      while (page < 2) {
         const { data: chunk, error } = await supabaseClient
           .from('attendance_records')
-          .select('*')
+          .select(lightColumns)
+          .gte('event_timestamp', sixtyDaysAgo)
           .order('event_timestamp', { ascending: false })
           .range(page * pageSize, (page + 1) * pageSize - 1);
 
@@ -3532,11 +3536,27 @@ ${criticalCards.map((c, i) => {
     XLSX.writeFile(wb, `Employee_Cards_Compliance_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   }
 
-  // Photo Lightbox Modal Handlers
-  window.openPhotoModal = function(index) {
+  // Photo Lightbox Modal Handlers (Free-Tier: on-demand photo loading)
+  window.openPhotoModal = async function(index) {
     const r = attendanceData[index];
     if (!r) return;
-    const photoSrc = getPhotoSrc(r);
+    let photoSrc = getPhotoSrc(r);
+
+    // If photo_url was omitted during lightweight list fetch, load it on-demand for this single record
+    if (!photoSrc && r.id && supabaseClient) {
+      try {
+        const { data: pData } = await supabaseClient
+          .from('attendance_records')
+          .select('photo_url')
+          .eq('id', r.id)
+          .maybeSingle();
+        if (pData && pData.photo_url) {
+          r.photo_url = pData.photo_url;
+          photoSrc = getPhotoSrc(r);
+        }
+      } catch (_) {}
+    }
+
     if (!photoSrc) return;
 
     const modalImg = document.getElementById('photo-modal-img');

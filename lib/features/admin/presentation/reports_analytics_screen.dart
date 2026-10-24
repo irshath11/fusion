@@ -66,7 +66,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       final cloudRecords =
           await SupabaseService().fetchAttendanceRecordsFromSupabase();
       if (cloudRecords.isNotEmpty) {
-        _db.clearAttendanceCache();
         _db.saveAttendanceRecordsBatch(cloudRecords);
       }
 

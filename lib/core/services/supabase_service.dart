@@ -1717,9 +1717,14 @@ class SupabaseService {
     }
   }
 
-  /// Fetch all attendance records from Supabase cloud database with automatic pagination
+  /// Lightweight attendance fetch optimized for free-tier Supabase:
+  /// - Excludes heavy binary/base64 photo_url from bulk list queries
+  /// - Scopes queries to recent date range (defaults to last 60 days, covering current & previous pay cycles)
+  /// - Limits batch size to prevent multi-megabyte egress bursts
   Future<List<AttendanceRecord>> fetchAttendanceRecordsFromSupabase({
-    int maxRecords = 20000,
+    int maxRecords = 2000,
+    DateTime? since,
+    bool fullHistory = false,
   }) async {
     if (!_isInitialized || client == null) return [];
     try {
@@ -1728,10 +1733,23 @@ class SupabaseService {
       int from = 0;
       bool hasMore = true;
 
+      // Default to last 60 days if fullHistory is not explicitly requested
+      final effectiveSince = fullHistory
+          ? null
+          : (since ?? DateTime.now().subtract(const Duration(days: 60)));
+
+      // Lightweight column projection: exclude photo_url from bulk list
+      const String lightColumns =
+          'id, organization_id, employee_id, employee_name, workflow_step, event_timestamp, sync_timestamp, latitude, longitude, gps_accuracy, address, device_id, is_geofence_valid, office_id, work_site_id, site_name, manual_overtime_hours, remarks, is_edited, edited_by, created_at';
+
       while (hasMore && records.length < maxRecords) {
-        final List<dynamic> response = await client!
-            .from('attendance_records')
-            .select()
+        var query = client!.from('attendance_records').select(lightColumns);
+
+        if (effectiveSince != null) {
+          query = query.gte('event_timestamp', effectiveSince.toIso8601String());
+        }
+
+        final List<dynamic> response = await query
             .order('event_timestamp', ascending: false)
             .range(from, from + pageSize - 1);
 
@@ -1762,5 +1780,24 @@ class SupabaseService {
       debugPrint('Supabase fetchAttendanceRecordsFromSupabase note: $e');
       return [];
     }
+  }
+
+  /// Fetches photo URL or base64 proof on demand for a single attendance record.
+  /// Preserves free-tier egress by only downloading photo when explicitly requested by user.
+  Future<String?> fetchAttendanceRecordPhoto(String recordId) async {
+    if (!_isInitialized || client == null || recordId.isEmpty) return null;
+    try {
+      final response = await client!
+          .from('attendance_records')
+          .select('photo_url')
+          .eq('id', recordId)
+          .maybeSingle();
+      if (response != null && response['photo_url'] != null) {
+        return response['photo_url']?.toString();
+      }
+    } catch (e) {
+      debugPrint('Supabase fetchAttendanceRecordPhoto error: $e');
+    }
+    return null;
   }
 }
