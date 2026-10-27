@@ -629,8 +629,12 @@ class LocalDatabaseService {
 
     if (index >= 0) {
       final existing = _attendanceRecords[index];
+      final photoToKeep = record.photoBase64.trim().isNotEmpty
+          ? record.photoBase64
+          : existing.photoBase64;
       if (existing.isEdited && record.manualOvertimeHours == null && existing.manualOvertimeHours != null) {
         _attendanceRecords[index] = record.copyWith(
+          photoBase64: photoToKeep,
           manualOvertimeHours: existing.manualOvertimeHours,
           overrideManualOvertimeHours: true,
           remarks: (existing.remarks != null && existing.remarks!.isNotEmpty) ? existing.remarks : record.remarks,
@@ -638,7 +642,9 @@ class LocalDatabaseService {
           editedBy: existing.editedBy,
         );
       } else {
-        _attendanceRecords[index] = record;
+        _attendanceRecords[index] = record.copyWith(
+          photoBase64: photoToKeep,
+        );
       }
     } else {
       _attendanceRecords.add(record);

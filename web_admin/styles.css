@@ -1498,16 +1498,47 @@ html, body {
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
+.wallet-emp-avatar.has-photo {
+  padding: 0;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.wallet-emp-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-full);
+  display: block;
+}
+
+.emp-avatar.has-photo {
+  padding: 0;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.emp-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-full);
+  display: block;
+}
+
 .wallet-emp-info {
   min-width: 0;
   flex: 1;
 }
 
 .wallet-emp-name {
-  font-size: 15.5px;
+  font-size: 14px;
   font-weight: 700;
   color: #FFFFFF;
-  white-space: nowrap;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
   letter-spacing: 0.01em;

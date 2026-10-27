@@ -69,6 +69,7 @@ Enterprise-grade, offline-first mobile and web application built using **Flutter
 - **Supabase Database Cron (`pg_cron` & `pg_net`)**: Dispatches automated daily compliance checks every morning at **08:00 AM Gulf Standard Time (GST)** via `backend/supabase_cron_job.sql`.
 - **Automated Email & WhatsApp Alerts**: Broadcasts urgent renewal alerts via **Resend API** to operations executives (`sr.irshath@gmail.com, nasuru@fusionmaint.com`) and automated WhatsApp alerts via **CallMeBot API** to `+971586939371`.
 - **Client-Side Quick Triggers**: 1-click WhatsApp (`https://wa.me/...`) and pre-composed email drafting directly from the Flutter app and Web Admin Portal.
+- **Dedicated Documentation**: See [Cards Management & Expiry Notification Module Manual](docs/CARD_AND_EXPIRY_NOTIFICATION_MODULE.md) for full operational, architectural, and setup runbooks.
 
 ### 16. Company Salary Cycle Engine (25th to 24th) & Leave Records Ledger
 - **25th-to-24th Monthly Salary Cycles**: Aligns shift aggregation and timesheets with Gulf payroll billing periods (`SalaryCycleHelper`), dynamically resolving cycles based on selected reference dates.

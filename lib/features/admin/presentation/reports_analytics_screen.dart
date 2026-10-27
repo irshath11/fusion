@@ -54,6 +54,53 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   late final List<SalaryCycle> _availableSalaryCycles =
       SalaryCycle.getRecentCycles();
 
+  // Lazy-loaded photos cache for individual datewise reports
+  final Map<String, String> _lazyLoadedPhotos = {};
+  final Set<String> _loadingPhotoRecordIds = {};
+  final Set<String> _checkedPhotoRecordIds = {};
+
+  Future<void> _fetchPhotosForDateRecords(List<AttendanceRecord> records) async {
+    final missingRecords = records.where((r) {
+      final hasLocal = r.photoBase64.trim().isNotEmpty;
+      final hasLazy = _lazyLoadedPhotos[r.id]?.trim().isNotEmpty ?? false;
+      return !hasLocal && !hasLazy && !_loadingPhotoRecordIds.contains(r.id);
+    }).toList();
+
+    if (missingRecords.isEmpty) return;
+
+    for (final r in missingRecords) {
+      _loadingPhotoRecordIds.add(r.id);
+    }
+    if (mounted) setState(() {});
+
+    try {
+      final ids = missingRecords.map((r) => r.id).toList();
+      final photosMap = await SupabaseService().fetchAttendanceRecordPhotos(ids);
+
+      bool changed = false;
+      for (final r in missingRecords) {
+        final url = photosMap[r.id];
+        if (url != null && url.isNotEmpty) {
+          _lazyLoadedPhotos[r.id] = url;
+          final updated = r.copyWith(photoBase64: url);
+          _db.saveAttendanceRecord(updated, persist: true);
+          changed = true;
+        }
+        _checkedPhotoRecordIds.add(r.id);
+      }
+      if (changed && mounted) {
+        setState(() {});
+      }
+    } catch (e) {
+      debugPrint('Error fetching photos for date records: $e');
+    } finally {
+      for (final r in missingRecords) {
+        _loadingPhotoRecordIds.remove(r.id);
+      }
+      if (mounted) setState(() {});
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -2638,14 +2685,37 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                   ),
                                 ],
                                 const SizedBox(width: 8),
-                                Text(
-                                  '${dateRecords.where((r) => r.photoBase64.isNotEmpty).length} Photo(s)',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: isDark
-                                          ? AppColors.textSecondaryDark
-                                          : Colors.grey),
-                                )
+                                () {
+                                  final count = dateRecords.where((r) {
+                                    final p = r.photoBase64.trim().isNotEmpty
+                                        ? r.photoBase64
+                                        : (_lazyLoadedPhotos[r.id] ?? '');
+                                    return p.trim().isNotEmpty;
+                                  }).length;
+                                  return Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.camera_alt_outlined,
+                                        size: 13,
+                                        color: count > 0
+                                            ? (isDark ? Colors.blue.shade300 : Colors.blue.shade700)
+                                            : (isDark ? AppColors.textSecondaryDark : Colors.grey),
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        '$count Photo(s)',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: count > 0 ? FontWeight.w600 : FontWeight.normal,
+                                          color: count > 0
+                                              ? (isDark ? Colors.blue.shade300 : Colors.blue.shade700)
+                                              : (isDark ? AppColors.textSecondaryDark : Colors.grey),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }(),
                               ],
                             ),
                             if (dayEntry != null &&
@@ -2698,6 +2768,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         setState(() {
                           _selectedDate = parsedDate;
                         });
+                        _fetchPhotosForDateRecords(dateRecords);
                       },
                     ),
                   );
@@ -3205,46 +3276,60 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      if (inRec.photoBase64.isNotEmpty ||
-                          (outRec != null && outRec.photoBase64.isNotEmpty)) ...[
-                        Row(
+                      () {
+                        final inPhoto = inRec.photoBase64.trim().isNotEmpty
+                            ? inRec.photoBase64
+                            : (_lazyLoadedPhotos[inRec.id] ?? '');
+                        final outPhoto = (outRec != null && outRec.photoBase64.trim().isNotEmpty)
+                            ? outRec.photoBase64
+                            : (outRec != null ? (_lazyLoadedPhotos[outRec.id] ?? '') : '');
+
+                        if (inPhoto.isEmpty && outPhoto.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+
+                        return Column(
                           children: [
-                            if (inRec.photoBase64.isNotEmpty)
-                              GestureDetector(
-                                onTap: () => _showFullImageDialog(inRec),
-                                child: Container(
-                                  height: 60,
-                                  width: 60,
-                                  clipBehavior: Clip.antiAlias,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.red.shade300),
+                            Row(
+                              children: [
+                                if (inPhoto.isNotEmpty)
+                                  GestureDetector(
+                                    onTap: () => _showFullImageDialog(
+                                        inRec.copyWith(photoBase64: inPhoto)),
+                                    child: Container(
+                                      height: 60,
+                                      width: 60,
+                                      clipBehavior: Clip.antiAlias,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: Colors.red.shade300),
+                                      ),
+                                      child: _buildPhotoWidget(inPhoto),
+                                    ),
                                   ),
-                                  child: _buildPhotoWidget(inRec.photoBase64),
-                                ),
-                              ),
-                            if (inRec.photoBase64.isNotEmpty &&
-                                outRec != null &&
-                                outRec.photoBase64.isNotEmpty)
-                              const SizedBox(width: 10),
-                            if (outRec != null && outRec.photoBase64.isNotEmpty)
-                              GestureDetector(
-                                onTap: () => _showFullImageDialog(outRec),
-                                child: Container(
-                                  height: 60,
-                                  width: 60,
-                                  clipBehavior: Clip.antiAlias,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.green.shade300),
+                                if (inPhoto.isNotEmpty && outPhoto.isNotEmpty)
+                                  const SizedBox(width: 10),
+                                if (outPhoto.isNotEmpty)
+                                  GestureDetector(
+                                    onTap: () => _showFullImageDialog(
+                                        outRec!.copyWith(photoBase64: outPhoto)),
+                                    child: Container(
+                                      height: 60,
+                                      width: 60,
+                                      clipBehavior: Clip.antiAlias,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: Colors.green.shade300),
+                                      ),
+                                      child: _buildPhotoWidget(outPhoto),
+                                    ),
                                   ),
-                                  child: _buildPhotoWidget(outRec.photoBase64),
-                                ),
-                              ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
                           ],
-                        ),
-                        const SizedBox(height: 8),
-                      ],
+                        );
+                      }(),
                       if (inRec.address.isNotEmpty) ...[
                         Row(
                           children: [
@@ -4670,6 +4755,18 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
     dateRecords.sort((a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
 
+    // Automatically fetch verified photos from cloud if missing locally
+    final needsPhotos = dateRecords.any((r) =>
+        r.photoBase64.trim().isEmpty &&
+        !(_lazyLoadedPhotos[r.id]?.trim().isNotEmpty ?? false) &&
+        !_checkedPhotoRecordIds.contains(r.id) &&
+        !_loadingPhotoRecordIds.contains(r.id));
+    if (needsPhotos) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _fetchPhotosForDateRecords(dateRecords);
+      });
+    }
+
     final formattedDateTitle =
         DateFormat('EEEE, dd MMMM yyyy').format(_selectedDate!);
 
@@ -5494,7 +5591,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                           final String siteNameText =
                               TimesheetCalculator.resolveSiteName(r);
 
-                          final hasPhoto = r.photoBase64.trim().isNotEmpty;
+                          final effectivePhoto = (r.photoBase64.trim().isNotEmpty
+                              ? r.photoBase64
+                              : (_lazyLoadedPhotos[r.id] ?? '')).trim();
+                          final hasPhoto = effectivePhoto.isNotEmpty;
+                          final isPhotoLoading = _loadingPhotoRecordIds.contains(r.id);
 
                           if (hasPhoto) {
                             return Container(
@@ -5557,7 +5658,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                   const SizedBox(height: 10),
                                   Center(
                                     child: GestureDetector(
-                                      onTap: () => _showFullImageDialog(r),
+                                      onTap: () => _showFullImageDialog(
+                                          r.copyWith(photoBase64: effectivePhoto)),
                                       child: Container(
                                         height: 140,
                                         width: 140,
@@ -5569,14 +5671,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                           border:
                                               Border.all(color: activePrimary),
                                         ),
-                                        child: _buildPhotoWidget(r.photoBase64),
+                                        child: _buildPhotoWidget(effectivePhoto),
                                       ),
                                     ),
                                   ),
                                   const SizedBox(height: 8),
                                   Center(
                                     child: TextButton.icon(
-                                      onPressed: () => _showFullImageDialog(r),
+                                      onPressed: () => _showFullImageDialog(
+                                          r.copyWith(photoBase64: effectivePhoto)),
                                       icon: const Icon(Icons.fullscreen_rounded,
                                           size: 16),
                                       label: const Text(
@@ -5588,8 +5691,49 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 ],
                               ),
                             );
+                          } else if (isPhotoLoading) {
+                            return Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppColors.backgroundDark
+                                    : Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isDark
+                                      ? AppColors.cardBorderDark
+                                      : Colors.grey.shade300,
+                                ),
+                              ),
+                              child: Center(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: activePrimary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      'Loading verified photo from cloud...',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isDark
+                                            ? AppColors.textSecondaryDark
+                                            : Colors.grey.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
                           } else {
-                            // Where image is not required: Display Site Name & Location Card
+                            // Where image is not required or yet to be fetched
                             return Container(
                               width: double.infinity,
                               decoration: BoxDecoration(
@@ -5660,6 +5804,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                         ],
                                       ],
                                     ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.sync_rounded, size: 20),
+                                    tooltip: 'Check Cloud for Photo',
+                                    onPressed: () => _fetchPhotosForDateRecords([r]),
                                   ),
                                 ],
                               ),
@@ -5757,6 +5906,38 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         return Image.file(File(cleanPhoto), fit: BoxFit.cover);
       }
 
+      // Check if it's a Supabase storage path or filename
+      if (!cleanPhoto.startsWith('data:') &&
+          (cleanPhoto.startsWith('photos/') ||
+              cleanPhoto.contains('attendance_') ||
+              cleanPhoto.endsWith('.jpg') ||
+              cleanPhoto.endsWith('.png') ||
+              cleanPhoto.endsWith('.jpeg'))) {
+        final storagePath = cleanPhoto.startsWith('photos/')
+            ? cleanPhoto
+            : 'photos/$cleanPhoto';
+        final resolvedUrl = SupabaseService()
+            .client
+            ?.storage
+            .from('attendance_photos')
+            .getPublicUrl(storagePath);
+        if (resolvedUrl != null && resolvedUrl.startsWith('http')) {
+          return Image.network(
+            resolvedUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                color: Colors.blueGrey.shade800,
+                child: const Center(
+                  child: Icon(Icons.broken_image_rounded,
+                      size: 50, color: Colors.white70),
+                ),
+              );
+            },
+          );
+        }
+      }
+
       String base64Str = cleanPhoto;
       if (base64Str.contains(',')) {
         base64Str = base64Str.split(',').last;
@@ -5777,6 +5958,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
   void _showFullImageDialog(AttendanceRecord record) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final photo = record.photoBase64.trim().isNotEmpty
+        ? record.photoBase64
+        : (_lazyLoadedPhotos[record.id] ?? '');
+
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
@@ -5804,14 +5989,19 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               ),
               const Divider(),
               Container(
-                height: 280,
+                height: 320,
                 width: double.infinity,
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
                   color: Colors.black,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: _buildPhotoWidget(record.photoBase64),
+                child: InteractiveViewer(
+                  panEnabled: true,
+                  minScale: 0.8,
+                  maxScale: 4.0,
+                  child: _buildPhotoWidget(photo),
+                ),
               ),
               const SizedBox(height: 12),
               Text(

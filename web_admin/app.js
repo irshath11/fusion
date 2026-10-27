@@ -314,7 +314,7 @@
   const drawerBackdrop = document.getElementById('employee-drawer-backdrop');
   const drawer = document.getElementById('employee-drawer');
   const employeeForm = document.getElementById('employee-form');
-  
+
   const transferModalBackdrop = document.getElementById('transfer-modal-backdrop');
   const transferModal = document.getElementById('transfer-modal');
   const transferTargetSelect = document.getElementById('transfer-target-select');
@@ -630,7 +630,7 @@
   function onLoginSuccess(user) {
     currentUser = user;
     loginOverlay.style.display = 'none';
-    
+
     document.getElementById('user-display-name').textContent = user.full_name || 'Admin';
     document.getElementById('user-display-role').textContent = user.role || 'ADMIN';
     document.getElementById('user-avatar').textContent = (user.full_name || 'A').charAt(0).toUpperCase();
@@ -729,9 +729,9 @@
   function combineUserEmployeeRecords(users, employees) {
     const list = users.map(u => {
       const emp = employees.find(e => e.user_id === u.id || (e.email && u.email && e.email.toLowerCase() === u.email.toLowerCase())) || {};
-      
+
       // Cross-reference against master directory to resolve official full name
-      const official = MASTER_EMPLOYEES_DIRECTORY.find(m => 
+      const official = MASTER_EMPLOYEES_DIRECTORY.find(m =>
         (u.email && m.email.toLowerCase() === u.email.toLowerCase()) ||
         (emp.employee_code && (m.employeeId.toUpperCase() === emp.employee_code.toUpperCase() || emp.employee_code.toUpperCase() === `EMP-${m.employeeId.toUpperCase()}`)) ||
         (u.full_name && m.fullName.toLowerCase() === u.full_name.toLowerCase()) ||
@@ -758,7 +758,7 @@
     employees.forEach(emp => {
       const already = list.some(item => (emp.id && item.employeeTableId === emp.id) || (emp.user_id && item.userId === emp.user_id));
       if (!already) {
-        const official = MASTER_EMPLOYEES_DIRECTORY.find(m => 
+        const official = MASTER_EMPLOYEES_DIRECTORY.find(m =>
           (emp.employee_code && (m.employeeId.toUpperCase() === emp.employee_code.toUpperCase() || emp.employee_code.toUpperCase() === `EMP-${m.employeeId.toUpperCase()}`)) ||
           (emp.email && m.email.toLowerCase() === emp.email.toLowerCase()) ||
           (emp.full_name && m.fullName.toLowerCase() === emp.full_name.toLowerCase()) ||
@@ -784,7 +784,7 @@
 
     // Ensure all master directory records exist so card lookup never misses an employee
     MASTER_EMPLOYEES_DIRECTORY.forEach(m => {
-      const exists = list.some(item => 
+      const exists = list.some(item =>
         (item.employeeCode && item.employeeCode.toUpperCase() === m.employeeId.toUpperCase()) ||
         (item.email && item.email.toLowerCase() === m.email.toLowerCase()) ||
         (item.name && item.name.toLowerCase() === m.fullName.toLowerCase())
@@ -810,10 +810,77 @@
     return list;
   }
 
+  // Enterprise employee photo resolver
+  function getEmployeePhotoUrl(emp, card = null) {
+    if (emp && emp.photoUrl && typeof emp.photoUrl === 'string' && emp.photoUrl.trim()) return emp.photoUrl.trim();
+    if (emp && emp.photo_url && typeof emp.photo_url === 'string' && emp.photo_url.trim()) return emp.photo_url.trim();
+
+    // Check by employeeCode or ID in MASTER_EMPLOYEES_DIRECTORY
+    const candidateCodes = [
+      emp?.employeeCode,
+      emp?.id,
+      card?.employee_id
+    ].filter(Boolean);
+
+    for (const rawCode of candidateCodes) {
+      const clean = String(rawCode).trim().toUpperCase().replace(/^EMP-/, '');
+      const match = MASTER_EMPLOYEES_DIRECTORY.find(m =>
+        m.employeeId.toUpperCase() === clean ||
+        m.employeeId.toUpperCase() === clean.replace(/-/g, '')
+      );
+      if (match) {
+        return `../assets/images/employees/${match.employeeId}.png`;
+      }
+      if (/^(N-100[3-9]|N-101[0-3]|10[0-6][0-9])$/i.test(clean)) {
+        return `../assets/images/employees/${clean}.png`;
+      }
+    }
+
+    // Check by full name or aliases in MASTER_EMPLOYEES_DIRECTORY
+    const nameCandidate = (emp?.name || card?.file_name || card?.notes || '').toLowerCase();
+    if (nameCandidate) {
+      const match = MASTER_EMPLOYEES_DIRECTORY.find(m =>
+        nameCandidate.includes(m.fullName.toLowerCase()) ||
+        nameCandidate.includes(m.employeeId.toLowerCase()) ||
+        (m.aliases && m.aliases.some(a => nameCandidate.includes(a.toLowerCase())))
+      );
+      if (match) {
+        return `../assets/images/employees/${match.employeeId}.png`;
+      }
+    }
+
+    return null;
+  }
+
   // Multi-tier employee resolver: finds full official employee details across all identifiers and cards
   function findEmployee(empId, card = null) {
     const cleanId = (empId || '').trim();
     const cleanIdLower = cleanId.toLowerCase();
+
+    // Enrichment helper guaranteeing full official legal name and photoUrl
+    const enrich = (base) => {
+      if (!base) return base;
+      const cleanCode = (base.employeeCode || base.id || '').toUpperCase().replace(/^EMP-/, '');
+      const master = MASTER_EMPLOYEES_DIRECTORY.find(m =>
+        m.employeeId.toUpperCase() === cleanCode ||
+        m.employeeId.toUpperCase() === (base.employeeCode || '').toUpperCase() ||
+        (base.email && m.email.toLowerCase() === base.email.toLowerCase()) ||
+        (base.name && m.fullName.toLowerCase() === base.name.toLowerCase()) ||
+        (m.aliases && base.name && m.aliases.some(a => base.name.toLowerCase().includes(a.toLowerCase())))
+      );
+      const fullName = (master && master.fullName) || (base.name && base.name !== 'Staff' && base.name !== 'Staff Member' ? base.name : (master ? master.fullName : 'Team Member'));
+      const photoUrl = base.photoUrl || (master ? `../assets/images/employees/${master.employeeId}.png` : getEmployeePhotoUrl(base, card));
+
+      return {
+        ...base,
+        name: fullName,
+        employeeCode: (master && master.employeeId) || base.employeeCode || 'EMP',
+        photoUrl: photoUrl,
+        department: (master && master.department) || base.department || 'Operations',
+        designation: (master && master.designation) || base.designation || 'Staff',
+        email: (master && master.email) || base.email || ''
+      };
+    };
 
     // 1. Direct match in loaded employeesData by id, employeeTableId, userId, code, email, or name
     if (cleanId) {
@@ -829,14 +896,14 @@
         return false;
       });
       if (match && match.name && match.name !== 'Unknown' && match.name !== 'Staff' && match.name !== 'Staff Member' && match.name !== 'Unknown Staff') {
-        return match;
+        return enrich(match);
       }
     }
 
     // 2. Direct lookup in MASTER_EMPLOYEES_DIRECTORY by ID, code, email, name, or alias
     if (cleanId) {
       const normId = cleanIdLower.replace(/^emp-/, '');
-      const masterMatch = MASTER_EMPLOYEES_DIRECTORY.find(m => 
+      const masterMatch = MASTER_EMPLOYEES_DIRECTORY.find(m =>
         m.employeeId.toLowerCase() === cleanIdLower ||
         m.employeeId.toLowerCase() === normId ||
         m.email.toLowerCase() === cleanIdLower ||
@@ -844,7 +911,7 @@
         (m.aliases && m.aliases.some(a => a.toLowerCase() === cleanIdLower || a.toLowerCase() === normId))
       );
       if (masterMatch) {
-        return {
+        return enrich({
           id: cleanId,
           employeeTableId: cleanId,
           userId: null,
@@ -853,8 +920,9 @@
           department: masterMatch.department,
           designation: masterMatch.designation,
           email: masterMatch.email,
+          photoUrl: `../assets/images/employees/${masterMatch.employeeId}.png`,
           phone: ''
-        };
+        });
       }
     }
 
@@ -867,7 +935,7 @@
       for (const m of MASTER_EMPLOYEES_DIRECTORY) {
         const hasAlias = m.aliases && m.aliases.some(a => combined.includes(a.toLowerCase()));
         if (combined.includes(m.employeeId.toLowerCase()) || combined.includes(m.fullName.toLowerCase()) || hasAlias) {
-          return {
+          return enrich({
             id: cleanId || m.employeeId,
             employeeTableId: cleanId || m.employeeId,
             userId: null,
@@ -876,8 +944,9 @@
             department: m.department,
             designation: m.designation,
             email: m.email,
+            photoUrl: `../assets/images/employees/${m.employeeId}.png`,
             phone: ''
-          };
+          });
         }
       }
 
@@ -890,7 +959,7 @@
           .trim();
         cleanName = cleanName.split(/\s+/).filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
         if (cleanName.length >= 3) {
-          return {
+          return enrich({
             id: cleanId,
             employeeTableId: cleanId,
             userId: null,
@@ -900,7 +969,7 @@
             designation: 'Staff',
             email: '',
             phone: ''
-          };
+          });
         }
       }
     }
@@ -908,11 +977,11 @@
     // 4. Return any partial match from employeesData if available
     if (cleanId) {
       const partial = employeesData.find(e => e.id === cleanId || e.employeeTableId === cleanId);
-      if (partial && partial.name && partial.name !== 'Unknown') return partial;
+      if (partial && partial.name && partial.name !== 'Unknown') return enrich(partial);
     }
 
     // 5. Final fallback - never display "Staff Member" or "Unknown Staff"
-    return {
+    return enrich({
       id: cleanId,
       employeeTableId: cleanId,
       userId: null,
@@ -922,12 +991,12 @@
       designation: 'Staff',
       phone: '',
       email: ''
-    };
+    });
   }
 
   function updateOverviewMetrics() {
     document.getElementById('metric-total-employees').textContent = employeesData.length;
-    
+
     // Calculate checked in & on duty today
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
@@ -941,7 +1010,7 @@
     );
 
     document.getElementById('metric-checked-in-today').textContent = checkedInEmpIds.size;
-    
+
     const onDutyCount = Math.max(0, checkedInEmpIds.size - completedEmpIds.size);
     document.getElementById('metric-on-duty').textContent = onDutyCount;
     document.getElementById('metric-offices-count').textContent = officesData.length;
@@ -953,9 +1022,9 @@
     if (!employeeTableBody) return;
     const query = (employeeSearchInput?.value || '').toLowerCase();
 
-    const filtered = employeesData.filter(e => 
-      e.name.toLowerCase().includes(query) || 
-      e.employeeCode.toLowerCase().includes(query) || 
+    const filtered = employeesData.filter(e =>
+      e.name.toLowerCase().includes(query) ||
+      e.employeeCode.toLowerCase().includes(query) ||
       e.email.toLowerCase().includes(query)
     );
 
@@ -1012,16 +1081,16 @@
         <td>${o.geofence_radius_meters}m</td>
         <td><span class="badge ${o.is_default ? 'badge-success' : 'badge-neutral'}">${o.is_default ? 'Default HQ' : 'Branch'}</span></td>
         <td>
-          ${o.is_default 
-            ? '<span style="color: var(--text-muted); font-size: 11px;">Protected (HQ)</span>' 
-            : `<button class="btn btn-sm" style="color: #ef4444; border: 1px solid #ef4444; padding: 3px 8px; font-size: 11px; border-radius: 4px; background: transparent; cursor: pointer;" onclick="deleteOfficeLocation('${o.id}', '${encodeURIComponent(o.name)}')">🗑 Delete</button>`
-          }
+          ${o.is_default
+        ? '<span style="color: var(--text-muted); font-size: 11px;">Protected (HQ)</span>'
+        : `<button class="btn btn-sm" style="color: #ef4444; border: 1px solid #ef4444; padding: 3px 8px; font-size: 11px; border-radius: 4px; background: transparent; cursor: pointer;" onclick="deleteOfficeLocation('${o.id}', '${encodeURIComponent(o.name)}')">🗑 Delete</button>`
+      }
         </td>
       </tr>
     `).join('');
   }
 
-  window.deleteOfficeLocation = async function(officeId, encodedName) {
+  window.deleteOfficeLocation = async function (officeId, encodedName) {
     const name = decodeURIComponent(encodedName);
     if (!confirm(`Are you sure you want to delete office "${name}"?\n\nAny employees assigned to this office branch will automatically revert to using the default Main Office.`)) {
       return;
@@ -1107,7 +1176,7 @@
     if (photo.startsWith('http://') || photo.startsWith('https://') || photo.startsWith('data:image/')) {
       return photo;
     }
-    
+
     // Clean whitespace & newline characters from base64 string
     const cleanBase64 = photo.replace(/[\r\n\s]+/g, '');
     if (cleanBase64.length > 20) {
@@ -1324,7 +1393,7 @@
   }
 
   // Employee Edit Drawer Handlers
-  window.editEmployee = function(empId) {
+  window.editEmployee = function (empId) {
     const emp = employeesData.find(e => e.id === empId);
     if (!emp) return;
 
@@ -1517,35 +1586,35 @@
 
   function calculateExpiryStatus(expiryDateStr) {
     if (!expiryDateStr) {
-      return { 
-        status: 'UNKNOWN', 
-        badgeClass: 'badge-neutral', 
-        statusGlowClass: 'glow-valid', 
-        walletStatusText: 'NO EXPIRY', 
-        label: 'No Date Set', 
-        isCritical: false, 
-        daysLeft: 999 
+      return {
+        status: 'UNKNOWN',
+        badgeClass: 'badge-neutral',
+        statusGlowClass: 'glow-valid',
+        walletStatusText: 'NO EXPIRY',
+        label: 'No Date Set',
+        isCritical: false,
+        daysLeft: 999
       };
     }
 
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
+
     // Parse Date
     const parts = expiryDateStr.split('-');
     if (parts.length < 3) {
-      return { 
-        status: 'UNKNOWN', 
-        badgeClass: 'badge-neutral', 
-        statusGlowClass: 'glow-valid', 
-        walletStatusText: 'INVALID DATE', 
-        label: 'Invalid Date', 
-        isCritical: false, 
-        daysLeft: 999 
+      return {
+        status: 'UNKNOWN',
+        badgeClass: 'badge-neutral',
+        statusGlowClass: 'glow-valid',
+        walletStatusText: 'INVALID DATE',
+        label: 'Invalid Date',
+        isCritical: false,
+        daysLeft: 999
       };
     }
     const expDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-    
+
     const diffMs = expDate.getTime() - today.getTime();
     const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
 
@@ -1716,11 +1785,11 @@
     }
   }
 
-  window.setCardsViewMode = function(mode) {
+  window.setCardsViewMode = function (mode) {
     currentCardsViewMode = mode;
     try {
       localStorage.setItem('f360_cards_view_mode', mode);
-    } catch (e) {}
+    } catch (e) { }
 
     const walletView = document.getElementById('cards-wallet-view');
     const tableView = document.getElementById('cards-table-container');
@@ -1741,7 +1810,7 @@
     }
   };
 
-  window.copyCardNumber = function(number, evt) {
+  window.copyCardNumber = function (number, evt) {
     if (evt) evt.stopPropagation();
     if (!number) return;
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -1816,7 +1885,7 @@
     renderOverviewCardsAlerts();
   }
 
-  window.notifyAdminWhatsAppDigest = function() {
+  window.notifyAdminWhatsAppDigest = function () {
     const urgentCards = cardsData.filter(c => {
       const st = calculateExpiryStatus(c.expiry_date);
       return st.isCritical || st.status === 'EXPIRED';
@@ -1853,7 +1922,7 @@
     showToast('Launched WhatsApp with 3-day renewal alerts for +971586939371', 'success');
   };
 
-  window.notifyAdminEmailDigest = function() {
+  window.notifyAdminEmailDigest = function () {
     const urgentCards = cardsData.filter(c => {
       const st = calculateExpiryStatus(c.expiry_date);
       return st.isCritical || st.status === 'EXPIRED';
@@ -1891,7 +1960,7 @@
   // --------------------------------------------------------------------------
   // Automated Compliance Robot Functions (Background Free Email & WhatsApp)
   // --------------------------------------------------------------------------
-  window.openRobotConfigModal = function() {
+  window.openRobotConfigModal = function () {
     const resendKey = localStorage.getItem('fusion_compliance_resend_key') || '';
     const callmebotKey = localStorage.getItem('fusion_compliance_callmebot_key') || '';
     const isEnabled = localStorage.getItem('fusion_compliance_robot_enabled') !== 'false';
@@ -1913,14 +1982,14 @@
     if (backdrop) backdrop.style.display = 'block';
   };
 
-  window.closeRobotConfigModal = function() {
+  window.closeRobotConfigModal = function () {
     const modal = document.getElementById('robot-config-modal');
     const backdrop = document.getElementById('robot-config-modal-backdrop');
     if (modal) modal.style.display = 'none';
     if (backdrop) backdrop.style.display = 'none';
   };
 
-  window.saveRobotConfig = async function() {
+  window.saveRobotConfig = async function () {
     const resendKey = (document.getElementById('robot-resend-key')?.value || '').trim();
     const callmebotKey = (document.getElementById('robot-callmebot-key')?.value || '').trim();
     const isEnabled = document.getElementById('robot-enabled-switch')?.checked ?? true;
@@ -1952,7 +2021,7 @@
     checkAndRunAutomatedRobot();
   };
 
-  window.testRobotEmail = async function() {
+  window.testRobotEmail = async function () {
     const resendKey = (document.getElementById('robot-resend-key')?.value || '').trim();
     if (!resendKey) {
       showToast('Please enter your Resend API key first', 'warning');
@@ -1988,7 +2057,7 @@
     }
   };
 
-  window.testRobotWhatsApp = async function() {
+  window.testRobotWhatsApp = async function () {
     const callmebotKey = (document.getElementById('robot-callmebot-key')?.value || '').trim();
     if (!callmebotKey) {
       showToast('Please enter your CallMeBot API key first', 'warning');
@@ -2120,11 +2189,16 @@
       const cardsHtml = criticalCards.slice(0, 4).map(card => {
         const emp = findEmployee(card.employee_id, card);
         const typeBadge = getCardTypeBadge(card.card_type);
+        const photoSrc = getEmployeePhotoUrl(emp, card);
+        const avatarLetter = (emp.name || 'E').charAt(0).toUpperCase();
+        const avatarHtml = photoSrc
+          ? `<div class="emp-avatar has-photo" style="width: 34px; height: 34px;"><img src="${photoSrc}" alt="${emp.name}" class="emp-avatar-img" onerror="this.onerror=null;this.parentElement.classList.remove('has-photo');this.parentElement.textContent='${avatarLetter}';"></div>`
+          : `<div class="emp-avatar" style="width: 34px; height: 34px; font-size: 12px;">${avatarLetter}</div>`;
 
         return `
           <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--bg-surface); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: var(--radius-sm); margin-top: 8px;">
             <div style="display: flex; align-items: center; gap: 10px;">
-              <div class="emp-avatar" style="width: 32px; height: 32px; font-size: 12px;">${(emp.name || 'E').charAt(0).toUpperCase()}</div>
+              ${avatarHtml}
               <div>
                 <div style="font-weight: 600; font-size: 13px;">${emp.name} <span style="font-size: 11px; font-weight: normal; color: var(--text-secondary);">(${emp.employeeCode})</span></div>
                 <div style="font-size: 11px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; margin-top: 2px;">
@@ -2204,7 +2278,7 @@
       const st = calculateExpiryStatus(card.expiry_date);
 
       // Search query filter
-      const matchQuery = 
+      const matchQuery =
         emp.name.toLowerCase().includes(query) ||
         emp.employeeCode.toLowerCase().includes(query) ||
         (card.card_name || '').toLowerCase().includes(query) ||
@@ -2268,6 +2342,11 @@
         const emp = findEmployee(card.employee_id, card);
         const st = calculateExpiryStatus(card.expiry_date);
         const typeBadge = getCardTypeBadge(card.card_type, card.card_name);
+        const photoSrc = getEmployeePhotoUrl(emp, card);
+        const avatarLetter = (emp.name || 'E').charAt(0).toUpperCase();
+        const tableAvatarHtml = photoSrc
+          ? `<div class="emp-avatar has-photo" style="width: 38px; height: 38px;"><img src="${photoSrc}" alt="${emp.name}" class="emp-avatar-img" onerror="this.onerror=null;this.parentElement.classList.remove('has-photo');this.parentElement.textContent='${avatarLetter}';"></div>`
+          : `<div class="emp-avatar">${avatarLetter}</div>`;
 
         const hasDoc = !!card.document_url;
         const docBtn = `
@@ -2288,7 +2367,7 @@
           <tr>
             <td>
               <div class="employee-meta">
-                <div class="emp-avatar">${(emp.name || 'E').charAt(0).toUpperCase()}</div>
+                ${tableAvatarHtml}
                 <div class="emp-details">
                   <span class="emp-name">${emp.name}</span>
                   <span class="emp-code">${emp.employeeCode} • ${emp.department}</span>
@@ -2353,7 +2432,11 @@
         const st = calculateExpiryStatus(card.expiry_date);
         const cfg = getWalletCardConfig(card);
         const formattedNum = formatCardNumberDisplay(card.card_number, card.card_type);
+        const photoSrc = getEmployeePhotoUrl(emp, card);
         const avatarLetter = (emp.name || 'E').charAt(0).toUpperCase();
+        const walletAvatarHtml = photoSrc
+          ? `<div class="wallet-emp-avatar has-photo"><img src="${photoSrc}" alt="${emp.name}" class="wallet-emp-avatar-img" onerror="this.onerror=null;this.parentElement.classList.remove('has-photo');this.parentElement.textContent='${avatarLetter}';"></div>`
+          : `<div class="wallet-emp-avatar">${avatarLetter}</div>`;
         const hasDoc = !!card.document_url;
 
         return `
@@ -2382,7 +2465,7 @@
             <!-- Card Body: Employee Identity & Embossed Monospace Number -->
             <div class="wallet-card-body">
               <div class="wallet-emp-row">
-                <div class="wallet-emp-avatar">${avatarLetter}</div>
+                ${walletAvatarHtml}
                 <div class="wallet-emp-info">
                   <div class="wallet-emp-name" title="${emp.name}">${emp.name}</div>
                   <div class="wallet-emp-meta">
@@ -2689,7 +2772,7 @@ OUTPUT RULES
             break;
           }
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     const errorLog = [];
@@ -3169,13 +3252,13 @@ OUTPUT RULES
     }
   }
 
-  window.editCard = function(cardId) {
+  window.editCard = function (cardId) {
     const card = cardsData.find(c => c.id === cardId);
     if (!card) return;
     openCardDrawer(card);
   };
 
-  window.deleteCard = async function(cardId) {
+  window.deleteCard = async function (cardId) {
     const card = cardsData.find(c => c.id === cardId);
     if (!card) return;
     if (!confirm(`Are you sure you want to delete the document record "${card.card_name}" (${card.card_number})?`)) {
@@ -3219,7 +3302,7 @@ OUTPUT RULES
   }
 
   // Card Document Viewer Lightbox Modal
-  window.openCardViewer = async function(cardId) {
+  window.openCardViewer = async function (cardId) {
     const card = cardsData.find(c => c.id === cardId);
     if (!card) return;
     const emp = findEmployee(card.employee_id, card);
@@ -3294,7 +3377,7 @@ OUTPUT RULES
   }
 
   // Download specific card file or generated summary pass
-  window.downloadCardFile = async function(cardId) {
+  window.downloadCardFile = async function (cardId) {
     const card = cardsData.find(c => c.id === cardId);
     if (!card) return;
     const emp = findEmployee(card.employee_id, card);
@@ -3319,8 +3402,8 @@ OUTPUT RULES
       showToast('Opening secure document file...', 'success');
     } else {
       // Generate official text summary pass download
-      const content = 
-`=============================================================
+      const content =
+        `=============================================================
          FUSION 360 WORKFORCE - CARD & PASS RECORD
 =============================================================
 Employee Name  : ${emp.name}
@@ -3348,7 +3431,7 @@ Generated Date : ${new Date().toLocaleString()}
   };
 
   // 1-Click WhatsApp Notification Trigger
-  window.notifyCardWhatsApp = function(cardId) {
+  window.notifyCardWhatsApp = function (cardId) {
     const card = cardsData.find(c => c.id === cardId);
     if (!card) return;
     const emp = findEmployee(card.employee_id, card);
@@ -3356,8 +3439,8 @@ Generated Date : ${new Date().toLocaleString()}
 
     const cleanPhone = (emp.phone || '').replace(/[^0-9]/g, '');
 
-    const message = 
-`🚨 *URGENT COMPLIANCE NOTICE: CARD EXPIRATION*
+    const message =
+      `🚨 *URGENT COMPLIANCE NOTICE: CARD EXPIRATION*
 ----------------------------------------
 👤 *Employee:* ${emp.name} (${emp.employeeCode})
 🏢 *Department:* ${emp.department} - ${emp.designation || 'Operations'}
@@ -3370,7 +3453,7 @@ Generated Date : ${new Date().toLocaleString()}
 ----------------------------------------
 _Fusion 360 Workforce Document Control_`;
 
-    const waUrl = cleanPhone 
+    const waUrl = cleanPhone
       ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
       : `https://wa.me/?text=${encodeURIComponent(message)}`;
 
@@ -3382,7 +3465,7 @@ _Fusion 360 Workforce Document Control_`;
   };
 
   // 1-Click Email Notification Trigger
-  window.notifyCardEmail = function(cardId) {
+  window.notifyCardEmail = function (cardId) {
     const card = cardsData.find(c => c.id === cardId);
     if (!card) return;
     const emp = findEmployee(card.employee_id, card);
@@ -3390,9 +3473,9 @@ _Fusion 360 Workforce Document Control_`;
 
     const recipient = emp.email || '';
     const subject = `[URGENT] Document Expiry Alert: ${card.card_name} for ${emp.name} (${st.label})`;
-    
-    const body = 
-`Dear ${emp.name} & Administration,
+
+    const body =
+      `Dear ${emp.name} & Administration,
 
 This is an automated compliance notification from Fusion 360 Operations Control.
 
@@ -3462,16 +3545,16 @@ Fusion 360 Compliance & Operations Desk`;
       }
 
       if (previewEl) {
-        const text = 
-`🚨 *FUSION 360: CRITICAL CARD EXPIRATION COMPLIANCE DIGEST*
+        const text =
+          `🚨 *FUSION 360: CRITICAL CARD EXPIRATION COMPLIANCE DIGEST*
 Date: ${new Date().toLocaleDateString('en-GB')}
 Total Urgent Items: ${criticalCards.length}
 ----------------------------------------
 ${criticalCards.map((c, i) => {
-  const emp = findEmployee(c.employee_id, c);
-  const st = calculateExpiryStatus(c.expiry_date);
-  return `${i + 1}. *${emp.name}* - ${c.card_name}\n   Card #: ${c.card_number}\n   Expiry: ${formatDisplayDate(c.expiry_date)} (${st.label})`;
-}).join('\n\n')}
+            const emp = findEmployee(c.employee_id, c);
+            const st = calculateExpiryStatus(c.expiry_date);
+            return `${i + 1}. *${emp.name}* - ${c.card_name}\n   Card #: ${c.card_number}\n   Expiry: ${formatDisplayDate(c.expiry_date)} (${st.label})`;
+          }).join('\n\n')}
 ----------------------------------------
 ⚠️ Immediate action required to maintain regulatory & security compliance.`;
         previewEl.value = text;
@@ -3535,7 +3618,7 @@ ${criticalCards.map((c, i) => {
   }
 
   // Photo Lightbox Modal Handlers (Free-Tier: on-demand photo loading)
-  window.openPhotoModal = async function(index) {
+  window.openPhotoModal = async function (index) {
     const r = attendanceData[index];
     if (!r) return;
     let photoSrc = getPhotoSrc(r);
@@ -3552,7 +3635,7 @@ ${criticalCards.map((c, i) => {
           r.photo_url = pData.photo_url;
           photoSrc = getPhotoSrc(r);
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     if (!photoSrc) return;

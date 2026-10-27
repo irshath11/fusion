@@ -98,6 +98,14 @@ class _CardsManagementScreenState extends State<CardsManagementScreen>
       'placeholder': 'CISPA-PORT-8899',
     },
     {
+      'id': 'EXPIRING_SOON',
+      'label': 'Expiring Soon',
+      'icon': Icons.hourglass_top_rounded,
+      'color': Color(0xFFF59E0B),
+      'fullName': 'Documents Expiring Soon (< 30 Days)',
+      'placeholder': 'Card Number',
+    },
+    {
       'id': 'ALL',
       'label': 'All Cards',
       'icon': Icons.folder_shared_rounded,
@@ -222,25 +230,43 @@ class _CardsManagementScreenState extends State<CardsManagementScreen>
         }
         for (final u in cloudUsers) {
           final code = (u.employeeCode != null && u.employeeCode!.isNotEmpty) ? u.employeeCode! : '';
+          final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+            code: code,
+            name: u.fullName,
+            email: u.email,
+            id: u.id,
+          );
+          final fullName = official?.fullName ?? (u.fullName.isNotEmpty && u.fullName != 'Staff' && u.fullName != 'Staff Member' ? u.fullName : (official?.fullName ?? u.fullName));
+          final photo = EmployeeDirectoryHelper.resolvePhoto(
+            customPhotoUrl: null,
+            employeeCode: code.isNotEmpty ? code : official?.employeeId,
+            fullName: fullName,
+            email: u.email,
+            id: u.id,
+          ) ?? official?.photoAsset;
+
           final entity = EmployeeEntity(
             id: u.id,
-            employeeCode: code.isNotEmpty ? code : 'EMP-${u.id.length >= 4 ? u.id.substring(0, 4).toUpperCase() : u.id}',
-            name: u.fullName,
+            employeeCode: code.isNotEmpty ? code : (official?.employeeId ?? 'EMP-${u.id.length >= 4 ? u.id.substring(0, 4).toUpperCase() : u.id}'),
+            name: fullName.isNotEmpty ? fullName : 'Staff Member',
             mobileNumber: u.phoneNumber ?? '',
             email: u.email,
-            designation: u.designation ?? 'Staff',
-            department: u.department ?? 'Operations',
+            photoUrl: photo,
+            designation: official?.designation ?? u.designation ?? 'Staff',
+            department: official?.department ?? u.department ?? 'Operations',
             isActive: u.isActive,
           );
           empMap[u.id] = entity;
           if (code.isNotEmpty) empMap[code.toUpperCase()] = entity;
+          if (official != null) empMap[official.employeeId.toUpperCase()] = entity;
+          if (fullName.isNotEmpty) empMap[fullName.toLowerCase()] = entity;
           if (u.fullName.isNotEmpty) empMap[u.fullName.toLowerCase()] = entity;
         }
 
         // Fetch Supabase raw employees table to map employees.id -> user_id & employee_code
         final empRows = await supabase
             .from('employees')
-            .select('id, user_id, employee_code, name, full_name, email')
+            .select('id, user_id, employee_code, name, full_name, email, photo_url, designation, department')
             .eq('is_deleted', false);
         for (final r in empRows) {
           final m = Map<String, dynamic>.from(r);
@@ -249,12 +275,57 @@ class _CardsManagementScreenState extends State<CardsManagementScreen>
           final code = m['employee_code']?.toString() ?? '';
           final name = m['name']?.toString() ?? m['full_name']?.toString() ?? '';
           final email = m['email']?.toString() ?? '';
+          final photoUrl = m['photo_url']?.toString();
+          final desig = m['designation']?.toString();
+          final dept = m['department']?.toString();
+
+          final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+            code: code,
+            name: name,
+            email: email,
+            id: eId,
+          );
+
+          final resolvedFullName = official?.fullName ?? (name.isNotEmpty && name != 'Staff' ? name : (official?.fullName ?? name));
+          final resolvedPhoto = EmployeeDirectoryHelper.resolvePhoto(
+            customPhotoUrl: photoUrl,
+            employeeCode: code.isNotEmpty ? code : official?.employeeId,
+            fullName: resolvedFullName,
+            email: email,
+            id: eId,
+          ) ?? official?.photoAsset;
 
           if (eId.isNotEmpty) {
             if (uId.isNotEmpty) _empIdCrossReference[eId.toLowerCase()] = uId;
             if (code.isNotEmpty) _empIdCrossReference[eId.toLowerCase()] = code;
-            if (empMap.containsKey(uId)) empMap[eId] = empMap[uId]!;
-            if (code.isNotEmpty && empMap.containsKey(code.toUpperCase())) empMap[eId] = empMap[code.toUpperCase()]!;
+            if (official != null) _empIdCrossReference[eId.toLowerCase()] = official.employeeId;
+
+            // If user already in empMap, enrich with photo and official full name
+            if (empMap.containsKey(uId)) {
+              final existing = empMap[uId]!;
+              final enriched = existing.copyWith(
+                photoUrl: existing.photoUrl ?? resolvedPhoto,
+                name: (official?.fullName != null && official!.fullName.isNotEmpty) ? official.fullName : existing.name,
+                designation: official?.designation ?? existing.designation,
+                department: official?.department ?? existing.department,
+              );
+              empMap[uId] = enriched;
+              empMap[eId] = enriched;
+            } else {
+              final newEntity = EmployeeEntity(
+                id: eId,
+                employeeCode: code.isNotEmpty ? code : (official?.employeeId ?? 'EMP-${eId.length >= 4 ? eId.substring(0, 4).toUpperCase() : eId}'),
+                name: resolvedFullName.isNotEmpty ? resolvedFullName : 'Staff',
+                mobileNumber: '',
+                email: email,
+                photoUrl: resolvedPhoto,
+                designation: official?.designation ?? desig ?? 'Staff',
+                department: official?.department ?? dept ?? 'Operations',
+              );
+              empMap[eId] = newEntity;
+              if (code.isNotEmpty) empMap[code.toUpperCase()] = newEntity;
+              if (official != null) empMap[official.employeeId.toUpperCase()] = newEntity;
+            }
           }
           if (uId.isNotEmpty && eId.isNotEmpty) {
             _empIdCrossReference[uId.toLowerCase()] = eId;
@@ -323,13 +394,75 @@ class _CardsManagementScreenState extends State<CardsManagementScreen>
     await _db.persistEmployeeCards(jsonList);
   }
 
+  EmployeeEntity _enrichEmployee(EmployeeEntity emp, [EmployeeCard? card]) {
+    OfficialEmployeeRecord? official = EmployeeDirectoryHelper.resolveOfficialRecord(
+      code: emp.employeeCode,
+      name: emp.name,
+      email: emp.email,
+      id: emp.id,
+    );
+
+    if (official == null && card != null) {
+      final texts = [
+        card.employeeId,
+        card.fileName ?? '',
+        card.notes ?? '',
+        card.cardName,
+      ];
+      for (final t in texts) {
+        if (t.trim().isEmpty) continue;
+        official = EmployeeDirectoryHelper.resolveOfficialRecord(
+          code: t,
+          name: t,
+          email: t,
+          id: t,
+        );
+        if (official != null) break;
+      }
+    }
+
+    final fullName = official?.fullName ??
+        EmployeeDirectoryHelper.getCompleteFullName(
+          currentName: emp.name,
+          email: emp.email,
+          code: emp.employeeCode,
+          id: emp.id,
+        );
+
+    final resolvedPhoto = EmployeeDirectoryHelper.resolvePhoto(
+      customPhotoUrl: emp.photoUrl,
+      employeeCode: emp.employeeCode.isNotEmpty ? emp.employeeCode : official?.employeeId,
+      fullName: fullName,
+      email: emp.email,
+      id: emp.id,
+    ) ?? official?.photoAsset;
+
+    return emp.copyWith(
+      name: fullName.isNotEmpty && fullName != 'Staff' && fullName != 'Staff Member'
+          ? fullName
+          : (official?.fullName ?? emp.name),
+      photoUrl: resolvedPhoto ?? emp.photoUrl,
+      employeeCode: (emp.employeeCode.isNotEmpty && emp.employeeCode != 'EMP-000')
+          ? emp.employeeCode
+          : (official?.employeeId ?? emp.employeeCode),
+      designation: (official != null && (emp.designation.isEmpty || emp.designation == 'Staff'))
+          ? official.designation
+          : emp.designation,
+      department: (official != null && (emp.department.isEmpty || emp.department == 'Operations'))
+          ? official.department
+          : emp.department,
+    );
+  }
+
   EmployeeEntity? _getEmployee(String empId, [EmployeeCard? card]) {
     final cleanId = empId.trim();
 
     // 1. Direct ID match in _employees
     if (cleanId.isNotEmpty) {
       for (final e in _employees) {
-        if (e.id.toLowerCase() == cleanId.toLowerCase()) return e;
+        if (e.id.toLowerCase() == cleanId.toLowerCase()) {
+          return _enrichEmployee(e, card);
+        }
       }
     }
 
@@ -337,9 +470,11 @@ class _CardsManagementScreenState extends State<CardsManagementScreen>
     if (cleanId.isNotEmpty && _empIdCrossReference.containsKey(cleanId.toLowerCase())) {
       final target = _empIdCrossReference[cleanId.toLowerCase()]!;
       for (final e in _employees) {
-        if (e.id.toLowerCase() == target.toLowerCase()) return e;
-        if (e.employeeCode.toUpperCase() == target.toUpperCase()) return e;
-        if (e.name.toLowerCase() == target.toLowerCase()) return e;
+        if (e.id.toLowerCase() == target.toLowerCase() ||
+            e.employeeCode.toUpperCase() == target.toUpperCase() ||
+            e.name.toLowerCase() == target.toLowerCase()) {
+          return _enrichEmployee(e, card);
+        }
       }
     }
 
@@ -349,7 +484,7 @@ class _CardsManagementScreenState extends State<CardsManagementScreen>
       for (final e in _employees) {
         final eCode = e.employeeCode.toUpperCase().replaceAll('EMP-', '');
         if (eCode.isNotEmpty && (eCode == normCode || e.employeeCode.toUpperCase() == cleanId.toUpperCase())) {
-          return e;
+          return _enrichEmployee(e, card);
         }
       }
     }
@@ -357,14 +492,18 @@ class _CardsManagementScreenState extends State<CardsManagementScreen>
     // 4. Email match
     if (cleanId.isNotEmpty && cleanId.contains('@')) {
       for (final e in _employees) {
-        if (e.email.trim().toLowerCase() == cleanId.toLowerCase()) return e;
+        if (e.email.trim().toLowerCase() == cleanId.toLowerCase()) {
+          return _enrichEmployee(e, card);
+        }
       }
     }
 
     // 5. Name match
     if (cleanId.isNotEmpty) {
       for (final e in _employees) {
-        if (e.name.trim().toLowerCase() == cleanId.toLowerCase()) return e;
+        if (e.name.trim().toLowerCase() == cleanId.toLowerCase()) {
+          return _enrichEmployee(e, card);
+        }
       }
     }
 
@@ -404,11 +543,11 @@ class _CardsManagementScreenState extends State<CardsManagementScreen>
         // Check against _employees
         for (final e in _employees) {
           if (e.name.length >= 3 && tLower.contains(e.name.toLowerCase())) {
-            return e;
+            return _enrichEmployee(e, card);
           }
           final eCode = e.employeeCode.toUpperCase().replaceAll('EMP-', '');
           if (eCode.length >= 3 && t.toUpperCase().contains(eCode)) {
-            return e;
+            return _enrichEmployee(e, card);
           }
         }
 
@@ -448,31 +587,58 @@ class _CardsManagementScreenState extends State<CardsManagementScreen>
   }
 
   String _resolveEmployeeDisplayName(EmployeeEntity? emp, EmployeeCard card) {
-    if (emp != null && emp.name.isNotEmpty && emp.name != 'Staff' && emp.name != 'Staff Member') {
-      return emp.name;
+    if (emp != null) {
+      final legalName = EmployeeDirectoryHelper.getCompleteFullName(
+        currentName: emp.name,
+        email: emp.email,
+        code: emp.employeeCode,
+        id: emp.id,
+      );
+      if (legalName.isNotEmpty && legalName != 'Staff' && legalName != 'Staff Member') {
+        return legalName;
+      }
     }
-    // Attempt extraction from file name (e.g. "Irshath_Ahamed_EMIRATES_ID.pdf" -> "Irshath Ahamed")
+
+    // Direct official lookup from card.employeeId
+    if (card.employeeId.isNotEmpty) {
+      final off = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: card.employeeId,
+        id: card.employeeId,
+        name: card.employeeId,
+      );
+      if (off != null) return off.fullName;
+    }
+
+    // Attempt extraction from file name (e.g. "Mohammed_Iburahim_Baseer_Ahamed_EMIRATES_ID.pdf" -> "Mohammed Iburahim Baseer Ahamed")
     if (card.fileName != null && card.fileName!.isNotEmpty) {
       var raw = card.fileName!;
       raw = raw.replaceAll(RegExp(r'\.(pdf|png|jpg|jpeg|webp)$', caseSensitive: false), '');
       raw = raw.replaceAll(RegExp(r'_(EMIRATES_ID|VISA|PASSPORT|INSURANCE|MOPA|CISPA|PASS|CARD).*$', caseSensitive: false), '');
       raw = raw.replaceAll('_', ' ').replaceAll('-', ' ').trim();
       if (raw.isNotEmpty && raw.length >= 3 && !raw.toLowerCase().contains('unnamed') && !raw.toLowerCase().contains('scan')) {
+        final off = EmployeeDirectoryHelper.resolveOfficialRecord(name: raw);
+        if (off != null) return off.fullName;
         return raw;
       }
     }
+
     // Check if card notes contain holder name
     if (card.notes != null && card.notes!.isNotEmpty) {
       final match = RegExp(r'holder[:\s]+([^\n\r,]+)', caseSensitive: false).firstMatch(card.notes!);
       if (match != null && match.group(1) != null) {
         final candidate = match.group(1)!.trim();
-        if (candidate.isNotEmpty) return candidate;
+        if (candidate.isNotEmpty) {
+          final off = EmployeeDirectoryHelper.resolveOfficialRecord(name: candidate);
+          if (off != null) return off.fullName;
+          return candidate;
+        }
       }
     }
+
     if (card.employeeId.isNotEmpty && !card.employeeId.contains('-') && card.employeeId.length <= 10) {
       return 'Staff (${card.employeeId})';
     }
-    return emp?.name ?? 'Staff';
+    return (emp != null && emp.name.isNotEmpty && emp.name != 'Staff') ? emp.name : 'Staff';
   }
 
   String get _currentTabId => _tabsConfig[_tabController.index]['id'] as String;
@@ -480,6 +646,9 @@ class _CardsManagementScreenState extends State<CardsManagementScreen>
   List<EmployeeCard> _getCardsForTab(String tabId) {
     if (tabId == 'ALL') {
       return _cards;
+    }
+    if (tabId == 'EXPIRING_SOON') {
+      return _cards.where((c) => !c.isExpired && c.daysUntilExpiry <= 30).toList();
     }
     return _cards.where((c) => c.cardType == tabId).toList();
   }
@@ -1566,7 +1735,7 @@ Fusion 360 Compliance & Operations Desk''';
     final isEditing = cardToEdit != null;
 
     String initialType = cardToEdit?.cardType ?? defaultType ?? _currentTabId;
-    if (initialType == 'ALL') {
+    if (initialType == 'ALL' || initialType == 'EXPIRING_SOON') {
       initialType = 'EMIRATES_ID';
     }
 
@@ -1835,7 +2004,7 @@ Fusion 360 Compliance & Operations Desk''';
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       ),
                       items: _tabsConfig
-                          .where((t) => t['id'] != 'ALL')
+                          .where((t) => t['id'] != 'ALL' && t['id'] != 'EXPIRING_SOON')
                           .map((t) {
                         return DropdownMenuItem<String>(
                           value: t['id'] as String,
@@ -2574,13 +2743,15 @@ Fusion 360 Compliance & Operations Desk''';
         backgroundColor: AppColors.primaryLight,
         icon: const Icon(Icons.upload_file_rounded),
         label: Text(
-          _currentTabId == 'ALL'
+          (_currentTabId == 'ALL' || _currentTabId == 'EXPIRING_SOON')
               ? 'Upload Card'
               : 'Upload ${_tabsConfig[_tabController.index]['label']}',
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         onPressed: () => _showAddEditCardDialog(
-          defaultType: _currentTabId == 'ALL' ? 'EMIRATES_ID' : _currentTabId,
+          defaultType: (_currentTabId == 'ALL' || _currentTabId == 'EXPIRING_SOON')
+              ? 'EMIRATES_ID'
+              : _currentTabId,
         ),
       ),
       body: _isLoading
@@ -3117,7 +3288,7 @@ Fusion 360 Compliance & Operations Desk''';
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             onPressed: () => _showAddEditCardDialog(
-              defaultType: tabId == 'ALL' ? 'EMIRATES_ID' : tabId,
+              defaultType: (tabId == 'ALL' || tabId == 'EXPIRING_SOON') ? 'EMIRATES_ID' : tabId,
             ),
           ),
         ],
@@ -3478,9 +3649,15 @@ Fusion 360 Compliance & Operations Desk''';
                               ],
                             ),
                             child: EmployeeAvatar(
-                              photoUrl: emp?.photoUrl,
+                              photoUrl: emp?.photoUrl ?? EmployeeDirectoryHelper.resolvePhoto(
+                                employeeCode: emp?.employeeCode ?? card.employeeId,
+                                fullName: _resolveEmployeeDisplayName(emp, card),
+                                email: emp?.email,
+                                id: card.employeeId,
+                              ),
                               fullName: _resolveEmployeeDisplayName(emp, card),
-                              radius: 18,
+                              radius: 19,
+                              borderColor: accentBorder,
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -3493,10 +3670,11 @@ Fusion 360 Compliance & Operations Desk''';
                                   style: TextStyle(
                                     color: isDark ? Colors.white : const Color(0xFF0F172A),
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 14.5,
-                                    letterSpacing: 0.2,
+                                    fontSize: 13.5,
+                                    height: 1.2,
+                                    letterSpacing: 0.1,
                                   ),
-                                  maxLines: 1,
+                                  maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 2),
@@ -3903,7 +4081,12 @@ Fusion 360 Compliance & Operations Desk''';
               Row(
                 children: [
                   EmployeeAvatar(
-                    photoUrl: emp?.photoUrl,
+                    photoUrl: emp?.photoUrl ?? EmployeeDirectoryHelper.resolvePhoto(
+                      employeeCode: emp?.employeeCode ?? card.employeeId,
+                      fullName: _resolveEmployeeDisplayName(emp, card),
+                      email: emp?.email,
+                      id: card.employeeId,
+                    ),
                     fullName: _resolveEmployeeDisplayName(emp, card),
                     radius: 20,
                   ),

@@ -1732,9 +1732,9 @@ class SupabaseService {
       int from = 0;
       bool hasMore = true;
 
-      // Lightweight column projection: exclude photo_url from bulk list
+      // Column projection: includes photo_url (CDN URL string) so attendance verification photos are visible
       const String lightColumns =
-          'id, organization_id, employee_id, employee_name, workflow_step, event_timestamp, sync_timestamp, latitude, longitude, gps_accuracy, address, device_id, is_geofence_valid, office_id, work_site_id, site_name, manual_overtime_hours, remarks, is_edited, edited_by, created_at';
+          'id, organization_id, employee_id, employee_name, workflow_step, event_timestamp, sync_timestamp, latitude, longitude, gps_accuracy, address, device_id, is_geofence_valid, office_id, work_site_id, site_name, manual_overtime_hours, remarks, is_edited, edited_by, created_at, photo_url';
 
       while (hasMore && records.length < maxRecords) {
         var query = client!.from('attendance_records').select(lightColumns);
@@ -1777,7 +1777,6 @@ class SupabaseService {
   }
 
   /// Fetches photo URL or base64 proof on demand for a single attendance record.
-  /// Preserves free-tier egress by only downloading photo when explicitly requested by user.
   Future<String?> fetchAttendanceRecordPhoto(String recordId) async {
     if (!_isInitialized || client == null || recordId.isEmpty) return null;
     try {
@@ -1787,11 +1786,41 @@ class SupabaseService {
           .eq('id', recordId)
           .maybeSingle();
       if (response != null && response['photo_url'] != null) {
-        return response['photo_url']?.toString();
+        final val = response['photo_url']?.toString().trim();
+        if (val != null && val.isNotEmpty) {
+          return val;
+        }
       }
     } catch (e) {
       debugPrint('Supabase fetchAttendanceRecordPhoto error: $e');
     }
     return null;
+  }
+
+  /// Fetches photo URLs on demand for multiple attendance records in a single query.
+  Future<Map<String, String>> fetchAttendanceRecordPhotos(List<String> recordIds) async {
+    if (!_isInitialized || client == null || recordIds.isEmpty) return {};
+    try {
+      final validIds = recordIds.where((id) => id.isNotEmpty).toList();
+      if (validIds.isEmpty) return {};
+      final List<dynamic> response = await client!
+          .from('attendance_records')
+          .select('id, photo_url')
+          .inFilter('id', validIds);
+
+      final Map<String, String> photoMap = {};
+      for (final item in response) {
+        if (item is Map && item['id'] != null && item['photo_url'] != null) {
+          final url = item['photo_url'].toString().trim();
+          if (url.isNotEmpty) {
+            photoMap[item['id'].toString()] = url;
+          }
+        }
+      }
+      return photoMap;
+    } catch (e) {
+      debugPrint('Supabase fetchAttendanceRecordPhotos error: $e');
+      return {};
+    }
   }
 }

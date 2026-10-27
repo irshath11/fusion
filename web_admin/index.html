@@ -1,21 +1,24 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fusion 360 - Admin Web Suite & Operations Control</title>
-  
+
   <!-- Inter Font -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  
+
   <!-- Leaflet Maps CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-  
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
   <!-- Application CSS -->
   <link rel="stylesheet" href="styles.css?v=4">
 </head>
+
 <body>
 
   <!-- Login Modal Overlay -->
@@ -32,11 +35,13 @@
       <form id="login-form">
         <div class="form-group">
           <label class="form-label" for="login-email">Email Address</label>
-          <input type="email" id="login-email" class="form-control" placeholder="admin@enterprise.com" required autocomplete="username">
+          <input type="email" id="login-email" class="form-control" placeholder="admin@enterprise.com" required
+            autocomplete="username">
         </div>
         <div class="form-group">
           <label class="form-label" for="login-password">Password / Firebase Access Code</label>
-          <input type="password" id="login-password" class="form-control" placeholder="••••••••" required autocomplete="current-password">
+          <input type="password" id="login-password" class="form-control" placeholder="••••••••" required
+            autocomplete="current-password">
         </div>
         <button type="submit" id="login-submit-btn" class="btn btn-primary" style="width: 100%; margin-top: 8px;">
           Authenticate Admin Session
@@ -60,53 +65,61 @@
 
       <nav class="sidebar-nav">
         <div class="nav-section-title">Navigation</div>
-        
+
         <div class="nav-item active" data-tab="overview">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
           </svg>
           <span>Overview</span>
         </div>
 
         <div class="nav-item" data-tab="employees">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
           </svg>
           <span>Employees</span>
         </div>
 
         <div class="nav-item" data-tab="cards">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
           </svg>
           <span>Cards & Pass Expiry</span>
         </div>
 
         <div class="nav-item" data-tab="offices">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
           </svg>
           <span>Offices & Geofences</span>
         </div>
 
         <div class="nav-item" data-tab="sites">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
           <span>Work Sites</span>
         </div>
 
         <div class="nav-item" data-tab="map">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
           </svg>
           <span>Live GPS Tracking</span>
         </div>
 
         <div class="nav-item" data-tab="reports">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
           <span>Timesheets & Reports</span>
         </div>
@@ -115,7 +128,8 @@
 
         <div class="nav-item" data-tab="security">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
           </svg>
           <span>Security & Ownership</span>
         </div>
@@ -130,8 +144,10 @@
           </div>
         </div>
         <button id="logout-btn" class="btn-icon" title="Sign Out">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
           </svg>
         </button>
       </div>
@@ -139,7 +155,7 @@
 
     <!-- Main Wrapper Area -->
     <main class="main-wrapper">
-      
+
       <!-- Top Sticky Header -->
       <header class="top-header">
         <div class="header-left">
@@ -212,13 +228,15 @@
                 <span style="font-size: 20px; color: var(--primary);">⚡</span>
                 <div>
                   <h3 style="font-size: 15px; font-weight: 600; margin: 0;">Live Activity & Operations Hub</h3>
-                  <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">Real-time workforce attendance stream and rapid administrative shortcuts</div>
+                  <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">Real-time workforce
+                    attendance stream and rapid administrative shortcuts</div>
                 </div>
               </div>
               <span class="badge badge-success"><span class="badge-dot"></span>LIVE STREAM</span>
             </div>
-            
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-color);">
+
+            <div
+              style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-color);">
               <button class="btn btn-secondary btn-sm" onclick="switchTab('cards')">🪪 Cards & Pass Expiry</button>
               <button class="btn btn-secondary btn-sm" onclick="switchTab('map')">📍 Live Field Map</button>
               <button class="btn btn-secondary btn-sm" onclick="switchTab('reports')">📊 Reports & Timesheets</button>
@@ -239,9 +257,11 @@
               <div class="table-actions">
                 <div class="search-input-wrapper">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
-                  <input type="text" id="employee-search-input" class="form-control" placeholder="Search name or code...">
+                  <input type="text" id="employee-search-input" class="form-control"
+                    placeholder="Search name or code...">
                 </div>
                 <button id="btn-add-employee" class="btn btn-primary">
                   + Add Employee
@@ -273,14 +293,15 @@
 
         <!-- TAB: CARDS & PASS EXPIRY TRACKER -->
         <div id="tab-cards" class="tab-pane">
-          
+
           <!-- Critical Expiry Alert Banner (Displayed when <= 3 days or expired) -->
           <div id="cards-alert-banner" class="compliance-alert-banner" style="display: none;">
             <div class="alert-banner-content">
               <div class="alert-banner-icon">🚨</div>
               <div>
                 <div id="alert-banner-title" class="alert-banner-title">Critical Document Expiry Alert</div>
-                <div id="alert-banner-desc" class="alert-banner-desc">You have employees with cards expiring within the next 3 days or already expired. Immediate renewal action required.</div>
+                <div id="alert-banner-desc" class="alert-banner-desc">You have employees with cards expiring within the
+                  next 3 days or already expired. Immediate renewal action required.</div>
               </div>
             </div>
             <div class="alert-banner-actions">
@@ -333,25 +354,32 @@
           </div>
 
           <!-- 3-Day Automated Compliance Expiry Banner -->
-          <div id="urgent-cards-banner" style="display: none; margin-bottom: 16px; padding: 14px 18px; background: rgba(239, 68, 68, 0.08); border: 1.5px solid rgba(239, 68, 68, 0.4); border-radius: 12px; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.08);">
-            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+          <div id="urgent-cards-banner"
+            style="display: none; margin-bottom: 16px; padding: 14px 18px; background: rgba(239, 68, 68, 0.08); border: 1.5px solid rgba(239, 68, 68, 0.4); border-radius: 12px; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.08);">
+            <div
+              style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
               <div style="display: flex; align-items: center; gap: 12px;">
                 <span style="font-size: 24px;">🚨</span>
                 <div>
-                  <div id="urgent-cards-banner-title" style="font-weight: 800; font-size: 13.5px; color: #ef4444;">Urgent Renewal Notice: 0 Document(s) Expiring within ≤ 3 Days</div>
+                  <div id="urgent-cards-banner-title" style="font-weight: 800; font-size: 13.5px; color: #ef4444;">
+                    Urgent Renewal Notice: 0 Document(s) Expiring within ≤ 3 Days</div>
                   <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px;">
-                    Automated compliance dispatch configured for <strong>sr.irshath@gmail.com, nasuru@fusionmaint.com</strong> and <strong>+971 58 693 9371</strong>
+                    Automated compliance dispatch configured for <strong>sr.irshath@gmail.com,
+                      nasuru@fusionmaint.com</strong> and <strong>+971 58 693 9371</strong>
                   </div>
                 </div>
               </div>
               <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <button class="btn btn-sm" onclick="notifyAdminWhatsAppDigest()" style="background: #25D366; color: white; border: none; font-weight: bold; font-size: 11.5px; display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; cursor: pointer;">
+                <button class="btn btn-sm" onclick="notifyAdminWhatsAppDigest()"
+                  style="background: #25D366; color: white; border: none; font-weight: bold; font-size: 11.5px; display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; cursor: pointer;">
                   <span>💬</span> WhatsApp (+971 58 693 9371)
                 </button>
-                <button class="btn btn-sm" onclick="notifyAdminEmailDigest()" style="background: #3B82F6; color: white; border: none; font-weight: bold; font-size: 11.5px; display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; cursor: pointer;">
+                <button class="btn btn-sm" onclick="notifyAdminEmailDigest()"
+                  style="background: #3B82F6; color: white; border: none; font-weight: bold; font-size: 11.5px; display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; cursor: pointer;">
                   <span>✉️</span> Email Alerts
                 </button>
-                <button class="btn btn-sm" onclick="openRobotConfigModal()" style="background: #6366F1; color: white; border: none; font-weight: bold; font-size: 11.5px; display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; cursor: pointer;">
+                <button class="btn btn-sm" onclick="openRobotConfigModal()"
+                  style="background: #6366F1; color: white; border: none; font-weight: bold; font-size: 11.5px; display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; cursor: pointer;">
                   <span>🤖</span> Robot Config (Auto-Send)
                 </button>
               </div>
@@ -369,9 +397,11 @@
               <div class="table-actions" style="flex-wrap: wrap; gap: 8px;">
                 <div class="search-input-wrapper">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
-                  <input type="text" id="cards-search-input" class="form-control" placeholder="Search employee, pass or number...">
+                  <input type="text" id="cards-search-input" class="form-control"
+                    placeholder="Search employee, pass or number...">
                 </div>
 
                 <select id="cards-filter-type" class="form-control" style="width: auto; min-width: 155px;">
@@ -395,12 +425,24 @@
 
                 <!-- Digital ID Wallet vs Compact Table View Toggle -->
                 <div class="view-mode-pill-group">
-                  <button id="btn-cards-view-wallet" class="view-pill-btn active" onclick="setCardsViewMode('wallet')" title="Digital ID Wallet Passes">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                  <button id="btn-cards-view-wallet" class="view-pill-btn active" onclick="setCardsViewMode('wallet')"
+                    title="Digital ID Wallet Passes">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="2" y="5" width="20" height="14" rx="2" />
+                      <line x1="2" y1="10" x2="22" y2="10" />
+                    </svg>
                     <span>Wallet Passes</span>
                   </button>
-                  <button id="btn-cards-view-table" class="view-pill-btn" onclick="setCardsViewMode('table')" title="Compact Data Table">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                  <button id="btn-cards-view-table" class="view-pill-btn" onclick="setCardsViewMode('table')"
+                    title="Compact Data Table">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="8" y1="6" x2="21" y2="6" />
+                      <line x1="8" y1="12" x2="21" y2="12" />
+                      <line x1="8" y1="18" x2="21" y2="18" />
+                      <line x1="3" y1="6" x2="3.01" y2="6" />
+                      <line x1="3" y1="12" x2="3.01" y2="12" />
+                      <line x1="3" y1="18" x2="3.01" y2="18" />
+                    </svg>
                     <span>Compact Table</span>
                   </button>
                 </div>
@@ -522,7 +564,8 @@
                 <h4 style="font-size: 14px; font-weight: 600;">Active Field Staff</h4>
                 <div class="search-input-wrapper" style="width: 100%;">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                   <input type="text" id="map-search-input" class="form-control" placeholder="Search staff location...">
                 </div>
@@ -544,8 +587,11 @@
                 <h3 class="table-title">Attendance Log & Timesheet Export</h3>
               </div>
               <div class="table-actions" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                <label for="reports-cycle-select" style="font-size: 12px; font-weight: 500; color: var(--text-secondary);">Salary Cycle (25th-24th):</label>
-                <select id="reports-cycle-select" class="form-control" style="width: auto; padding: 6px 12px; font-size: 13px;">
+                <label for="reports-cycle-select"
+                  style="font-size: 12px; font-weight: 500; color: var(--text-secondary);">Salary Cycle
+                  (25th-24th):</label>
+                <select id="reports-cycle-select" class="form-control"
+                  style="width: auto; padding: 6px 12px; font-size: 13px;">
                   <!-- Dynamically populated with 25th-24th salary cycles -->
                 </select>
                 <button id="btn-export-csv" class="btn btn-secondary">
@@ -582,7 +628,8 @@
           <div class="card-table-wrapper" style="padding: 20px;">
             <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">Organization Ownership Management</h3>
             <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 20px;">
-              Transfer Super Admin control to another designated Admin user. This executes the atomic PostgreSQL RPC function in Supabase.
+              Transfer Super Admin control to another designated Admin user. This executes the atomic PostgreSQL RPC
+              function in Supabase.
             </p>
             <button id="btn-open-transfer-modal" class="btn btn-danger">
               🛡️ Initiate Ownership Transfer
@@ -604,7 +651,7 @@
     <div class="drawer-body">
       <form id="employee-form">
         <input type="hidden" id="emp-id">
-        
+
         <div class="form-group">
           <label class="form-label" for="emp-code">Employee Code *</label>
           <input type="text" id="emp-code" class="form-control" placeholder="EMP-1001" required>
@@ -659,7 +706,8 @@
     </div>
     <div class="modal-body">
       <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
-        Warning: Transferring ownership will demote your account to regular Admin status. Select the target Admin user below:
+        Warning: Transferring ownership will demote your account to regular Admin status. Select the target Admin user
+        below:
       </p>
       <div class="form-group">
         <label class="form-label" for="transfer-target-select">Select Target Admin User</label>
@@ -680,7 +728,8 @@
       <button id="photo-modal-close" class="btn-icon">✕</button>
     </div>
     <div class="modal-body" style="text-align: center; padding: 16px;">
-      <img id="photo-modal-img" src="" alt="Attendance Photo Audit" style="max-width: 100%; max-height: 420px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); object-fit: contain;">
+      <img id="photo-modal-img" src="" alt="Attendance Photo Audit"
+        style="max-width: 100%; max-height: 420px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); object-fit: contain;">
       <div id="photo-modal-meta" style="margin-top: 12px; font-size: 12px; color: var(--text-secondary);"></div>
     </div>
   </div>
@@ -716,40 +765,47 @@
 
         <div class="form-group" id="card-custom-name-group" style="display: none;">
           <label class="form-label" for="card-custom-name">Pass Name / Title *</label>
-          <input type="text" id="card-custom-name" class="form-control" placeholder="e.g. Airport Access Pass / Security Permit">
+          <input type="text" id="card-custom-name" class="form-control"
+            placeholder="e.g. Airport Access Pass / Security Permit">
         </div>
 
         <!-- Automated Smart Document Scanner & AI Vision Hub -->
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
             <label class="form-label" style="margin-bottom: 0;">Upload & Auto-Extract Card Data (AI Vision)</label>
-            <button type="button" id="btn-toggle-ai-key" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 2px 8px; border-color: rgba(59, 130, 246, 0.4);">
+            <button type="button" id="btn-toggle-ai-key" class="btn btn-secondary btn-sm"
+              style="font-size: 11px; padding: 2px 8px; border-color: rgba(59, 130, 246, 0.4);">
               🔑 <span id="ai-key-status-label">Configure Gemini AI</span>
             </button>
           </div>
 
           <!-- Gemini AI Key Configuration Drawer / Panel -->
-          <div id="ai-key-config-box" style="display: none; margin-bottom: 12px; padding: 12px; border-radius: var(--radius-sm); border: 1px solid rgba(59, 130, 246, 0.4); background: rgba(59, 130, 246, 0.08);">
+          <div id="ai-key-config-box"
+            style="display: none; margin-bottom: 12px; padding: 12px; border-radius: var(--radius-sm); border: 1px solid rgba(59, 130, 246, 0.4); background: rgba(59, 130, 246, 0.08);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-weight: 600; font-size: 12px; color: var(--primary);">🤖 Gemini Multimodal AI Vision</span>
-              <a href="https://aistudio.google.com/app/apikey" target="_blank" style="font-size: 11px; color: var(--primary); text-decoration: underline;">Get Free Key ↗</a>
+              <span style="font-weight: 600; font-size: 12px; color: var(--primary);">🤖 Gemini Multimodal AI
+                Vision</span>
+              <a href="https://aistudio.google.com/app/apikey" target="_blank"
+                style="font-size: 11px; color: var(--primary); text-decoration: underline;">Get Free Key ↗</a>
             </div>
             <p style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">
               Directly reads Emirates ID, UAE Visas, Passports, Insurance cards, and PDFs with 99%+ accuracy.
             </p>
             <div style="display: flex; gap: 6px;">
-              <input type="password" id="gemini-api-key-input" class="form-control" style="font-size: 12px; padding: 6px 10px;" placeholder="Paste Gemini API key (AIzaSy...)">
-              <button type="button" id="btn-save-ai-key" class="btn btn-primary btn-sm" style="white-space: nowrap;">Save Key</button>
+              <input type="password" id="gemini-api-key-input" class="form-control"
+                style="font-size: 12px; padding: 6px 10px;" placeholder="Paste Gemini API key (AIzaSy...)">
+              <button type="button" id="btn-save-ai-key" class="btn btn-primary btn-sm"
+                style="white-space: nowrap;">Save Key</button>
             </div>
           </div>
-          
+
           <div id="card-file-dropzone" class="file-dropzone">
             <input type="file" id="card-file-input" accept="image/*,application/pdf" style="display: none;">
             <div class="dropzone-icon">📷</div>
             <div class="dropzone-text">Click to choose or drop employee card file</div>
             <div class="dropzone-subtext">Supports PNG, JPG, WEBP, PDF • Auto-extracts numbers & expiry dates</div>
           </div>
-          
+
           <div id="card-file-preview" class="dropzone-preview" style="display: none;">
             <img id="card-file-thumb" class="dropzone-thumbnail" src="" alt="Thumbnail">
             <div class="dropzone-file-meta">
@@ -761,29 +817,39 @@
 
           <!-- Instant Document Recognition Trigger Buttons -->
           <div style="margin-top: 10px;">
-            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">Or 1-click test auto-recognition for selected card:</div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">Or 1-click test
+              auto-recognition for selected card:</div>
             <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-              <button type="button" id="btn-ocr-instant-scan" class="btn btn-secondary btn-sm" style="flex: 1; min-width: 140px; font-weight: 600;">
+              <button type="button" id="btn-ocr-instant-scan" class="btn btn-secondary btn-sm"
+                style="flex: 1; min-width: 140px; font-weight: 600;">
                 ⚡ Auto-Extract Data
               </button>
-              <button type="button" id="btn-ocr-sample-eid" class="btn btn-secondary btn-sm" title="Simulate Emirates ID Scan">🇦🇪 EID</button>
-              <button type="button" id="btn-ocr-sample-visa" class="btn btn-secondary btn-sm" title="Simulate UAE Visa Scan">🛂 Visa</button>
-              <button type="button" id="btn-ocr-sample-passport" class="btn btn-secondary btn-sm" title="Simulate Passport Scan">📘 Passport</button>
-              <button type="button" id="btn-ocr-sample-insurance" class="btn btn-secondary btn-sm" title="Simulate Health Insurance Scan">🏥 Insurance</button>
-              <button type="button" id="btn-ocr-sample-mopa" class="btn btn-secondary btn-sm" title="Simulate MOPA Pass Scan">🛡️ MOPA</button>
-              <button type="button" id="btn-ocr-sample-cispa" class="btn btn-secondary btn-sm" title="Simulate CISPA Pass Scan">⚓ CISPA</button>
+              <button type="button" id="btn-ocr-sample-eid" class="btn btn-secondary btn-sm"
+                title="Simulate Emirates ID Scan">🇦🇪 EID</button>
+              <button type="button" id="btn-ocr-sample-visa" class="btn btn-secondary btn-sm"
+                title="Simulate UAE Visa Scan">🛂 Visa</button>
+              <button type="button" id="btn-ocr-sample-passport" class="btn btn-secondary btn-sm"
+                title="Simulate Passport Scan">📘 Passport</button>
+              <button type="button" id="btn-ocr-sample-insurance" class="btn btn-secondary btn-sm"
+                title="Simulate Health Insurance Scan">🏥 Insurance</button>
+              <button type="button" id="btn-ocr-sample-mopa" class="btn btn-secondary btn-sm"
+                title="Simulate MOPA Pass Scan">🛡️ MOPA</button>
+              <button type="button" id="btn-ocr-sample-cispa" class="btn btn-secondary btn-sm"
+                title="Simulate CISPA Pass Scan">⚓ CISPA</button>
             </div>
           </div>
 
           <!-- OCR Live Status & Extraction Result Banner -->
-          <div id="card-ocr-status-card" style="display: none; margin-top: 10px; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-surface); font-size: 12px;">
+          <div id="card-ocr-status-card"
+            style="display: none; margin-top: 10px; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-surface); font-size: 12px;">
             <!-- Rendered by JS -->
           </div>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="card-number-input">Card / Document Number (Auto-Populated)</label>
-          <input type="text" id="card-number-input" class="form-control" placeholder="Extracted via OCR or enter number" required>
+          <input type="text" id="card-number-input" class="form-control" placeholder="Extracted via OCR or enter number"
+            required>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
@@ -799,7 +865,8 @@
 
         <div class="form-group">
           <label class="form-label" for="card-notes">Notes / Renewal Remarks</label>
-          <textarea id="card-notes" class="form-control" rows="2" placeholder="Optional notes (e.g. Sponsor info, Renewal under process)"></textarea>
+          <textarea id="card-notes" class="form-control" rows="2"
+            placeholder="Optional notes (e.g. Sponsor info, Renewal under process)"></textarea>
         </div>
       </form>
     </div>
@@ -818,10 +885,14 @@
     </div>
     <div class="modal-body" style="padding: 16px;">
       <div id="card-viewer-content" style="text-align: center;">
-        <img id="card-viewer-img" src="" alt="Document Preview" style="max-width: 100%; max-height: 400px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); object-fit: contain;">
-        <iframe id="card-viewer-pdf" src="" style="width: 100%; height: 400px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); display: none;"></iframe>
+        <img id="card-viewer-img" src="" alt="Document Preview"
+          style="max-width: 100%; max-height: 400px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); object-fit: contain;">
+        <iframe id="card-viewer-pdf" src=""
+          style="width: 100%; height: 400px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); display: none;"></iframe>
       </div>
-      <div id="card-viewer-meta" style="margin-top: 14px; padding: 12px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); font-size: 12px;"></div>
+      <div id="card-viewer-meta"
+        style="margin-top: 14px; padding: 12px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); font-size: 12px;">
+      </div>
     </div>
     <div class="modal-footer" style="justify-content: space-between;">
       <div style="display: flex; gap: 8px;">
@@ -844,14 +915,17 @@
     </div>
     <div class="modal-body">
       <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
-        The following employee cards are expiring within the next 3 days or have expired. Choose your notification channel to dispatch alerts:
+        The following employee cards are expiring within the next 3 days or have expired. Choose your notification
+        channel to dispatch alerts:
       </p>
-      <div id="broadcast-list" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 8px; margin-bottom: 14px; background: var(--bg-surface);">
+      <div id="broadcast-list"
+        style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 8px; margin-bottom: 14px; background: var(--bg-surface);">
         <!-- Dynamically rendered list of critical cards -->
       </div>
       <div class="form-group">
         <label class="form-label">Alert Message Preview</label>
-        <textarea id="broadcast-message-preview" class="form-control" rows="5" readonly style="font-family: var(--font-mono); font-size: 11px;"></textarea>
+        <textarea id="broadcast-message-preview" class="form-control" rows="5" readonly
+          style="font-family: var(--font-mono); font-size: 11px;"></textarea>
       </div>
     </div>
     <div class="modal-footer">
@@ -869,7 +943,8 @@
         <span style="font-size: 24px;">🤖</span>
         <div>
           <h3 class="modal-title" style="margin: 0;">Background Robot Config</h3>
-          <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">Silent 3-day renewal alerts (Free Email & WhatsApp)</div>
+          <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">Silent 3-day renewal alerts (Free
+            Email & WhatsApp)</div>
         </div>
       </div>
       <button id="robot-config-modal-close" class="btn-icon" onclick="closeRobotConfigModal()">✕</button>
@@ -877,18 +952,22 @@
     <div class="modal-body" style="padding: 16px;">
       <!-- Target Email(s) Input -->
       <div class="form-group" style="margin-bottom: 14px;">
-        <label class="form-label" style="font-weight: 600; font-size: 12.5px; margin-bottom: 4px;">📬 Recipient Email Address(es)</label>
+        <label class="form-label" style="font-weight: 600; font-size: 12.5px; margin-bottom: 4px;">📬 Recipient Email
+          Address(es)</label>
         <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">
           Separate multiple emails with commas. Verified domain: <strong>fusionmaint.org</strong>
         </div>
-        <input type="text" id="robot-target-email" class="form-control" placeholder="sr.irshath@gmail.com, nasuru@fusionmaint.com" style="font-size: 12px;">
+        <input type="text" id="robot-target-email" class="form-control"
+          placeholder="sr.irshath@gmail.com, nasuru@fusionmaint.com" style="font-size: 12px;">
       </div>
 
       <!-- Enable Switch -->
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-subtle);">
+      <div
+        style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-subtle);">
         <div>
           <div style="font-weight: 600; font-size: 13px;">Enable Daily Automated Robot</div>
-          <div style="font-size: 11px; color: var(--text-secondary);">Silently sends daily alert on screen load and cloud cron</div>
+          <div style="font-size: 11px; color: var(--text-secondary);">Silently sends daily alert on screen load and
+            cloud cron</div>
         </div>
         <input type="checkbox" id="robot-enabled-switch" checked style="width: 18px; height: 18px; cursor: pointer;">
       </div>
@@ -896,45 +975,56 @@
       <!-- Resend Free Email API -->
       <div class="form-group" style="margin-bottom: 16px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-          <label class="form-label" style="font-weight: 600; font-size: 12.5px; margin: 0;">Resend API Key (Free Email)</label>
+          <label class="form-label" style="font-weight: 600; font-size: 12.5px; margin: 0;">Resend API Key (Free
+            Email)</label>
           <span style="font-size: 10.5px; color: #10B981; font-weight: bold;">3,000 Free/Mo</span>
         </div>
         <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">
-          Get your free key from <a href="https://resend.com/api-keys" target="_blank" style="color: #3B82F6;">resend.com/api-keys</a>.
+          Get your free key from <a href="https://resend.com/api-keys" target="_blank"
+            style="color: #3B82F6;">resend.com/api-keys</a>.
         </div>
         <div style="display: flex; gap: 8px;">
-          <input type="text" id="robot-resend-key" class="form-control" placeholder="re_123456789..." style="font-family: var(--font-mono); font-size: 12px;">
-          <button class="btn btn-secondary btn-sm" onclick="testRobotEmail()" style="white-space: nowrap;">Test Email</button>
+          <input type="text" id="robot-resend-key" class="form-control" placeholder="re_123456789..."
+            style="font-family: var(--font-mono); font-size: 12px;">
+          <button class="btn btn-secondary btn-sm" onclick="testRobotEmail()" style="white-space: nowrap;">Test
+            Email</button>
         </div>
       </div>
 
       <!-- CallMeBot Free WhatsApp API -->
       <div class="form-group" style="margin-bottom: 8px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-          <label class="form-label" style="font-weight: 600; font-size: 12.5px; margin: 0;">CallMeBot API Key (Free WhatsApp)</label>
+          <label class="form-label" style="font-weight: 600; font-size: 12.5px; margin: 0;">CallMeBot API Key (Free
+            WhatsApp)</label>
           <span style="font-size: 10.5px; color: #10B981; font-weight: bold;">100% Free</span>
         </div>
         <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">
-          Send <code style="background: rgba(0,0,0,0.1); padding: 2px 4px; border-radius: 4px;">I allow callmebot to send me messages</code> to <strong>+34 911 98 05 60</strong> on WhatsApp to get your free key.
+          Send <code
+            style="background: rgba(0,0,0,0.1); padding: 2px 4px; border-radius: 4px;">I allow callmebot to send me messages</code>
+          to <strong>+34 911 98 05 60</strong> on WhatsApp to get your free key.
         </div>
         <div style="display: flex; gap: 8px;">
-          <input type="text" id="robot-callmebot-key" class="form-control" placeholder="CallMeBot apikey..." style="font-family: var(--font-mono); font-size: 12px;">
-          <button class="btn btn-secondary btn-sm" onclick="testRobotWhatsApp()" style="white-space: nowrap;">Test WhatsApp</button>
+          <input type="text" id="robot-callmebot-key" class="form-control" placeholder="CallMeBot apikey..."
+            style="font-family: var(--font-mono); font-size: 12px;">
+          <button class="btn btn-secondary btn-sm" onclick="testRobotWhatsApp()" style="white-space: nowrap;">Test
+            WhatsApp</button>
         </div>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeRobotConfigModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveRobotConfig()" style="background: #6366F1; border-color: #6366F1;">Save Settings</button>
+      <button class="btn btn-primary" onclick="saveRobotConfig()"
+        style="background: #6366F1; border-color: #6366F1;">Save Settings</button>
     </div>
   </div>
 
   <!-- Supabase JS Client SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  
+
   <!-- Leaflet Map JS -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
   <!-- SheetJS for Excel Export -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
@@ -945,4 +1035,5 @@
   <script src="app.js?v=5"></script>
 
 </body>
+
 </html>

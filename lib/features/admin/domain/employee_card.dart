@@ -43,8 +43,8 @@ class EmployeeCard {
 
   bool get isExpired => daysUntilExpiry < 0;
   bool get isCritical => daysUntilExpiry >= 0 && daysUntilExpiry <= 3;
-  bool get isExpiringSoon => daysUntilExpiry > 3 && daysUntilExpiry <= 30;
-  bool get isValid => daysUntilExpiry > 30;
+  bool get isExpiringSoon => daysUntilExpiry >= 0 && daysUntilExpiry <= 30;
+  bool get isValid => daysUntilExpiry > 3;
 
   String get statusLabel {
     if (isExpired) {
