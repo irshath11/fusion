@@ -30,6 +30,19 @@ The **Employee Management** feature empowers Super Admins and Administrators to 
    - **Password Reset**: Admin can trigger password resets for staff members.
    - **Audit Activity Logging**: Records `EMPLOYEE_CREATED`, `EMPLOYEE_UPDATED`, `EMPLOYEE_DISABLED`, `EMPLOYEE_ACTIVATED`, and `EMPLOYEE_DELETED` in `activity_logs`.
 
+5. **Official Portrait Photo Directory & Avatars**:
+   - Every employee badge is mapped to high-resolution official portrait photos stored in `assets/images/employees/` (mirrored in `web/assets/images/employees/` for web admin).
+   - Supported badges include `1004`, `1008`, `1012`, `1021`, `1024`, `1031`, `1036`, `1038`, `1047`, `1048`, `1049`, `1054`, `1056`, `1057`, `1058`, `1059`, `1060`, and North branch codes `N-1003` through `N-1013`.
+   - The [`EmployeeAvatar`](../lib/core/widgets/employee_avatar.dart) widget automatically resolves image assets by employee code, with seamless fallback to stylized monogram initials.
+
+6. **Identity Reconciliation Helper (`EmployeeDirectoryHelper`)**:
+   - Normalizes employee names, badge numbers, and department codes.
+   - Reconciles historical attendance and timesheet entries across variant formats (`1004` vs `N-1004`, case-insensitive names, stripped whitespace).
+
+7. **Employee Statutory Cards & Passes Linkage**:
+   - Each employee profile is directly linked to their active statutory documents (Emirates ID, Visa, Passport, Insurance, MOPA, CISPA, Custom passes) in the `employee_cards` table.
+   - Administrators can monitor card compliance statuses directly from the employee management screen and drill down to the Cards Manager.
+
 ---
 
 ## 2. Technical Implementation & Data Structures
@@ -73,5 +86,9 @@ class EmployeeEntity {
 | :--- | :--- |
 | [`lib/features/admin/domain/employee_entity.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/domain/employee_entity.dart) | Domain entity for staff members. |
 | [`lib/features/admin/presentation/user_management_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/user_management_cubit.dart) | Cubit managing multi-role user creation via isolated Firebase secondary auth, Supabase RPC/insertions, and Hive box updates. |
-| [`lib/features/admin/presentation/employee_management_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/employee_management_screen.dart) | Comprehensive UI list view, search bar, active/inactive badges, and bottom-sheet form for adding/editing employees. |
+| [`lib/features/admin/presentation/employee_management_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/employee_management_screen.dart) | Comprehensive UI list view, search bar, active/inactive badges, employee avatar rendering, and bottom-sheet form for adding/editing employees. |
 | [`lib/features/admin/presentation/user_form_dialog.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/user_form_dialog.dart) | User creation and editing modal form with role selection dropdown (`SUPER_ADMIN`, `ADMIN`, `EMPLOYEE`) and password visibility toggles. |
+| [`lib/core/widgets/employee_avatar.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/widgets/employee_avatar.dart) | Widget rendering official employee portrait photos with graceful monogram fallback. |
+| [`lib/core/utils/employee_directory_helper.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/utils/employee_directory_helper.dart) | Identity matching and badge normalization utility. |
+| [`lib/core/constants/employee_photo_data.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/constants/employee_photo_data.dart) | Registry mapping badge codes to local asset image paths. |
+

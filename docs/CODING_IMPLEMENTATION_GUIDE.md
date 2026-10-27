@@ -17,6 +17,11 @@
 8. [4-Step Attendance Stepper & Geofence Validator (`lib/features/attendance/presentation/attendance_cubit.dart`)](#8-4-step-attendance-stepper--geofence-validator-libfeaturesattendancepresentationattendance_cubitdart)
 9. [Hardware Device Fingerprinting (`lib/features/security/device_binding_service.dart`)](#9-hardware-device-fingerprinting-libfeaturessecuritydevice_binding_servicedart)
 10. [Atomic Ownership Transfer Engine (`lib/features/admin/presentation/ownership_transfer_cubit.dart`)](#10-atomic-ownership-transfer-engine-libfeaturesadminpresentationownership_transfer_cubitdart)
+11. [Document Intelligence & Gemini AI OCR Engine (`lib/core/services/card_ocr_service.dart`)](#11-document-intelligence--gemini-ai-ocr-engine-libcoreservicescard_ocr_servicedart)
+12. [Automated Compliance Notification Robot (`lib/core/services/card_expiry_notification_service.dart`)](#12-automated-compliance-notification-robot-libcoreservicescard_expiry_notification_servicedart)
+13. [25th–24th Salary Cycle & Daily Leave Ledger Engine (`lib/core/utils/salary_cycle_helper.dart`)](#13-25th24th-salary-cycle--daily-leave-ledger-engine-libcoreutilssalary_cycle_helperdart)
+14. [24-Hour Auto-Checkout & Sunday 100% OT Rule (`lib/core/utils/timesheet_calculator.dart`)](#14-24-hour-auto-checkout--sunday-100-ot-rule-libcoreutilstimesheet_calculatordart)
+
 
 ---
 
@@ -645,3 +650,160 @@ class OwnershipTransferCubit extends Cubit<OwnershipTransferState> {
   }
 }
 ```
+
+---
+
+## 11. Document Intelligence & Gemini AI OCR Engine (`lib/core/services/card_ocr_service.dart`)
+
+### Code Implementation Highlights
+Extracts document metadata and dates directly from uploaded scans or photos using Google's multimodal Gemini Vision model:
+
+```dart
+class CardOcrService {
+  static Future<OcrCardResult> extractFromFile({
+    required String fileName,
+    List<int>? fileBytes,
+    String? filePath,
+    EmployeeEntity? employee,
+    String? geminiApiKey,
+  }) async {
+    final apiKey = geminiApiKey ?? LocalDatabaseService().getGeminiApiKey();
+    
+    // Convert document bytes to base64 payload
+    final base64Payload = base64Encode(fileBytes!);
+    final mimeType = _resolveMimeType(fileName);
+
+    final prompt = '''
+Analyze this employee card/document and extract:
+1. cardType (EMIRATES_ID, VISA, PASSPORT, INSURANCE, MOPA_PASS, CISPA_PASS, CUSTOM_PASS)
+2. cardNumber (Official ID or card number)
+3. issueDate (DD/MM/YYYY)
+4. expiryDate (DD/MM/YYYY)
+5. holderName (Legal name of document holder)
+Output in valid JSON.
+''';
+
+    final response = await http.post(
+      Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'contents': [
+          {
+            'parts': [
+              {'text': prompt},
+              {
+                'inline_data': {'mime_type': mimeType, 'data': base64Payload}
+              }
+            ]
+          }
+        ]
+      }),
+    );
+
+    final jsonResp = jsonDecode(response.body);
+    final textContent = jsonResp['candidates'][0]['content']['parts'][0]['text'];
+    return _parseExtractionResult(textContent, employee);
+  }
+}
+```
+
+---
+
+## 12. Automated Compliance Notification Robot (`lib/core/services/card_expiry_notification_service.dart`)
+
+### Code Implementation Highlights
+Generates professional compliance notifications and dispatches alerts via WhatsApp and Resend Email API:
+
+```dart
+class CardExpiryNotificationService {
+  static const String defaultAdminEmail = 'sr.irshath@gmail.com, nasuru@fusionmaint.com';
+  static const String defaultAdminPhone = '+971586939371';
+
+  static List<EmployeeCard> getExpiringCardsWithinDays(List<EmployeeCard> cards, {int days = 3}) {
+    final today = DateTime.now();
+    return cards.where((c) {
+      if (c.isDeleted) return false;
+      final diff = c.expiryDate.difference(today).inDays;
+      return diff <= days;
+    }).toList();
+  }
+
+  static Future<void> launchWhatsAppReminder(List<EmployeeCard> cards, Map<String, EmployeeEntity> employeeMap) async {
+    final message = generateWhatsAppMessage(cards: cards, employeeMap: employeeMap);
+    final encoded = Uri.encodeComponent(message);
+    final cleanPhone = defaultAdminPhone.replaceAll(RegExp(r'[^0-9]'), '');
+    final url = Uri.parse('https://wa.me/$cleanPhone?text=$encoded');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+}
+```
+
+---
+
+## 13. 25th–24th Salary Cycle & Daily Leave Ledger Engine (`lib/core/utils/salary_cycle_helper.dart`)
+
+### Code Implementation Highlights
+Dynamically resolves custom payroll cycles running 25th of month to 24th of next month:
+
+```dart
+class SalaryCycle {
+  final DateTime startDate;
+  final DateTime endDate;
+  final int salaryMonth;
+  final int salaryYear;
+
+  factory SalaryCycle.fromDate(DateTime date) {
+    final int year = date.year;
+    final int month = date.month;
+    final int day = date.day;
+
+    if (day >= 25) {
+      final start = DateTime(year, month, 25, 0, 0, 0);
+      final nextMonthDt = DateTime(year, month + 1, 1);
+      final end = DateTime(nextMonthDt.year, nextMonthDt.month, 24, 23, 59, 59, 999);
+      return SalaryCycle(startDate: start, endDate: end, salaryMonth: nextMonthDt.month, salaryYear: nextMonthDt.year);
+    } else {
+      final prevMonthDt = DateTime(year, month - 1, 1);
+      final start = DateTime(prevMonthDt.year, prevMonthDt.month, 25, 0, 0, 0);
+      final end = DateTime(year, month, 24, 23, 59, 59, 999);
+      return SalaryCycle(startDate: start, endDate: end, salaryMonth: month, salaryYear: year);
+    }
+  }
+}
+```
+
+---
+
+## 14. 24-Hour Auto-Checkout & Sunday 100% OT Rule (`lib/core/utils/timesheet_calculator.dart`)
+
+### Code Implementation Highlights
+Enforces Sunday holiday overtime conversion and protects timesheet metrics from stale unclosed shifts:
+
+```dart
+// 1. Sunday 100% Overtime Rule
+final bool isSunday = date.weekday == DateTime.sunday;
+double regHours;
+double otHours;
+
+if (isSunday) {
+  // Sunday is mandatory weekly off -> All worked duration converts to 100% OT
+  regHours = 0.0;
+  otHours = totalHours;
+} else {
+  // Monday-Saturday -> Capped at 8.0h regular
+  regHours = totalHours <= 8.0 ? totalHours : 8.0;
+  otHours = totalHours <= 8.0 ? 0.0 : totalHours - 8.0;
+}
+
+// 2. 24-Hour Auto-Checkout Rule
+final elapsed = DateTime.now().difference(checkInTime);
+if (!hasCheckOut && elapsed.inHours >= 24) {
+  // Shift ran over 24h without checkout -> Auto cap at 8h regular and 0 OT
+  regHours = 8.0;
+  otHours = 0.0;
+  isAutoCompleted = true;
+}
+```
+

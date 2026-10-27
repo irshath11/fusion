@@ -60,6 +60,32 @@ Enterprise-grade, offline-first mobile and web application built using **Flutter
 ### 13. Analytics & Multi-Format Report Export
 - Generates downloadable compliance reports in **PDF**, **Excel (.xlsx)**, and **CSV** formats with customizable filters.
 
+### 14. Statutory Cards Management & Gemini Multimodal AI Vision OCR
+- **Compliance Document Tracking**: Centrally tracks employee statutory cards and field access passes (`EMIRATES_ID`, `VISA`, `PASSPORT`, `INSURANCE`, `MOPA_PASS`, `CISPA_PASS`, and `CUSTOM_PASS`).
+- **Google Gemini Multimodal AI Vision**: Automatically scans uploaded card photos or PDF scans (`CardOcrService`) and extracts document type, card number, employee name, issue date, and expiry date.
+- **Dynamic Expiry Lifecycle**: Real-time status badges for **Expired** (<0d), **Critical** (≤3d), **Expiring Soon** (≤30d), and **Valid** (>30d).
+
+### 15. Automated Multi-Channel Notification Robot
+- **Supabase Database Cron (`pg_cron` & `pg_net`)**: Dispatches automated daily compliance checks every morning at **08:00 AM Gulf Standard Time (GST)** via `backend/supabase_cron_job.sql`.
+- **Automated Email & WhatsApp Alerts**: Broadcasts urgent renewal alerts via **Resend API** to operations executives (`sr.irshath@gmail.com, nasuru@fusionmaint.com`) and automated WhatsApp alerts via **CallMeBot API** to `+971586939371`.
+- **Client-Side Quick Triggers**: 1-click WhatsApp (`https://wa.me/...`) and pre-composed email drafting directly from the Flutter app and Web Admin Portal.
+
+### 16. Company Salary Cycle Engine (25th to 24th) & Leave Records Ledger
+- **25th-to-24th Monthly Salary Cycles**: Aligns shift aggregation and timesheets with Gulf payroll billing periods (`SalaryCycleHelper`), dynamically resolving cycles based on selected reference dates.
+- **Daily Leave Records Ledger**: Categorizes every calendar day into 5 definitive states: `Present`, `Leave / Absent`, `Sunday (Weekly Off)`, `Sunday Duty (Worked)`, and `Upcoming` (`LeaveCalculator`).
+
+### 17. 24-Hour Auto-Checkout Safety Guard & Sunday 100% OT Rule
+- **24-Hour Auto-Checkout**: Any unclosed shift exceeding 24 hours without an official check-out is automatically capped at **8.0 standard regular hours** and **0.0 overtime hours** (`isAutoCompleted: true`), protecting timesheet calculations from runaway shift lengths.
+- **Sunday 100% Overtime Rule**: Sunday is designated as the mandatory weekly off day; **100% of all hours worked on Sunday are automatically converted to Overtime Hours**.
+
+### 18. Employee Photo Directory & Portrait Avatars
+- **Badge Image Mapping**: Maps official employee codes (`1004`, `1008`, `N-1003`, etc.) to high-resolution portrait photos stored in `assets/images/employees/` and `web/assets/images/employees/`.
+- **Avatar Component**: Reusable `EmployeeAvatar` rendering official photos with graceful monogram initials fallback.
+- **Identity Reconciliation**: `EmployeeDirectoryHelper` normalizes employee codes and names across legacy variations.
+
+### 19. Office Station Deletion with Safeguard Protection
+- Admins can delete branch office stations with automatic employee fallback: any personnel assigned to a deleted branch automatically revert to the default Main Office without breaking geofence validation.
+
 ---
 
 ## 💻 Running the Admin Web Application
@@ -72,30 +98,7 @@ flutter run -d chrome
 ```
 
 ### Option B: Running the Standalone Web Admin Site (`web_admin`)
-A dedicated, ultra-fast web admin portal constructed with HTML5/CSS3/JS, Supabase SDK, and Leaflet Maps is located in `web_admin/`:
-```bash
-cd web_admin
-npm start
-```
-Or serve via any web server / Python server:
-```bash
-npx serve -s . -l 3000
-```
-Open `http://localhost:3000` in your browser.
-
----
-
-## 💻 Running the Admin Web Application
-
-### Option A: Running as a Flutter Web App
-You can run the Flutter Web application directly using Flutter:
-```bash
-# Run in Chrome browser
-flutter run -d chrome
-```
-
-### Option B: Running the Standalone Web Admin Site (`web_admin`)
-A dedicated, ultra-fast web admin portal constructed with HTML5/CSS3/JS, Supabase SDK, and Leaflet Maps is located in `web_admin/`:
+A dedicated, ultra-fast web admin portal constructed with HTML5/CSS3/JS, Supabase SDK, Leaflet Maps, and Cards Manager is located in `web_admin/`:
 ```bash
 cd web_admin
 npm start
@@ -113,13 +116,14 @@ Open `http://localhost:3000` in your browser.
 ```
 attendance_app/
 ├── backend/
-│   └── supabase_schema.sql         # Supabase PostgreSQL schema, UUID FKs, RLS Policies, Ownership Transfer RPC
+│   ├── supabase_schema.sql         # Supabase PostgreSQL 15-table schema, RLS Policies, Ownership Transfer RPC
+│   └── supabase_cron_job.sql       # Automated 8:00 AM GST card expiry compliance robot (pg_cron & pg_net)
 ├── web_admin/                      # Standalone Enterprise Web Admin Portal
-│   ├── index.html                  # HTML5 SPA Container & Leaflet Map Container
+│   ├── index.html                  # HTML5 SPA Container, Leaflet Map, & Cards Manager
 │   ├── styles.css                  # Enterprise Design System & CSS Variables
-│   ├── app.js                      # JavaScript Controller, Supabase JS SDK & Leaflet Integration
+│   ├── app.js                      # JavaScript Controller, Supabase JS SDK, Gemini OCR, Leaflet Map
 │   └── package.json                # Local web server script
-├── docs/                           # Comprehensive System & Feature Documentation (Modules 00–10)
+├── docs/                           # Comprehensive System Documentation (Modules 00–12)
 │   ├── 00_system_architecture.md
 │   ├── 01_auth_and_password_management.md
 │   ├── 02_organization_setup.md
@@ -131,23 +135,33 @@ attendance_app/
 │   ├── 08_reports_and_data_export.md
 │   ├── 09_timesheet_and_work_site_management.md
 │   ├── 10_security_device_binding_and_ownership_transfer.md
+│   ├── 11_cards_management_and_ai_compliance.md
+│   ├── 12_leave_management_and_payroll_cycles.md
+│   ├── TECHNICAL_DEVELOPER_DOCUMENTATION.md
+│   ├── CODING_IMPLEMENTATION_GUIDE.md
+│   ├── ENTERPRISE_CASE_STUDY.md
 │   └── README.md                   # Documentation Index
+├── assets/
+│   └── images/employees/           # Official portrait employee badge photos
 ├── lib/
 │   ├── main.dart                   # Role-Based Router Entry Point (Web & Mobile)
-│   ├── app_config.dart             # Global environment configurations
+│   ├── app_config.dart             # Global environment configurations & Supabase keys
 │   ├── core/                       # Shared utilities, constants, & themes
-│   │   ├── constants/              # Colors, Themes, Enums (UserRole, WorkflowStep, ActivityLogAction)
-│   │   ├── services/               # LocationService, CameraService, SupabaseService, ExportServices
-│   │   ├── utils/                  # GeofenceCalculator, TimesheetCalculator
-│   │   └── widgets/                # AppButton, CustomTextField, StatusBadge, OfflineBanner
-│   ├── database/                   # Hive Local Database Persistence
+│   │   ├── constants/              # Colors, Themes, Enums, EmployeePhotoData
+│   │   ├── services/               # LocationService, CameraService, SupabaseService, CardOcrService,
+│   │   │                           # CardExpiryNotificationService, PdfExportService, ExcelCsvExportService
+│   │   ├── utils/                  # GeofenceCalculator, TimesheetCalculator, SalaryCycleHelper,
+│   │   │                           # LeaveCalculator, EmployeeDirectoryHelper, PhotoAttachmentHelper
+│   │   └── widgets/                # AppButton, CustomTextField, StatusBadge, OfflineBanner, EmployeeAvatar
+│   ├── database/                   # Hive Local Database Persistence Engine
 │   └── features/                   # Clean Architecture Features
 │       ├── setup/                  # First-Time Wizard Screen & Cubit
 │       ├── auth/                   # Login Screen, Firebase/Supabase Auth & Cubit
 │       ├── attendance/             # Attendance Workflow Stepper, Camera Modal, SiteNameDialog, Cubit
 │       ├── employee/               # Employee Duty Portal & Timeline
-│       ├── admin/                  # Dashboard, Employee & Office Management, Work Sites, Ownership Transfer & Responsive Desktop Web View
-│       ├── timesheet/              # Employee Timesheet Portal, Daily Entry Calculation, PDF Export
+│       ├── admin/                  # Dashboard, Employee & Office Management, Cards Management Screen,
+│       │                           # Work Sites, Ownership Transfer & Responsive Desktop Web View
+│       ├── timesheet/              # Employee Timesheet Portal, 25th-24th Salary Cycle, Daily Calculation, PDF Export
 │       ├── security/               # Hardware Device Binding Service
 │       └── sync/                   # Offline Sync Engine
 ├── pubspec.yaml
@@ -170,5 +184,7 @@ attendance_app/
    ```bash
    flutter run -d chrome
    ```
-4. **Deploy Database**:
+4. **Deploy Database & Scheduled Compliance Robot**:
    - Copy `backend/supabase_schema.sql` into your Supabase SQL Editor and execute.
+   - Copy `backend/supabase_cron_job.sql` into the SQL Editor to schedule the automated daily 8:00 AM GST compliance robot.
+

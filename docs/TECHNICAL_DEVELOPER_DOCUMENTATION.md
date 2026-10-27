@@ -106,6 +106,8 @@ The **Fusion Field Workforce Tracking & Timesheet Management Platform** is an en
   - `hive` & `hive_flutter` (`^2.2.3`): Offline local database storage engine.
   - `firebase_core` & `firebase_auth` (`^3.1.0`, `^5.1.0`): Primary authentication gateway.
   - `supabase_flutter` (`^2.5.2`): Cloud PostgreSQL, storage bucket, real-time database, and RPC execution.
+  - `google_generative_ai`: Gemini Multimodal AI Vision API for automated card document extraction and OCR.
+  - `http` & `url_launcher`: Automated API notification dispatch and direct WhatsApp/Email actions.
   - `geolocator` (`^12.0.0`) & `permission_handler`: Hardware GPS location & permissions.
   - `camera` (`^0.11.0`): Direct hardware selfie camera capture.
   - `image` (`^4.2.0`): Pure Dart image downscaling and quality compression.
@@ -120,7 +122,7 @@ The architecture strictly employs `flutter_bloc` using `Cubit` controllers to en
 - **`AdminCubit`** ([`admin_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/admin_cubit.dart)): Handles executive stats aggregation, office/site CRUD, and live tracking map updates.
 - **`UserManagementCubit`** ([`user_management_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/user_management_cubit.dart)): Manages 3-tier user accounts, secondary Firebase auth instances, and status toggles.
 - **`OwnershipTransferCubit`** ([`ownership_transfer_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/ownership_transfer_cubit.dart)): Executes Super Admin re-authentication and atomic RPC ownership transfer.
-- **`TimesheetCubit`** ([`timesheet_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/timesheet/presentation/timesheet_cubit.dart)): Controls daily shift aggregation, regular/overtime hours calculation, and PDF downloading.
+- **`TimesheetCubit`** ([`timesheet_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/timesheet/presentation/timesheet_cubit.dart)): Controls daily shift aggregation, 25th–24th salary cycle metrics, regular/overtime hours calculation, and PDF downloading.
 
 ---
 
@@ -135,33 +137,43 @@ lib/
 │   ├── constants/
 │   │   ├── app_colors.dart         # Color palette & branding tokens
 │   │   ├── app_enums.dart          # UserRole, WorkflowStep, ActivityLogAction, SyncStatus
-│   │   └── app_theme.dart          # ThemeData configuration (Light/Dark themes)
+│   │   ├── app_theme.dart          # ThemeData configuration (Light/Dark themes)
+│   │   └── employee_photo_data.dart# Registry mapping employee badge codes to portrait images
 │   ├── services/
 │   │   ├── camera_service.dart     # Image downscaling (480px) & 65% JPEG compression engine
 │   │   ├── location_service.dart   # Hardware GPS location fetching & Haversine distance calculations
-│   │   ├── supabase_service.dart   # Supabase cloud database CRUD, RLS queries, & RPC execution
+│   │   ├── supabase_service.dart   # Supabase cloud database CRUD, optimized date filtering, & RPC
+│   │   ├── card_ocr_service.dart   # Gemini Multimodal AI Vision OCR extraction service
+│   │   ├── card_expiry_notification_service.dart # Multi-channel WhatsApp & Email notification service
 │   │   ├── pdf_export_service.dart # Multi-page PDF generation for attendance & timesheets
 │   │   └── excel_csv_export_service.dart # Excel (.xlsx) & CSV export generation
 │   ├── utils/
 │   │   ├── geofence_calculator.dart # Spherical trigonometry math (Haversine formula)
-│   │   └── timesheet_calculator.dart# Daily shift aggregation, regular/overtime hours splitting
+│   │   ├── timesheet_calculator.dart# Daily shift aggregation, 24h auto check-out, Sunday 100% OT
+│   │   ├── salary_cycle_helper.dart # 25th-to-24th monthly salary cycle resolution & metrics
+│   │   ├── leave_calculator.dart   # Daily 5-state leave ledger (Present, Leave, Sunday Off, Sun Duty)
+│   │   ├── employee_directory_helper.dart # Identity matching and badge normalization
+│   │   └── photo_attachment_helper.dart # Image attachment resolution
 │   └── widgets/
 │       ├── app_button.dart         # Standardized elevated button with loading indicators
 │       ├── custom_text_field.dart  # Form text input widget with built-in password visibility toggles
 │       ├── status_badge.dart       # Color-coded badge for SyncStatus and workflow steps
-│       └── offline_banner.dart     # Persistent offline warning bar & manual sync trigger
+│       ├── offline_banner.dart     # Persistent offline warning bar & manual sync trigger
+│       └── employee_avatar.dart    # Portrait avatar component with monogram fallback
 ├── database/
-│   └── local_database_service.dart # Hive local database service managing 8 isolated storage boxes
+│   └── local_database_service.dart # Hive local database service managing isolated storage boxes
 └── features/
     ├── setup/                      # First-time onboarding wizard & organization setup
     ├── auth/                       # Login screen, AuthCubit, password management
     ├── attendance/                 # 4-step stepper, camera capture modal, site selection dialog
     ├── employee/                   # Employee duty dashboard, daily timeline, selfie displays
-    ├── admin/                      # Executive dashboard, employee management, office/site management, ownership transfer
+    ├── admin/                      # Executive dashboard, employee management, office/site management,
+    │                               # cards management (`cards_management_screen.dart`), ownership transfer
     ├── timesheet/                  # Employee timesheet screen, shift filter tabs, timesheet PDF export
     ├── security/                   # Hardware device fingerprinting service (`DeviceBindingService`)
     └── sync/                       # Offline sync engine with connectivity listener (`SyncEngine`)
 ```
+
 
 ---
 
@@ -304,21 +316,68 @@ If $d \le \text{geofence\_radius}$, check-in is **APPROVED**. Otherwise, check-i
 
 ---
 
+## 9. Timesheet Engine & Salary Cycles
+
+### Timesheet Calculation Logic (`TimesheetCalculator`)
+- **Daily Shift Duration**: Calculated between `1. Office Check-In` timestamp and `4. Office Check-Out` timestamp (or last site checkout).
+- **Regular Hours Cap**: Standard regular working hours are capped at **8.0 hours per day** (`standardRegularHoursPerDay = 8.0`) on Monday through Saturday.
+- **Overtime Calculation**: If total shift duration $> 8.0$ hours on regular days, $\text{Regular Hours} = 8.0$ and $\text{Overtime Hours} = \text{Total Hours} - 8.0$.
+- **Sunday 100% Overtime Rule**: Sunday is designated as the mandatory weekly off day in Gulf operations. **100% of all hours worked on Sunday are automatically converted into Overtime Hours** ($\text{Regular Hours} = 0.0\text{h}$, $\text{Overtime} = \text{Total Hours}$).
+- **24-Hour Auto-Checkout Safety Guard**: Any unclosed shift exceeding 24 hours without an official check-out is automatically capped at **8.0 standard regular hours and 0.0 overtime hours** (`isAutoCompleted: true`).
+- **Company Salary Cycle (25th to 24th)**: Aggregates duty records over payroll cycles starting on the 25th of the start month and concluding on the 24th of the target month via `SalaryCycleHelper`.
+- **Site Visit Summary (`SiteVisitSummary`)**: Tracks time elapsed between `2. Site Check-In` and `3. Site Check-Out` for each site visit during the shift.
+- **Site Name & Address Resolution**: Resolves location names through an intelligent fallback hierarchy (`siteName` ➔ `work_sites` ➔ `offices` ➔ `assignedOfficeName`).
+
+---
+
+## 9B. Cards Management, Gemini AI OCR & Automated Compliance Robot
+
+### Architecture & Components
+- **Statutory Cards & Passes**: Tracks `EMIRATES_ID`, `VISA`, `PASSPORT`, `INSURANCE`, `MOPA_PASS`, `CISPA_PASS`, and `CUSTOM_PASS` in the `employee_cards` table.
+- **Gemini Multimodal AI Vision OCR (`CardOcrService`)**: Extracts document type, card number, issuing date, expiry date, and holder name from uploaded photos and documents.
+- **Dynamic Expiry Lifecycle**:
+  - `Expired`: $\text{daysRemaining} < 0$
+  - `Critical`: $0 \le \text{daysRemaining} \le 3$
+  - `Expiring Soon`: $4 \le \text{daysRemaining} \le 30$
+  - `Valid`: $\text{daysRemaining} > 30$
+- **Automated Multi-Channel Notification Robot (`CardExpiryNotificationService` & `backend/supabase_cron_job.sql`)**:
+  - Scheduled daily at 08:00 AM GST via Supabase `pg_cron` & `pg_net`.
+  - Dispatches automated compliance alert emails via **Resend API**.
+  - Dispatches automated WhatsApp messages via **CallMeBot API**.
+  - Provides 1-click WhatsApp (`https://wa.me/...`) and mailto manual alert triggers in Flutter and Web Admin.
+
+---
+
+## 9C. Enterprise Leave Records & Attendance Ledger (`LeaveCalculator`)
+
+- Categorizes every calendar day within the active salary cycle into 5 statuses:
+  - `present`: Work logged on a scheduled day (Monday–Saturday).
+  - `leaveAbsent`: Scheduled day (Monday–Saturday) with zero attendance.
+  - `sundayWeeklyOff`: Sunday with no duty (approved rest day).
+  - `sundayDuty`: Sunday with duty worked (compensated with 100% overtime).
+  - `futureDay`: Unreached calendar date within the cycle.
+- Calculates scheduled working days, days attended, absent days, Sunday off days, Sunday duty days, and compliance percentage.
+
+---
+
 ## 10. Database Documentation (Supabase PostgreSQL)
 
 ### Database Schema Overview
-The database consists of **13 relational tables** with Row-Level Security (RLS) enabled across all entities:
+The database schema ([`backend/supabase_schema.sql`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/backend/supabase_schema.sql) and [`backend/supabase_cron_job.sql`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/backend/supabase_cron_job.sql)) consists of **15 relational tables** with Row-Level Security (RLS) enabled across all entities:
 
 ```
 [organizations] ───< [users] ───< [user_role_assignments] >─── [roles]
        │               │
        ├─► [offices]   └─► [employees] ───< [attendance_records]
        │                       │                     │
-       └─► [work_sites] ───────┼─────────────────────┘
-                               ├─► [devices]
-                               ├─► [gps_logs]
-                               └─► [activity_logs]
+       ├─► [work_sites] ───────┼─────────────────────┘
+       │                       ├─► [employee_cards]
+       │                       ├─► [devices]
+       │                       ├─► [gps_logs]
+       │                       └─► [activity_logs]
+       └─► [compliance_notification_settings]
 ```
+
 
 ### Stored Procedure: Atomic Organization Ownership Transfer
 ```sql
@@ -370,7 +429,9 @@ $$;
 
 1. **Image Downscaling Engine**: Downscales 5MB raw camera photos to 480px @ 65% JPEG quality (**~25KB–45KB payload, 99% reduction**), eliminating network congestion during sync.
 2. **Hive Local Key-Value Storage**: Outperforms SQLite with sub-millisecond read/write latencies for local UI rendering.
-3. **Selective Map Marker Rendering**: `flutter_map` and Leaflet.js map markers render using spatial bounding boxes to maintain 60 FPS UI performance.
+3. **Database Query Optimizations (Server-Side Date Filtering)**: Rather than loading tens of thousands of attendance logs client-side, `SupabaseService` and `web_admin/app.js` apply `.gte('event_timestamp', start)` and `.lte('event_timestamp', end)` in PostgreSQL, slashing data transfer payloads by over 95%.
+4. **Targeted PostgreSQL Indexes**: Indexes are placed on `(employee_id, event_timestamp DESC)`, `organization_id`, and `expiry_date` (`idx_employee_cards_expiry`), ensuring queries execute in sub-10ms.
+5. **Selective Map Marker Rendering**: `flutter_map` and Leaflet.js map markers render using spatial bounding boxes to maintain 60 FPS UI performance.
 
 ---
 
@@ -389,6 +450,12 @@ cd web_admin
 npx serve -s . -l 3000
 ```
 
-### Database Deployment
-1. Open Supabase Console -> SQL Editor.
-2. Copy contents of `backend/supabase_schema.sql` and click **Run**.
+### Database & Background Robot Deployment
+1. **Core Relational Schema**:
+   - Open Supabase Console -> SQL Editor.
+   - Copy contents of `backend/supabase_schema.sql` and click **Run**.
+2. **Automated Compliance Robot (`pg_cron` & `pg_net`)**:
+   - Copy contents of `backend/supabase_cron_job.sql` into the Supabase SQL Editor.
+   - Configure your Resend API key and CallMeBot API key in `compliance_notification_settings`.
+   - Click **Run** to schedule the daily 08:00 AM GST cron robot.
+

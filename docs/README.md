@@ -19,6 +19,9 @@ Welcome to the comprehensive feature and architecture documentation for the **En
 | **08** | [Reports & Multi-Format Data Export Feature](08_reports_and_data_export.md) | Multi-criteria filter engine, CSV data generation, Excel (.xlsx) spreadsheet creation, and multi-page PDF document rendering & printing services. |
 | **09** | [Employee Timesheet & Work Site Management Feature](09_timesheet_and_work_site_management.md) | Daily work shift hour calculation (`TimesheetCalculator`), regular hours (capped at 8.0h), overtime hours tracking (>8.0h), individual site visit duration breakdown (`SiteVisitSummary`), timesheet PDF export, and work site registry (`work_sites`). |
 | **10** | [Hardware Device Binding & Organization Ownership Transfer Feature](10_security_device_binding_and_ownership_transfer.md) | Multi-platform hardware device fingerprinting (`DeviceBindingService`), Supabase device registration (`devices`), and atomic organization ownership transfer procedure (`transfer_organization_ownership`). |
+| **11** | [Cards Management, Gemini AI OCR & Automated Compliance Robot](11_cards_management_and_ai_compliance.md) | Employee statutory cards tracking (Emirates ID, Visa, Passport, Insurance, MOPA, CISPA), Google Gemini Multimodal AI Vision OCR extraction, multi-tier expiry alerting (Expired, ≤3d Critical, ≤30d Expiring), and automated multi-channel notification robot via Supabase `pg_cron`, `pg_net`, Resend Email API, and CallMeBot WhatsApp API. |
+| **12** | [Enterprise Leave Records, Weekly Off Rules & Configurable Salary Cycles](12_leave_management_and_payroll_cycles.md) | Enterprise 25th-to-24th monthly salary cycle engine (`SalaryCycleHelper`), daily leave records ledger (`LeaveCalculator`), 5-state day categorization, Sunday mandatory weekly off rules, Sunday duty 100% overtime conversion, and 24-hour unclosed shift auto-checkout safety guard. |
+
 
 ---
 

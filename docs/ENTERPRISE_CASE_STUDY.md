@@ -43,14 +43,15 @@ Reduces payroll leaks caused by attendance manipulation, eliminates 90%+ of manu
 Fusion was architected as a Clean Architecture cross-platform Flutter application backed by Supabase PostgreSQL, Firebase Authentication, and a dedicated HTML5/JS Web Admin Portal (`web_admin/`).
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                                SYSTEM CAPABILITIES                               │
-├───────────────────────┬────────────────────────┬─────────────────────────────────┤
-│  OFFLINE WORKFORCE    │  GPS GEOFENCE CONTROL  │   TIMESHEET & REPORTING ENGINE  │
-│  • Hive Offline DB    │  • Haversine Formula   │   • 8.0h Cap Regular Hours      │
-│  • 99% Compression    │  • Office & Work Sites │   • Overtime Hours Tracking     │
-│  • Auto Sync Queue    │  • Live Tracking Map   │   • PDF, Excel, CSV Exports     │
-└───────────────────────┴────────────────────────┴─────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                           SYSTEM CAPABILITIES                                          │
+├───────────────────────┬────────────────────────┬─────────────────────────────────┬─────────────────────┤
+│  OFFLINE WORKFORCE    │  GPS GEOFENCE CONTROL  │   TIMESHEET & SALARY ENGINE     │  AI COMPLIANCE ROBOT│
+│  • Hive Offline DB    │  • Haversine Formula   │   • 25th-to-24th Salary Cycle   │  • Gemini AI Vision │
+│  • 99% Compression    │  • Office & Work Sites │   • Sunday 100% OT Conversion   │  • WhatsApp & Email │
+│  • Auto Sync Queue    │  • Live Tracking Map   │   • 24h Auto-Checkout Safeguard │  • Daily pg_cron    │
+└───────────────────────┴────────────────────────┴─────────────────────────────────┴─────────────────────┘
+
 ```
 
 ---
@@ -120,15 +121,24 @@ Fusion was architected as a Clean Architecture cross-platform Flutter applicatio
 ### Challenge 3: Secure & Atomic Organization Ownership Transfer
 - **Solution**: Implemented a PL/pgSQL database stored procedure (`transfer_organization_ownership`) triggered via `OwnershipTransferCubit`. This procedure requires mandatory Super Admin password re-authentication and atomically promotes the target Admin to Super Admin while demoting the previous owner within a single database transaction, backed by automated audit logging (`OWNERSHIP_TRANSFERRED`).
 
+### Challenge 4: Statutory Document Expirations Leading to Site Access Bans & Heavy Fines
+- **Solution**: Built an autonomous statutory document intelligence engine. Integrated Google Gemini Multimodal Vision AI (`CardOcrService`) to auto-extract expiry dates from card photos, and deployed a Supabase `pg_cron` / `pg_net` compliance robot that triggers automated morning WhatsApp and Resend Email alerts to operations leaders for any document within 3 days of expiration.
+
+### Challenge 5: Regional Payroll Billing Calendar Misalignment & Stale Unclosed Shifts
+- **Solution**: Implemented a custom 25th-to-24th salary cycle helper (`SalaryCycleHelper`), an automated Sunday 100% overtime conversion rule (Sunday as mandatory weekly off), a 5-state daily leave ledger (`LeaveCalculator`), and a 24-hour auto-checkout safety guard that caps forgotten check-outs at 8.0 regular hours and 0.0 overtime.
+
 ---
 
 ## Business Impact
 
 - **Zero Attendance Fraud**: Verified photo capture and Haversine geofence validation eliminated buddy-punching and remote check-ins.
+- **Zero Document Compliance Penalties**: Automated morning WhatsApp and email compliance notifications prevented expired Emirates IDs and site security passes from halting field projects.
 - **100% Operational Uptime**: Offline-first storage enabled uninterrupted field workforce logging in remote regions.
+- **100% Payroll Cycle Alignment**: Automated 25th-to-24th monthly calculations and Sunday 100% OT conversion eliminated manual payroll reconciliation.
 - **90% Faster Timesheet Processing**: Automated regular vs. overtime hour aggregation eliminated manual paper processing.
 - **99% Reduced Bandwidth Overhead**: Native JPEG compression dramatically reduced cellular data usage for field workers.
 - **Complete Operational Transparency**: Live tracking maps provided dispatchers with real-time field visibility.
+
 
 ---
 
