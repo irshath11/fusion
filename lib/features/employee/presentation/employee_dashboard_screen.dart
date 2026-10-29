@@ -40,7 +40,8 @@ class EmployeeDashboardScreen extends StatefulWidget {
       _EmployeeDashboardScreenState();
 }
 
-class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
+class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen>
+    with WidgetsBindingObserver {
   final LocalDatabaseService _db = LocalDatabaseService();
   final SyncEngine _syncEngine = SyncEngine();
 
@@ -53,12 +54,32 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _refreshSyncCount();
     _startWorkingTimeTimer();
     _syncCloudData();
+    _syncEngine.startAutoSync();
     _syncEngine.isSyncingNotifier.addListener(_onSyncStateChanged);
-    _syncResultSubscription = _syncEngine.syncResultStream.listen((_) {
-      if (mounted) _refreshSyncCount();
+    _syncResultSubscription = _syncEngine.syncResultStream.listen((res) {
+      if (mounted) {
+        _refreshSyncCount();
+        if (res.syncedCount > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.cloud_done_rounded, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  Text('Auto-synced ${res.syncedCount} offline record${res.syncedCount > 1 ? 's' : ''} to Supabase!'),
+                ],
+              ),
+              backgroundColor: AppColors.success,
+              duration: const Duration(seconds: 3),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
     });
   }
 
@@ -95,7 +116,17 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('[EmployeeDashboard] App resumed from background. Triggering auto-sync...');
+      _refreshSyncCount();
+      _syncEngine.triggerAutoSync();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _workingTimeTimer?.cancel();
     _syncEngine.isSyncingNotifier.removeListener(_onSyncStateChanged);
     _syncResultSubscription?.cancel();

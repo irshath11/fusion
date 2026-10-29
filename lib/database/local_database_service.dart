@@ -1976,6 +1976,19 @@ class LocalDatabaseService {
     }
   }
 
+  // Auto-Sync Persistence
+  bool isAutoSyncEnabled() {
+    return _settingsBox?.get('is_auto_sync_enabled', defaultValue: true) ?? true;
+  }
+
+  Future<void> setAutoSyncEnabled(bool enabled) async {
+    try {
+      await _settingsBox?.put('is_auto_sync_enabled', enabled);
+    } catch (e) {
+      debugPrint('Error saving auto sync setting to Hive: $e');
+    }
+  }
+
   void clearLocalAttendanceRecords() {
     _attendanceRecords.clear();
     _persistAttendanceRecords();

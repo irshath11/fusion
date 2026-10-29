@@ -34,9 +34,9 @@ class OfflineBanner extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        isSyncing && pendingCount == 0
-                            ? 'Syncing records with cloud...'
-                            : 'Offline Mode: $pendingCount pending sync record${pendingCount > 1 ? 's' : ''}',
+                        isSyncing
+                            ? 'Auto-syncing records with Supabase...'
+                            : 'Offline Mode: $pendingCount pending record${pendingCount > 1 ? 's' : ''} • Auto-Sync Active',
                         style: const TextStyle(
                           color: Colors.black87,
                           fontWeight: FontWeight.w700,

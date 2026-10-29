@@ -349,6 +349,9 @@ class AttendanceCubit extends Cubit<AttendanceState> {
 
       _db.addAttendanceRecord(record);
 
+      // Immediately trigger background auto-sync to upload record to Supabase DB if online
+      SyncEngine().triggerAutoSync();
+
       WorkflowStep next = _db.getWorkflowStepForEmployee(emp.id);
       emit(AttendanceStepSuccess(record, next));
     } catch (e) {

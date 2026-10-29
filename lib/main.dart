@@ -14,6 +14,7 @@ import 'features/attendance/presentation/attendance_cubit.dart';
 import 'features/admin/presentation/admin_dashboard_screen.dart';
 import 'features/employee/presentation/employee_dashboard_screen.dart';
 import 'features/security/device_binding_service.dart';
+import 'features/sync/data/sync_engine.dart';
 
 import 'core/theme/theme_cubit.dart';
 
@@ -32,6 +33,9 @@ void main() async {
 
   final db = LocalDatabaseService();
   await db.init();
+
+  // Initialize and start continuous background Auto-Sync engine for offline records
+  SyncEngine().startAutoSync();
 
   runApp(const WorkforceApp());
 }
@@ -88,6 +92,8 @@ class RootRoleRouter extends StatelessWidget {
         if (state is Authenticated) {
           // Register Device Binding upon successful login
           DeviceBindingService().registerDeviceBinding(state.user.id);
+          // Trigger background auto-sync for any pending offline records
+          SyncEngine().triggerAutoSync();
         }
       },
       builder: (context, state) {

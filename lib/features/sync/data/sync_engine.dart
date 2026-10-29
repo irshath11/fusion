@@ -39,39 +39,54 @@ class SyncEngine {
   bool _isAutoSyncStarted = false;
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
+  bool get isAutoSyncStarted => _isAutoSyncStarted;
+  bool get isAutoSyncEnabled => _db.isAutoSyncEnabled();
 
   /// Starts the continuous background auto-sync process:
   /// 1. Listens for network connectivity changes (offline -> online).
-  /// 2. Sets a recurring timer (every 2 minutes) to auto-flush pending queues.
+  /// 2. Sets a recurring timer (every 60 seconds) to auto-flush pending queues.
+  /// 3. Immediately triggers a sync if any pending records exist.
   void startAutoSync() {
+    if (!isAutoSyncEnabled) {
+      debugPrint('[SyncEngine] Auto-sync is currently disabled in settings.');
+      return;
+    }
     if (_isAutoSyncStarted) return;
     _isAutoSyncStarted = true;
 
-    // 1. Connectivity listener
+    debugPrint('[SyncEngine] Initializing and starting background Auto-Sync engine...');
+
+    // 1. Connectivity listener: triggers immediately when connection changes to online
     try {
+      _connectivitySubscription?.cancel();
       _connectivitySubscription =
           Connectivity().onConnectivityChanged.listen((results) {
         final bool hasConnection =
             results.any((r) => r != ConnectivityResult.none);
 
-        if (hasConnection) {
+        if (hasConnection && isAutoSyncEnabled) {
+          debugPrint('[SyncEngine] Network connectivity detected. Triggering auto-sync...');
           triggerAutoSync();
         }
       });
     } catch (e) {
-      debugPrint('SyncEngine connectivity listener error: $e');
+      debugPrint('[SyncEngine] Connectivity listener error: $e');
     }
 
-    // 2. Periodic background flush timer (every 2 minutes)
+    // 2. Periodic background flush timer (every 60 seconds)
     _periodicSyncTimer?.cancel();
-    _periodicSyncTimer = Timer.periodic(const Duration(minutes: 2), (_) {
-      if (_db.getAllPendingSyncRecords().isNotEmpty) {
+    _periodicSyncTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (isAutoSyncEnabled && _db.getAllPendingSyncRecords().isNotEmpty) {
+        debugPrint('[SyncEngine] Periodic interval check: found pending offline records. Triggering auto-sync...');
         triggerAutoSync();
       }
     });
 
-    // 3. Initial check on startup
-    triggerAutoSync();
+    // 3. Initial check on startup: flush any records queued from previous sessions
+    if (_db.getAllPendingSyncRecords().isNotEmpty) {
+      debugPrint('[SyncEngine] Found ${_db.getAllPendingSyncRecords().length} pending offline records on launch. Triggering initial auto-sync...');
+      triggerAutoSync();
+    }
   }
 
   void stopAutoSync() {
@@ -80,13 +95,15 @@ class SyncEngine {
     _periodicSyncTimer?.cancel();
     _periodicSyncTimer = null;
     _isAutoSyncStarted = false;
+    debugPrint('[SyncEngine] Auto-sync stopped.');
   }
 
   /// Triggers auto-sync asynchronously with safety guards and debounce
   void triggerAutoSync() {
+    if (!isAutoSyncEnabled) return;
     if (_isSyncing) return;
-    Future.delayed(const Duration(seconds: 1), () {
-      if (!_isSyncing) {
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (!_isSyncing && isAutoSyncEnabled) {
         performSync();
       }
     });
@@ -94,6 +111,11 @@ class SyncEngine {
 
   /// Check active internet connectivity with multi-endpoint fallback
   Future<bool> hasInternetConnection() async {
+    // On web, socket/InternetAddress lookup is not supported; browser fetch handles networking
+    if (kIsWeb) {
+      return true;
+    }
+
     try {
       final res1 = await InternetAddress.lookup('google.com')
           .timeout(const Duration(seconds: 3));
