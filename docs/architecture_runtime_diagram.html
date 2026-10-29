@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fusion 360 Attendance App - Runtime Architecture Diagram</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --surface: #111827;
+      --surface-elevated: #1f2937;
+      --surface-border: #374151;
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --primary: #38bdf8;
+      --primary-glow: rgba(56, 189, 248, 0.25);
+      --accent: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --purple: #a855f7;
+      
+      /* Boundary colors */
+      --bound-client: rgba(56, 189, 248, 0.08);
+      --bound-client-border: rgba(56, 189, 248, 0.4);
+      --bound-transport: rgba(245, 158, 11, 0.08);
+      --bound-transport-border: rgba(245, 158, 11, 0.4);
+      --bound-cloud: rgba(16, 185, 129, 0.08);
+      --bound-cloud-border: rgba(16, 185, 129, 0.4);
+      --bound-external: rgba(168, 85, 247, 0.08);
+      --bound-external-border: rgba(168, 85, 247, 0.4);
+
+      --node-bg: #1e293b;
+      --node-border: #475569;
+      --node-hover: #334155;
+      --primary-path-color: #38bdf8;
+    }
+
+    [data-theme="light"] {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-elevated: #f1f5f9;
+      --surface-border: #cbd5e1;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --primary: #0284c7;
+      --primary-glow: rgba(2, 132, 199, 0.2);
+      --accent: #059669;
+      --warning: #d97706;
+      --danger: #dc2626;
+      --purple: #9333ea;
+      
+      --bound-client: rgba(2, 132, 199, 0.04);
+      --bound-client-border: rgba(2, 132, 199, 0.35);
+      --bound-transport: rgba(217, 119, 6, 0.04);
+      --bound-transport-border: rgba(217, 119, 6, 0.35);
+      --bound-cloud: rgba(5, 150, 105, 0.04);
+      --bound-cloud-border: rgba(5, 150, 105, 0.35);
+      --bound-external: rgba(147, 51, 234, 0.04);
+      --bound-external-border: rgba(147, 51, 234, 0.35);
+
+      --node-bg: #ffffff;
+      --node-border: #94a3b8;
+      --node-hover: #e2e8f0;
+      --primary-path-color: #0284c7;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Top Navigation Header */
+    header {
+      background-color: var(--surface);
+      border-bottom: 1px solid var(--surface-border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .badge-archify {
+      background: linear-gradient(135deg, #0ea5e9, #6366f1);
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      background-color: var(--surface-elevated);
+      color: var(--text-main);
+      border: 1px solid var(--surface-border);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .btn:hover {
+      background-color: var(--node-hover);
+      border-color: var(--primary);
+    }
+
+    .btn.active {
+      background-color: var(--primary);
+      color: #0b0f19;
+      border-color: var(--primary);
+      font-weight: 600;
+    }
+
+    /* Main Layout */
+    .workspace {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 65px);
+      position: relative;
+    }
+
+    .diagram-viewport {
+      flex: 1;
+      position: relative;
+      background: radial-gradient(circle at 50% 50%, var(--surface-elevated) 0%, var(--bg) 100%);
+      overflow: hidden;
+      cursor: grab;
+    }
+
+    .diagram-viewport:active {
+      cursor: grabbing;
+    }
+
+    svg.diagram-canvas {
+      width: 100%;
+      height: 100%;
+      user-select: none;
+    }
+
+    /* Detail Drawer & Secondary Cards */
+    .side-panel {
+      width: 420px;
+      background-color: var(--surface);
+      border-left: 1px solid var(--surface-border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      z-index: 5;
+    }
+
+    .panel-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--surface-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .panel-header h3 {
+      font-size: 14px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--primary);
+    }
+
+    .panel-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--surface-border);
+      background: var(--surface-elevated);
+    }
+
+    .panel-tab {
+      flex: 1;
+      text-align: center;
+      padding: 10px 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .panel-tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+      font-weight: 600;
+      background: var(--surface);
+    }
+
+    .panel-content {
+      padding: 16px;
+      flex: 1;
+    }
+
+    /* Secondary Detail Cards */
+    .card {
+      background: var(--surface-elevated);
+      border: 1px solid var(--surface-border);
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 12px;
+      transition: all 0.2s ease;
+    }
+
+    .card:hover {
+      border-color: var(--primary);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--text-main);
+    }
+
+    .card-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    .badge-teal { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+    .badge-amber { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+    .badge-purple { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
+    .badge-blue { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+
+    .card-body {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .source-pill {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 3px 6px;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid var(--surface-border);
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 11px;
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    .source-pill:hover {
+      border-color: var(--primary);
+      text-decoration: underline;
+    }
+
+    /* SVG Diagram Aesthetics */
+    .boundary-rect {
+      rx: 12;
+      ry: 12;
+      stroke-width: 1.5;
+      stroke-dasharray: 6 4;
+      transition: all 0.3s ease;
+    }
+
+    .boundary-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      fill: var(--text-muted);
+    }
+
+    .node-group {
+      cursor: pointer;
+      transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .node-group:hover {
+      transform: translateY(-2px);
+    }
+
+    .node-box {
+      rx: 10;
+      ry: 10;
+      fill: var(--node-bg);
+      stroke: var(--node-border);
+      stroke-width: 1.5;
+      transition: all 0.2s ease;
+    }
+
+    .node-group:hover .node-box {
+      stroke: var(--primary);
+      fill: var(--node-hover);
+      filter: drop-shadow(0 6px 16px var(--primary-glow));
+    }
+
+    .node-group.selected .node-box {
+      stroke: var(--accent);
+      stroke-width: 2.5;
+      filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.4));
+    }
+
+    .node-title {
+      font-size: 13px;
+      font-weight: 600;
+      fill: var(--text-main);
+    }
+
+    .node-subtitle {
+      font-size: 10px;
+      fill: var(--text-muted);
+    }
+
+    .node-evidence {
+      font-size: 9.5px;
+      font-family: monospace;
+      fill: var(--primary);
+    }
+
+    /* Edge Paths */
+    .edge-path {
+      fill: none;
+      stroke: #475569;
+      stroke-width: 1.5;
+      stroke-dasharray: 4 3;
+      transition: stroke 0.3s;
+    }
+
+    .primary-flow-path {
+      fill: none;
+      stroke: var(--primary-path-color);
+      stroke-width: 3.5;
+      stroke-dasharray: 8 6;
+      animation: flow-dash 1.5s linear infinite;
+      filter: drop-shadow(0 0 6px var(--primary-glow));
+    }
+
+    .edge-label-bg {
+      fill: var(--surface);
+      rx: 4;
+      ry: 4;
+      stroke: var(--surface-border);
+      stroke-width: 0.8;
+    }
+
+    .edge-label-text {
+      font-size: 9.5px;
+      font-weight: 600;
+      fill: var(--primary);
+    }
+
+    @keyframes flow-dash {
+      to {
+        stroke-dashoffset: -28;
+      }
+    }
+
+    /* Legend Box */
+    .legend-box {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      background: rgba(17, 24, 39, 0.9);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--surface-border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 11px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .legend-line {
+      width: 24px;
+      height: 3px;
+      border-radius: 2px;
+    }
+
+    .legend-primary {
+      background: var(--primary);
+      box-shadow: 0 0 6px var(--primary);
+    }
+
+    .legend-secondary {
+      background: #64748b;
+      border-top: 1px dashed #94a3b8;
+    }
+
+    .legend-pill {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body data-theme="dark">
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <span class="badge-archify">ARCHIFY VERIFIED</span>
+      <div>
+        <div class="title">Fusion 360 Attendance & Field Workforce — Runtime Architecture</div>
+        <div class="subtitle">Offline-First Clean Architecture • Trust Boundaries • Primary Path • Evidence Grounded</div>
+      </div>
+    </div>
+    <div class="toolbar">
+      <button class="btn active" id="btnTogglePath" onclick="togglePrimaryPath()">
+        <span style="font-size: 14px;">⚡</span> Primary Path: Step 1 → 6
+      </button>
+      <button class="btn" onclick="zoomIn()">➕ Zoom In</button>
+      <button class="btn" onclick="zoomOut()">➖ Zoom Out</button>
+      <button class="btn" onclick="resetZoom()">↺ Reset</button>
+      <button class="btn" onclick="toggleTheme()">🌓 Theme</button>
+    </div>
+  </header>
+
+  <!-- Workspace -->
+  <div class="workspace">
+    <!-- Diagram Viewport -->
+    <div class="diagram-viewport" id="viewport">
+      <svg class="diagram-canvas" id="canvas" viewBox="0 0 1440 920">
+        <defs>
+          <!-- Arrow Markers -->
+          <marker id="arrow-primary" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8" />
+          </marker>
+          <marker id="arrow-secondary" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b" />
+          </marker>
+        </defs>
+
+        <!-- ========================================== -->
+        <!-- TRUST BOUNDARIES                           -->
+        <!-- ========================================== -->
+
+        <!-- Boundary 1: Client Edge Sandbox -->
+        <g id="boundary-client">
+          <rect class="boundary-rect" x="30" y="40" width="460" height="840" 
+                fill="var(--bound-client)" stroke="var(--bound-client-border)" />
+          <text class="boundary-label" x="50" y="70">🛡️ TRUST BOUNDARY 1: CLIENT EDGE SANDBOX (MOBILE / WEB RUNTIME)</text>
+          <text x="50" y="88" fill="var(--text-muted)" font-size="10">Untrusted local device runtime • Hardware sensors • Sandboxed Hive storage • Network-loss tolerant</text>
+        </g>
+
+        <!-- Boundary 2: Public Internet Transport -->
+        <g id="boundary-transport">
+          <rect class="boundary-rect" x="520" y="160" width="160" height="540" 
+                fill="var(--bound-transport)" stroke="var(--bound-transport-border)" />
+          <text class="boundary-label" x="535" y="190">🌐 BOUNDARY 2</text>
+          <text x="535" y="206" fill="var(--warning)" font-size="9.5" font-weight="600">PUBLIC TRANSPORT</text>
+          <text x="535" y="222" fill="var(--text-muted)" font-size="9">TLS 1.3 / HTTPS / WSS</text>
+          <text x="535" y="238" fill="var(--text-muted)" font-size="9">Bearer JWT auth</text>
+        </g>
+
+        <!-- Boundary 3: Supabase Cloud Platform (Database Tier) -->
+        <g id="boundary-cloud">
+          <rect class="boundary-rect" x="710" y="40" width="370" height="840" 
+                fill="var(--bound-cloud)" stroke="var(--bound-cloud-border)" />
+          <text class="boundary-label" x="730" y="70">🔒 TRUST BOUNDARY 3: CLOUD DATA PLATFORM (SUPABASE / POSTGRESQL)</text>
+          <text x="730" y="88" fill="var(--text-muted)" font-size="10">Secure Multi-Tenant Infrastructure • Row-Level Security (RLS) • pg_cron & pg_net • RPC</text>
+        </g>
+
+        <!-- Boundary 4: External Third-Party APIs -->
+        <g id="boundary-external">
+          <rect class="boundary-rect" x="1110" y="40" width="300" height="840" 
+                fill="var(--bound-external)" stroke="var(--bound-external-border)" />
+          <text class="boundary-label" x="1130" y="70">⚡ BOUNDARY 4: EXTERNAL SAAS & SERVICES</text>
+          <text x="1130" y="88" fill="var(--text-muted)" font-size="10">Google Gemini • Firebase • Resend • WhatsApp</text>
+        </g>
+
+        <!-- ========================================== -->
+        <!-- CORE COMPONENTS (8 to 12 Components)       -->
+        <!-- ========================================== -->
+
+        <!-- Component 1: Employee Mobile Client -->
+        <g class="node-group" id="node-1" onclick="selectComponent(1)" transform="translate(60, 120)">
+          <rect class="node-box" width="390" height="90" />
+          <text class="node-title" x="20" y="32">1. Employee Mobile App (Flutter Client)</text>
+          <text class="node-subtitle" x="20" y="52">Enforces 4-step sequence (Office In → Site In → Site Out → Office Out)</text>
+          <text class="node-evidence" x="20" y="72">SRC: lib/features/attendance/presentation/attendance_cubit.dart</text>
+        </g>
+
+        <!-- Component 2: Camera & Compression Pipeline -->
+        <g class="node-group" id="node-2" onclick="selectComponent(2)" transform="translate(60, 240)">
+          <rect class="node-box" width="390" height="90" />
+          <text class="node-title" x="20" y="32">2. Live Camera & Compression Pipeline</text>
+          <text class="node-subtitle" x="20" y="52">Hardware selfie stream; downscales 480px @ 65% JPEG (~25KB; 99% cut)</text>
+          <text class="node-evidence" x="20" y="72">SRC: lib/core/services/camera_service.dart#L18-L57</text>
+        </g>
+
+        <!-- Component 3: Workflow & Geofence Validator -->
+        <g class="node-group" id="node-3" onclick="selectComponent(3)" transform="translate(60, 360)">
+          <rect class="node-box" width="390" height="90" />
+          <text class="node-title" x="20" y="32">3. Workflow Engine & Haversine Geofence</text>
+          <text class="node-subtitle" x="20" y="52">GPS validation against assigned office/site radius; step state lock</text>
+          <text class="node-evidence" x="20" y="72">SRC: lib/core/utils/geofence_calculator.dart#L3-L37</text>
+        </g>
+
+        <!-- Component 4: Local Storage Engine (Hive Database) -->
+        <g class="node-group" id="node-4" onclick="selectComponent(4)" transform="translate(60, 480)">
+          <rect class="node-box" width="390" height="90" />
+          <text class="node-title" x="20" y="32">4. Offline Storage Engine (Local Hive DB)</text>
+          <text class="node-subtitle" x="20" y="52">Persistent offline key-value boxes: app_settings, pendingSyncRecords</text>
+          <text class="node-evidence" x="20" y="72">SRC: lib/database/local_database_service.dart#L16-L65</text>
+        </g>
+
+        <!-- Component 5: Background Sync Engine -->
+        <g class="node-group" id="node-5" onclick="selectComponent(5)" transform="translate(60, 600)">
+          <rect class="node-box" width="390" height="90" />
+          <text class="node-title" x="20" y="32">5. Background Sync Engine (Connectivity Listener)</text>
+          <text class="node-subtitle" x="20" y="52">Offline-to-online trigger, deferred geocoding, exponential backoff</text>
+          <text class="node-evidence" x="20" y="72">SRC: lib/features/sync/data/sync_engine.dart#L24-L140</text>
+        </g>
+
+        <!-- Component 6: Web Admin & Analytics Suite -->
+        <g class="node-group" id="node-6" onclick="selectComponent(6)" transform="translate(60, 720)">
+          <rect class="node-box" width="390" height="90" />
+          <text class="node-title" x="20" y="32">6. Web Admin Portal & Leaflet Tracking</text>
+          <text class="node-subtitle" x="20" y="52">Standalone SPA & Flutter Admin; cards manager, live GPS map, audit</text>
+          <text class="node-evidence" x="20" y="72">SRC: web_admin/app.js & lib/features/admin/presentation/</text>
+        </g>
+
+        <!-- Component 7: Supabase Service Gateway -->
+        <g class="node-group" id="node-7" onclick="selectComponent(7)" transform="translate(730, 240)">
+          <rect class="node-box" width="330" height="90" />
+          <text class="node-title" x="20" y="32">7. Cloud Data Gateway (SupabaseService)</text>
+          <text class="node-subtitle" x="20" y="52">Client SDK, batch upload, photo storage, device binding</text>
+          <text class="node-evidence" x="20" y="72">SRC: lib/core/services/supabase_service.dart#L15-L60</text>
+        </g>
+
+        <!-- Component 8: PostgreSQL 15 Relational DB & RLS -->
+        <g class="node-group" id="node-8" onclick="selectComponent(8)" transform="translate(730, 400)">
+          <rect class="node-box" width="330" height="110" />
+          <text class="node-title" x="20" y="32">8. PostgreSQL Relational Schema & RLS</text>
+          <text class="node-subtitle" x="20" y="52">15 Tables (attendance_records, employee_cards)</text>
+          <text class="node-subtitle" x="20" y="68">Tenant isolation by organization_id; RPC ownership transfer</text>
+          <text class="node-evidence" x="20" y="90">SRC: backend/supabase_schema.sql#L1-L120</text>
+        </g>
+
+        <!-- Component 9: Supabase Storage Bucket -->
+        <g class="node-group" id="node-9" onclick="selectComponent(9)" transform="translate(730, 550)">
+          <rect class="node-box" width="330" height="85" />
+          <text class="node-title" x="20" y="32">9. Supabase Storage (attendance_photos)</text>
+          <text class="node-subtitle" x="20" y="52">Public URL CDN hosting compressed selfie verifications</text>
+          <text class="node-evidence" x="20" y="70">SRC: lib/core/services/supabase_service.dart#L190-L215</text>
+        </g>
+
+        <!-- Component 10: Automated Compliance Robot (pg_cron) -->
+        <g class="node-group" id="node-10" onclick="selectComponent(10)" transform="translate(730, 675)">
+          <rect class="node-box" width="330" height="95" />
+          <text class="node-title" x="20" y="32">10. Automated Compliance Robot</text>
+          <text class="node-subtitle" x="20" y="52">pg_cron runs daily 08:00 AM GST; pg_net HTTP webhook alerts</text>
+          <text class="node-evidence" x="20" y="72">SRC: backend/supabase_cron_job.sql#L1-L45</text>
+        </g>
+
+        <!-- Component 11: Document AI & Gemini Vision OCR -->
+        <g class="node-group" id="node-11" onclick="selectComponent(11)" transform="translate(1130, 240)">
+          <rect class="node-box" width="260" height="90" />
+          <text class="node-title" x="16" y="32">11. Google Gemini Vision OCR</text>
+          <text class="node-subtitle" x="16" y="52">Multimodal statutory pass scanning</text>
+          <text class="node-evidence" x="16" y="72">SRC: lib/core/services/card_ocr_service.dart</text>
+        </g>
+
+        <!-- Component 12: Multi-Channel Alert Gateways -->
+        <g class="node-group" id="node-12" onclick="selectComponent(12)" transform="translate(1130, 675)">
+          <rect class="node-box" width="260" height="95" />
+          <text class="node-title" x="16" y="32">12. Resend & WhatsApp APIs</text>
+          <text class="node-subtitle" x="16" y="52">Operations email & CallMeBot WhatsApp</text>
+          <text class="node-evidence" x="16" y="72">SRC: card_expiry_notification_service.dart</text>
+        </g>
+
+        <!-- ========================================== -->
+        <!-- EDGES & PRIMARY RUNTIME PATH               -->
+        <!-- ========================================== -->
+
+        <!-- Secondary/Supporting Edges -->
+        <g id="secondary-edges">
+          <!-- Web Admin -> Supabase Gateway -->
+          <path class="edge-path" d="M 450 765 L 600 765 L 600 290 L 730 290" marker-end="url(#arrow-secondary)" />
+          <!-- Supabase Gateway -> Storage -->
+          <path class="edge-path" d="M 895 330 L 895 550" marker-end="url(#arrow-secondary)" />
+          <!-- Web Admin -> Gemini Vision -->
+          <path class="edge-path" d="M 450 735 L 590 735 L 590 140 L 1260 140 L 1260 240" marker-end="url(#arrow-secondary)" />
+          <!-- pg_cron -> Notification Gateway -->
+          <path class="edge-path" d="M 1060 720 L 1130 720" marker-end="url(#arrow-secondary)" />
+        </g>
+
+        <!-- PRIMARY RUNTIME PATH: FIELD ATTENDANCE FLOW (Step 1 -> 6) -->
+        <g id="primary-path-group">
+          <!-- Step 1: Employee App -> Camera Service -->
+          <path class="primary-flow-path" id="flow-step-1" d="M 255 210 L 255 240" marker-end="url(#arrow-primary)" />
+          
+          <!-- Step 2: Camera Service -> Geofence Validator -->
+          <path class="primary-flow-path" id="flow-step-2" d="M 255 330 L 255 360" marker-end="url(#arrow-primary)" />
+
+          <!-- Step 3: Geofence Validator -> Offline Hive DB -->
+          <path class="primary-flow-path" id="flow-step-3" d="M 255 450 L 255 480" marker-end="url(#arrow-primary)" />
+
+          <!-- Step 4: Hive DB -> Background Sync Engine -->
+          <path class="primary-flow-path" id="flow-step-4" d="M 255 570 L 255 600" marker-end="url(#arrow-primary)" />
+
+          <!-- Step 5: Sync Engine -> Crosses Boundary 2 -> Supabase Gateway -->
+          <path class="primary-flow-path" id="flow-step-5" d="M 450 645 L 600 645 L 600 260 L 730 260" marker-end="url(#arrow-primary)" />
+
+          <!-- Step 6: Supabase Gateway -> PostgreSQL Database -->
+          <path class="primary-flow-path" id="flow-step-6" d="M 895 330 L 895 400" marker-end="url(#arrow-primary)" />
+
+          <!-- Primary Path Badges / Labels -->
+          <g transform="translate(265, 222)">
+            <rect class="edge-label-bg" width="125" height="18" x="-62" y="-9" />
+            <text class="edge-label-text" x="0" y="3" text-anchor="middle">Step 1: Capture Selfie</text>
+          </g>
+
+          <g transform="translate(265, 342)">
+            <rect class="edge-label-bg" width="135" height="18" x="-67" y="-9" />
+            <text class="edge-label-text" x="0" y="3" text-anchor="middle">Step 2: Haversine GPS</text>
+          </g>
+
+          <g transform="translate(265, 462)">
+            <rect class="edge-label-bg" width="145" height="18" x="-72" y="-9" />
+            <text class="edge-label-text" x="0" y="3" text-anchor="middle">Step 3: Instant Local Hive</text>
+          </g>
+
+          <g transform="translate(265, 582)">
+            <rect class="edge-label-bg" width="145" height="18" x="-72" y="-9" />
+            <text class="edge-label-text" x="0" y="3" text-anchor="middle">Step 4: Pending Sync Queue</text>
+          </g>
+
+          <g transform="translate(600, 480)">
+            <rect class="edge-label-bg" width="155" height="18" x="-77" y="-9" />
+            <text class="edge-label-text" x="0" y="3" text-anchor="middle">Step 5: Background Upload (TLS)</text>
+          </g>
+
+          <g transform="translate(895, 365)">
+            <rect class="edge-label-bg" width="140" height="18" x="-70" y="-9" />
+            <text class="edge-label-text" x="0" y="3" text-anchor="middle">Step 6: RLS Insert & Storage</text>
+          </g>
+        </g>
+
+      </svg>
+
+      <!-- Viewport Legend -->
+      <div class="legend-box">
+        <div style="font-weight: 700; color: var(--text-main); margin-bottom: 2px;">DIAGRAM LEGEND</div>
+        <div class="legend-item">
+          <div class="legend-line legend-primary"></div>
+          <span><strong>Primary Flow Path</strong> (Field Attendance: Step 1 → 6)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-line legend-secondary"></div>
+          <span><strong>Secondary Control Edges</strong> (Admin, OCR, Webhooks)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-pill" style="background: var(--bound-client-border);"></div>
+          <span><strong>Boundary 1</strong>: Client Device Hardware Sandbox</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-pill" style="background: var(--bound-cloud-border);"></div>
+          <span><strong>Boundary 3</strong>: Supabase Managed Cloud DB</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Secondary Details & Inspection Cards Side Panel -->
+    <div class="side-panel">
+      <div class="panel-header">
+        <h3 id="panelHeaderTitle">Architecture Cards</h3>
+        <span style="font-size: 11px; color: var(--text-muted);">Secondary Details</span>
+      </div>
+
+      <div class="panel-tabs">
+        <div class="panel-tab active" id="tabCards" onclick="switchTab('cards')">Feature Cards</div>
+        <div class="panel-tab" id="tabInspection" onclick="switchTab('inspection')">Node Inspector</div>
+        <div class="panel-tab" id="tabBoundaries" onclick="switchTab('boundaries')">Trust Boundaries</div>
+      </div>
+
+      <!-- Tab Content: Feature Cards -->
+      <div class="panel-content" id="contentCards">
+        <!-- Card 1 -->
+        <div class="card">
+          <div class="card-title">
+            <span>Statutory Document AI & Gemini OCR</span>
+            <span class="card-badge badge-purple">AI Compliance</span>
+          </div>
+          <div class="card-body">
+            Multimodal document parser extracts card numbers, issue dates, and expiry dates from Emirates ID, Visa, Passport, and client access passes (MOPA/CISPA). Automatically sets 30-day and 3-day renewal alerts.
+          </div>
+          <a class="source-pill" href="file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/services/card_ocr_service.dart#L10-L45">
+            📄 card_ocr_service.dart
+          </a>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="card">
+          <div class="card-title">
+            <span>Dual-Layer Authentication & Hive Fallback</span>
+            <span class="card-badge badge-blue">Security</span>
+          </div>
+          <div class="card-body">
+            Authenticates primarily via Firebase Authentication. If remote networks are unreachable or credential exceptions occur, seamlessly falls back to encrypted local Hive storage (app_settings box) to allow offline work.
+          </div>
+          <a class="source-pill" href="file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/auth/presentation/auth_cubit.dart#L40-L95">
+            📄 auth_cubit.dart
+          </a>
+        </div>
+
+        <!-- Card 3 -->
+        <div class="card">
+          <div class="card-title">
+            <span>25th–24th Salary Cycle & Auto-Checkout</span>
+            <span class="card-badge badge-amber">Timesheets</span>
+          </div>
+          <div class="card-body">
+            Gulf payroll billing period (25th to 24th). Any shift unclosed after 24 hours is automatically capped at 8.0 regular hours and 0.0 OT. Mandatory Sunday rule converts 100% of Sunday duty to Overtime.
+          </div>
+          <a class="source-pill" href="file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/utils/timesheet_calculator.dart">
+            📄 timesheet_calculator.dart
+          </a>
+        </div>
+
+        <!-- Card 4 -->
+        <div class="card">
+          <div class="card-title">
+            <span>Hardware Device Binding & Fingerprint</span>
+            <span class="card-badge badge-teal">Anti-Fraud</span>
+          </div>
+          <div class="card-body">
+            Extracts hardware identifiers (Android ID, iOS Vendor ID, Windows Machine GUID, Web userAgent) using device_info_plus. Binds hardware ID to user account in Supabase devices table to prevent buddy punching.
+          </div>
+          <a class="source-pill" href="file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/security/device_binding_service.dart#L6-L55">
+            📄 device_binding_service.dart
+          </a>
+        </div>
+
+        <!-- Card 5 -->
+        <div class="card">
+          <div class="card-title">
+            <span>08:00 AM GST Multi-Channel Robot</span>
+            <span class="card-badge badge-purple">Automated Ops</span>
+          </div>
+          <div class="card-body">
+            PostgreSQL pg_cron extension triggers process_daily_card_compliance_alerts() daily at 08:00 AM GST. Dispatches urgent renewal alerts to operations via Resend API and CallMeBot WhatsApp gateway.
+          </div>
+          <a class="source-pill" href="file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/backend/supabase_cron_job.sql#L1-L45">
+            📄 supabase_cron_job.sql
+          </a>
+        </div>
+
+        <!-- Card 6 -->
+        <div class="card">
+          <div class="card-title">
+            <span>Atomic Ownership Transfer RPC</span>
+            <span class="card-badge badge-teal">Governance</span>
+          </div>
+          <div class="card-body">
+            transfer_organization_ownership() runs in a single ACID PostgreSQL transaction: promotes target Admin to Super Admin and demotes current Super Admin to Admin with mandatory audit logging (OWNERSHIP_TRANSFERRED).
+          </div>
+          <a class="source-pill" href="file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/backend/supabase_schema.sql#L240-L285">
+            📄 supabase_schema.sql
+          </a>
+        </div>
+      </div>
+
+      <!-- Tab Content: Node Inspector -->
+      <div class="panel-content" id="contentInspection" style="display: none;">
+        <div id="inspectorDetails">
+          <p style="color: var(--text-muted); font-size: 13px; text-align: center; margin-top: 40px;">
+            Select any component in the diagram to view its runtime contract, security posture, and source code evidence.
+          </p>
+        </div>
+      </div>
+
+      <!-- Tab Content: Trust Boundaries -->
+      <div class="panel-content" id="contentBoundaries" style="display: none;">
+        <div class="card" style="border-left: 4px solid var(--primary);">
+          <div class="card-title">Boundary 1: Client Edge Sandbox</div>
+          <div class="card-body">
+            <strong>Zone:</strong> Field worker mobile device & browser.<br>
+            <strong>Trust Level:</strong> Untrusted.<br>
+            <strong>Threats:</strong> Device clock manipulation, mock GPS location providers, hardware spoofing, network loss.<br>
+            <strong>Mitigations:</strong> Haversine spherical validation, hardware fingerprinting, live selfie stream only (gallery upload strictly disabled), offline Hive queue with immutable original timestamp.
+          </div>
+        </div>
+
+        <div class="card" style="border-left: 4px solid var(--warning);">
+          <div class="card-title">Boundary 2: Public Internet Transport</div>
+          <div class="card-body">
+            <strong>Zone:</strong> Cellular data / Public Wi-Fi / Edge networks.<br>
+            <strong>Trust Level:</strong> Untrusted Transit.<br>
+            <strong>Threats:</strong> Man-in-the-Middle (MitM), replay attacks, packet interception.<br>
+            <strong>Mitigations:</strong> TLS 1.3 encryption, Supabase Bearer JWT auth headers, UUIDv4 idempotent replay prevention.
+          </div>
+        </div>
+
+        <div class="card" style="border-left: 4px solid var(--accent);">
+          <div class="card-title">Boundary 3: Cloud Platform (Supabase)</div>
+          <div class="card-body">
+            <strong>Zone:</strong> Managed PostgreSQL 15, Auth, Storage, & pg_cron.<br>
+            <strong>Trust Level:</strong> High Trust (Authoritative Data Tier).<br>
+            <strong>Threats:</strong> Cross-tenant data leakage, unauthorized privilege escalation.<br>
+            <strong>Mitigations:</strong> Row-Level Security (RLS) on all 15 tables enforcing organization_id isolation, service role restrictions, stored procedures for atomic role transfers.
+          </div>
+        </div>
+
+        <div class="card" style="border-left: 4px solid var(--purple);">
+          <div class="card-title">Boundary 4: External SaaS APIs</div>
+          <div class="card-body">
+            <strong>Zone:</strong> Firebase Auth, Google Gemini API, Resend, WhatsApp.<br>
+            <strong>Trust Level:</strong> Third-party Delegated Trust.<br>
+            <strong>Threats:</strong> API quota limits, third-party outages, credential compromise.<br>
+            <strong>Mitigations:</strong> Local DB fallback on auth failure, rate limiting, secure storage of API keys in compliance_notification_settings table.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Component Metadata for Inspector
+    const COMPONENTS = {
+      1: {
+        name: "1. Employee Mobile App (Flutter Client)",
+        type: "Edge Presentation & Logic",
+        boundary: "Trust Boundary 1: Client Edge Sandbox",
+        source: "lib/features/attendance/presentation/attendance_cubit.dart#L20-L55",
+        description: "Enforces strict 4-step daily workflow (Office In → Site In → Site Out → Office Out). Coordinates camera capture, GPS acquisition, and UI state dispatching.",
+        contract: "Input: User interaction / Touch event\nOutput: WorkflowStep transition, AttendanceRecord creation",
+        security: "Prevent step skipping; verifies local session credentials."
+      },
+      2: {
+        name: "2. Live Camera & Compression Pipeline",
+        type: "Hardware Capture & Media Processing",
+        boundary: "Trust Boundary 1: Client Edge Sandbox",
+        source: "lib/core/services/camera_service.dart#L18-L57",
+        description: "Captures live selfie frames directly from front camera sensor. Rejects photo gallery and file pickers. Downscales image to max 480px and compresses to 65% JPEG quality (~25KB; 99% size reduction).",
+        contract: "Input: Raw Camera XFile\nOutput: CameraCaptureResult (base64Image, compressedSizeBytes)",
+        security: "Gallery uploads disabled; enforces real-time face presence."
+      },
+      3: {
+        name: "3. Workflow Engine & Haversine Geofence",
+        type: "Geospatial Verification",
+        boundary: "Trust Boundary 1: Client Edge Sandbox",
+        source: "lib/core/utils/geofence_calculator.dart#L3-L37",
+        description: "Computes spherical distance in meters between worker GPS position and target office/site coordinates. Blocks check-in if distance exceeds allowed radius (default 200m).",
+        contract: "Input: (userLat, userLng, targetLat, targetLng, radiusMeters)\nOutput: Boolean isWithinGeofence + Distance",
+        security: "Rejects attendance if GPS accuracy is too low or coordinates fall outside perimeter."
+      },
+      4: {
+        name: "4. Offline Storage Engine (Local Hive DB)",
+        type: "Local Key-Value Persistence",
+        boundary: "Trust Boundary 1: Client Edge Sandbox",
+        source: "lib/database/local_database_service.dart#L16-L65",
+        description: "High-performance offline storage engine. Caches current organization, employee profiles, office stations, and pending attendance entries in local Hive boxes (app_settings, attendanceRecords).",
+        contract: "Input: AttendanceRecord entity\nOutput: Persistent disk record with SyncStatus.pending",
+        security: "Sandboxed within mobile OS private storage."
+      },
+      5: {
+        name: "5. Background Sync Engine",
+        type: "Resilience & Network Synchronization",
+        boundary: "Boundary 1 & Boundary 2 Bridge",
+        source: "lib/features/sync/data/sync_engine.dart#L24-L140",
+        description: "Monitors network connectivity. Once online, executes deferred reverse geocoding, uploads compressed photos to cloud storage, inserts attendance entries, and marks local records as synced.",
+        contract: "Input: Connectivity change or 2-min recurring timer\nOutput: SyncEngineResult (syncedCount, failedCount)",
+        security: "Preserves original tamper-free event_timestamp created at check-in time."
+      },
+      6: {
+        name: "6. Web Admin Portal & Leaflet Tracking",
+        type: "Administrative Web Client",
+        boundary: "Trust Boundary 1: Client Edge Sandbox",
+        source: "web_admin/app.js & lib/features/admin/presentation/",
+        description: "Dedicated lightweight Web Admin Portal built with HTML5, CSS3, JS and Supabase SDK. Features real-time Leaflet GPS map tracking, statutory cards manager, and timesheet compliance auditing.",
+        contract: "Input: Admin user credentials / Supabase Realtime event\nOutput: Operations dashboard, live employee locations, PDF/Excel reports",
+        security: "Role-Based Access Control (SUPER_ADMIN, ADMIN)."
+      },
+      7: {
+        name: "7. Cloud Data Gateway (SupabaseService)",
+        type: "Cloud API Client & Transport",
+        boundary: "Boundary 2 -> Boundary 3 Gateway",
+        source: "lib/core/services/supabase_service.dart#L15-L60",
+        description: "Singleton service managing Supabase Client connection, auth token injection, attendance batch insertions, photo binary uploads, and device binding registration.",
+        contract: "Input: AttendanceRecord / Photo Base64 / DeviceInfo\nOutput: Cloud insertion confirmation & CDN public URL",
+        security: "Enforces TLS 1.3 transport encryption; Bearer anon/auth JWT."
+      },
+      8: {
+        name: "8. PostgreSQL 15 Relational DB & RLS",
+        type: "Central Persistence Tier",
+        boundary: "Trust Boundary 3: Cloud Platform",
+        source: "backend/supabase_schema.sql#L1-L120",
+        description: "15 relational tables housing organizations, users, offices, work_sites, attendance_records, employee_cards, and compliance_notification_settings. Enforces strict multi-tenant Row-Level Security.",
+        contract: "Input: SQL queries, inserts, and stored procedure calls\nOutput: Relational records, ACID transaction locks",
+        security: "Row-Level Security (RLS) restricts access based on organization_id."
+      },
+      9: {
+        name: "9. Supabase Storage (attendance_photos)",
+        type: "Cloud Object Storage",
+        boundary: "Trust Boundary 3: Cloud Platform",
+        source: "lib/core/services/supabase_service.dart#L190-L215",
+        description: "Secure storage bucket holding compressed attendance selfie verification photos. Serves public CDN URLs embedded into attendance logs.",
+        contract: "Input: Compressed JPEG binary stream\nOutput: Public URL path (https://.../attendance_photos/..)",
+        security: "File write restricted to authenticated service; public read-only for verified audit."
+      },
+      10: {
+        name: "10. Automated Compliance Robot",
+        type: "Database Scheduled Worker",
+        boundary: "Trust Boundary 3: Cloud Platform",
+        source: "backend/supabase_cron_job.sql#L1-L45",
+        description: "Supabase pg_cron extension schedules process_daily_card_compliance_alerts() daily at 08:00 AM GST. Uses pg_net to dispatch HTTP webhooks for urgent card expirations (≤3 days).",
+        contract: "Input: pg_cron schedule ('0 4 * * *' = 08:00 GST)\nOutput: HTTP POST requests via pg_net to Resend & CallMeBot",
+        security: "Internal database service execution; API tokens stored in protected settings table."
+      },
+      11: {
+        name: "11. Google Gemini Multimodal Vision OCR",
+        type: "External AI Service",
+        boundary: "Trust Boundary 4: External SaaS",
+        source: "lib/core/services/card_ocr_service.dart#L10-L45",
+        description: "Google Gemini 1.5 Flash multimodal vision API. Scans statutory document photos/PDFs and extracts card numbers, employee names, issue dates, and expiry dates with structured JSON formatting.",
+        contract: "Input: Base64 Document Image + OCR Prompt\nOutput: OcrCardResult (cardType, cardNumber, expiryDate, confidence)",
+        security: "API key authentication; zero local document retention on third party."
+      },
+      12: {
+        name: "12. Resend & WhatsApp Notification Gateways",
+        type: "External Communication Gateways",
+        boundary: "Trust Boundary 4: External SaaS",
+        source: "lib/core/services/card_expiry_notification_service.dart",
+        description: "Multi-channel notification dispatchers. Broadcasts urgent card expiration notices to operations executives via Resend Email API and CallMeBot WhatsApp API.",
+        contract: "Input: Email HTML template / WhatsApp URL-encoded text\nOutput: Instant multi-channel alert delivery",
+        security: "Encrypted API calls; target recipients restricted to authorized operations directors."
+      }
+    };
+
+    // UI State & Actions
+    let currentTab = 'cards';
+    let isPathHighlighted = true;
+    let zoomLevel = 1.0;
+
+    function selectComponent(id) {
+      document.querySelectorAll('.node-group').forEach(el => el.classList.remove('selected'));
+      const nodeEl = document.getElementById('node-' + id);
+      if (nodeEl) nodeEl.classList.add('selected');
+
+      const data = COMPONENTS[id];
+      if (!data) return;
+
+      switchTab('inspection');
+
+      const container = document.getElementById('inspectorDetails');
+      container.innerHTML = `
+        <div style="margin-bottom: 16px;">
+          <span class="card-badge badge-blue">${data.type}</span>
+          <h2 style="font-size: 15px; font-weight: 700; margin-top: 6px; color: var(--text-main);">${data.name}</h2>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">${data.boundary}</div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Source Evidence</div>
+          <div style="font-family: monospace; font-size: 11px; color: var(--primary); word-break: break-all;">
+            ${data.source}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Runtime Responsibility</div>
+          <div class="card-body">${data.description}</div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Interface Contract</div>
+          <pre style="font-family: monospace; font-size: 11px; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 4px; overflow-x: auto; color: var(--text-main);">${data.contract}</pre>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Security & Trust Guarantees</div>
+          <div class="card-body">${data.security}</div>
+        </div>
+      `;
+    }
+
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll('.panel-tab').forEach(el => el.classList.remove('active'));
+      document.getElementById('contentCards').style.display = 'none';
+      document.getElementById('contentInspection').style.display = 'none';
+      document.getElementById('contentBoundaries').style.display = 'none';
+
+      if (tab === 'cards') {
+        document.getElementById('tabCards').classList.add('active');
+        document.getElementById('contentCards').style.display = 'block';
+        document.getElementById('panelHeaderTitle').innerText = 'Architecture Cards';
+      } else if (tab === 'inspection') {
+        document.getElementById('tabInspection').classList.add('active');
+        document.getElementById('contentInspection').style.display = 'block';
+        document.getElementById('panelHeaderTitle').innerText = 'Node Inspector';
+      } else if (tab === 'boundaries') {
+        document.getElementById('tabBoundaries').classList.add('active');
+        document.getElementById('contentBoundaries').style.display = 'block';
+        document.getElementById('panelHeaderTitle').innerText = 'Trust Boundaries';
+      }
+    }
+
+    function togglePrimaryPath() {
+      isPathHighlighted = !isPathHighlighted;
+      const group = document.getElementById('primary-path-group');
+      const btn = document.getElementById('btnTogglePath');
+
+      if (isPathHighlighted) {
+        group.style.opacity = '1';
+        btn.classList.add('active');
+      } else {
+        group.style.opacity = '0.15';
+        btn.classList.remove('active');
+      }
+    }
+
+    function toggleTheme() {
+      const current = document.body.getAttribute('data-theme');
+      document.body.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+    }
+
+    function zoomIn() {
+      zoomLevel = Math.min(zoomLevel + 0.15, 2.0);
+      applyZoom();
+    }
+
+    function zoomOut() {
+      zoomLevel = Math.max(zoomLevel - 0.15, 0.6);
+      applyZoom();
+    }
+
+    function resetZoom() {
+      zoomLevel = 1.0;
+      applyZoom();
+    }
+
+    function applyZoom() {
+      document.getElementById('canvas').style.transform = `scale(${zoomLevel})`;
+      document.getElementById('canvas').style.transformOrigin = 'center center';
+    }
+  </script>
+</body>
+</html>
