@@ -466,7 +466,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           e.department.toLowerCase().contains(q);
     }).toList();
 
-    // Segregate filtered employees into With Records vs No Records
+    // Segregate filtered employees into With Records vs No Records scoped to salary cycle
+    final activeCycle = _selectedSalaryCycle ?? SalaryCycle.current();
     final employeesWithRecords = <MapEntry<EmployeeEntity, int>>[];
     final employeesWithoutRecords = <EmployeeEntity>[];
 
@@ -474,7 +475,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       final empRecords = allRecords
           .where((r) => _recordMatchesEmployee(r, emp))
           .toList();
-      final datesCount = empRecords
+      final cycleRecords = empRecords
+          .where((r) => activeCycle.contains(r.eventTimestamp))
+          .toList();
+      final datesCount = cycleRecords
           .map((r) =>
               DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()))
           .toSet()
@@ -814,7 +818,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      '$datesCount Attendance Date(s) Logged',
+                                      '$datesCount / ${activeCycle.totalDays} Days in Cycle Logged',
                                       style: const TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600,
@@ -1670,6 +1674,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       empRecords,
       targetEmployeeId: emp.id,
       targetEmployeeName: emp.name,
+      startDate: _selectedSalaryCycle?.startDate,
+      endDate: _selectedSalaryCycle?.endDate,
     );
 
     final Map<String, DailyTimesheetEntry> timesheetsByDate = {};
@@ -2020,7 +2026,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
                               color: AppColors.success)),
-                      Text('${sortedDateKeys.length} Days Worked',
+                      Text('${empLeaveSummary.daysWorked} Days Worked',
                           style: TextStyle(
                               fontSize: 10,
                               color: isDark
@@ -6076,12 +6082,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   Future<void> _exportPdfForEmployee(
       EmployeeEntity emp, List<AttendanceRecord> records) async {
     try {
+      final cycleToUse = _selectedSalaryCycle ?? SalaryCycle.current();
+      final recordsToExport = cycleToUse.filterRecords(records);
+
       await PdfExportService.downloadEmployeeAttendancePdfFile(
         organizationName: _db.organization?.name ?? 'Fusion Enterprise',
         employee: emp,
-        records: records,
-        salaryCyclePeriod: _selectedSalaryCycle?.shortPeriodLabel,
-        salaryCycle: _selectedSalaryCycle,
+        records: recordsToExport,
+        salaryCyclePeriod: cycleToUse.shortPeriodLabel,
+        salaryCycle: cycleToUse,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -6107,16 +6116,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   Future<void> _exportCumulativePdf(
       List<EmployeeEntity> employees, List<AttendanceRecord> records) async {
     try {
-      final recordsToExport = _cumulativeSalaryCycle != null
-          ? _cumulativeSalaryCycle!.filterRecords(records)
-          : records;
+      final cycleToUse = _cumulativeSalaryCycle ?? SalaryCycle.current();
+      final recordsToExport = cycleToUse.filterRecords(records);
 
       await PdfExportService.downloadCumulativePdfFile(
         organizationName: _db.organization?.name ?? 'Fusion Enterprise',
         employees: employees,
         records: recordsToExport,
-        salaryCyclePeriod: _cumulativeSalaryCycle?.shortPeriodLabel,
-        salaryCycle: _cumulativeSalaryCycle,
+        salaryCyclePeriod: cycleToUse.shortPeriodLabel,
+        salaryCycle: cycleToUse,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -6148,9 +6156,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     double grandReg = 0.0;
     double grandOt = 0.0;
 
-    final recordsToUse = _cumulativeSalaryCycle != null
-        ? _cumulativeSalaryCycle!.filterRecords(allRecords)
-        : allRecords;
+    final cycleToUse = _cumulativeSalaryCycle ?? SalaryCycle.current();
+    final recordsToUse = cycleToUse.filterRecords(allRecords);
 
     for (final emp in employees) {
       final empRecords = recordsToUse
@@ -6158,7 +6165,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           .toList();
 
       final timesheets =
-          TimesheetCalculator.calculateDailyTimesheets(empRecords);
+          TimesheetCalculator.calculateDailyTimesheets(
+            empRecords,
+            targetEmployeeId: emp.id,
+            targetEmployeeName: emp.name,
+            startDate: cycleToUse.startDate,
+            endDate: cycleToUse.endDate,
+          );
 
       double regHours = 0.0;
       double otHours = 0.0;
@@ -6175,9 +6188,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
       final empLeave = LeaveCalculator.calculateEmployeeLeave(
         emp,
-        recordsToUse,
-        _cumulativeSalaryCycle ?? SalaryCycle.current(),
+        empRecords,
+        cycleToUse,
       );
+
+      final int daysWorked = empLeave.daysWorked;
 
       summaries.add(
         _EmpCumulativeData(
@@ -6186,7 +6201,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           overtimeHours: otHours,
           emergencyDutyHours: emgHours,
           combinedHours: regHours + otHours,
-          daysWorked: timesheets.length,
+          daysWorked: daysWorked,
           leaveDays: empLeave.leaveDays,
           sundayOffs: empLeave.sundayWeeklyOffs,
           sundayDuties: empLeave.sundayDutyDays,
