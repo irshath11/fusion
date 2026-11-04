@@ -1484,13 +1484,23 @@ class LocalDatabaseService {
     return migratedCount;
   }
 
+  DateTime? _lastAutoResolveTime;
+
   /// Scans all attendance records for unclosed sessions (officeCheckIn with no subsequent officeCheckOut).
   /// If elapsed time crosses 24 hours from the check-in time:
   /// - Automatically creates and captures an officeCheckOut record after exactly 8 hours from check-in.
   /// - Completes only the 8.0 regular hours shift and checks out.
   /// - Saves locally in Hive and flags for cloud synchronization.
-  int autoResolveExpiredCheckIns() {
+  /// Throttled to execute at most once per 60 seconds to eliminate main-thread UI jank and lag.
+  int autoResolveExpiredCheckIns({bool force = false}) {
     final now = DateTime.now();
+    if (!force &&
+        _lastAutoResolveTime != null &&
+        now.difference(_lastAutoResolveTime!).inSeconds < 60) {
+      return 0;
+    }
+    _lastAutoResolveTime = now;
+
     int resolvedCount = 0;
 
     // Group records by canonical employeeId
@@ -1574,6 +1584,37 @@ class LocalDatabaseService {
     }
 
     return resolvedCount;
+  }
+
+  /// Prunes records belonging to other employees from local memory and Hive storage on employee devices.
+  /// Preserves all records matching the employee identity plus any pending offline sync records.
+  void pruneAttendanceRecordsForEmployee(String employeeId, {String? employeeName}) {
+    if (employeeId.trim().isEmpty) return;
+    final cleanId = employeeId.trim().toLowerCase();
+    final cleanName = employeeName?.trim().toLowerCase() ?? '';
+
+    final initialCount = _attendanceRecords.length;
+    _attendanceRecords.retainWhere((r) {
+      // Always retain pending unsynced records regardless
+      if (r.syncStatus == SyncStatus.pending) return true;
+
+      final rId = r.employeeId.trim().toLowerCase();
+      final rName = r.employeeName.trim().toLowerCase();
+
+      if (rId == cleanId || (cleanName.isNotEmpty && rName == cleanName)) return true;
+
+      return EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: r.employeeId,
+        recordEmployeeName: r.employeeName,
+        employeeId: employeeId,
+        employeeName: employeeName,
+      );
+    });
+
+    if (_attendanceRecords.length != initialCount) {
+      debugPrint('[LocalDatabaseService] Pruned ${initialCount - _attendanceRecords.length} non-employee records from device cache.');
+      _persistAttendanceRecords();
+    }
   }
 
   /// Fetches attendance records for the active shift or current workday session for an employee.

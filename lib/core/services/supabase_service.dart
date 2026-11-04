@@ -737,28 +737,40 @@ class SupabaseService {
   Future<void> syncCloudDataToLocal([String? orgId]) async {
     if (!_isInitialized || client == null) return;
     try {
-      final targetOrgId = orgId ?? LocalDatabaseService().organization?.id;
+      final db = LocalDatabaseService();
+      final targetOrgId = orgId ?? db.organization?.id;
       final remoteUsers = await fetchOrganizationUsers(targetOrgId ?? '00000000-0000-0000-0000-000000000001');
       if (remoteUsers.isNotEmpty) {
-        LocalDatabaseService().setUsers(remoteUsers);
+        db.setUsers(remoteUsers);
       }
       final remoteEmployees = await fetchEmployeesFromSupabase(targetOrgId);
       if (remoteEmployees.isNotEmpty) {
-        LocalDatabaseService().setEmployees(remoteEmployees);
+        db.setEmployees(remoteEmployees);
       }
       final remoteOffices = await fetchOfficesFromSupabase();
       if (remoteOffices.isNotEmpty) {
-        LocalDatabaseService().setOffices(remoteOffices);
+        db.setOffices(remoteOffices);
       }
       final remoteSites = await fetchWorkSitesFromSupabase();
       if (remoteSites.isNotEmpty) {
-        LocalDatabaseService().setWorkSites(remoteSites);
+        db.setWorkSites(remoteSites);
       }
-      final cloudRecords = await fetchAttendanceRecordsFromSupabase();
+
+      final currentUser = db.currentUser;
+      final bool isEmployee = currentUser != null && currentUser.role == UserRole.employee;
+
+      final cloudRecords = await fetchAttendanceRecordsFromSupabase(
+        employeeId: isEmployee ? (currentUser.id.isNotEmpty ? currentUser.id : currentUser.firebaseUid) : null,
+        employeeName: isEmployee ? currentUser.fullName : null,
+        since: isEmployee ? DateTime.now().subtract(const Duration(days: 90)) : null,
+      );
       if (cloudRecords.isNotEmpty) {
-        LocalDatabaseService().saveAttendanceRecordsBatch(cloudRecords);
+        db.saveAttendanceRecordsBatch(cloudRecords);
       }
-      LocalDatabaseService().refreshCurrentUser();
+      if (isEmployee && currentUser.id.isNotEmpty) {
+        db.pruneAttendanceRecordsForEmployee(currentUser.id, employeeName: currentUser.fullName);
+      }
+      db.refreshCurrentUser();
     } catch (e) {
       debugPrint('Error syncing cloud data to local cache: $e');
     }
@@ -1805,21 +1817,39 @@ class SupabaseService {
     return allSuccess;
   }
 
-  /// Fetch all attendance records from Supabase cloud database with automatic pagination
+  /// Fetch attendance records from Supabase cloud database with optional filtering and automatic pagination
   Future<List<AttendanceRecord>> fetchAttendanceRecordsFromSupabase({
+    String? employeeId,
+    String? employeeName,
+    DateTime? since,
     int maxRecords = 20000,
   }) async {
     if (!_isInitialized || client == null) return [];
     try {
       final List<AttendanceRecord> records = [];
-      const int pageSize = 1000;
+      final int pageSize = employeeId != null ? 500 : 1000;
       int from = 0;
       bool hasMore = true;
 
       while (hasMore && records.length < maxRecords) {
-        final List<dynamic> response = await client!
-            .from('attendance_records')
-            .select()
+        var query = client!.from('attendance_records').select();
+
+        final hasId = employeeId != null && employeeId.trim().isNotEmpty;
+        final hasName = employeeName != null && employeeName.trim().isNotEmpty;
+
+        if (hasId && hasName) {
+          query = query.or('employee_id.eq.${employeeId.trim()},employee_name.ilike.%${employeeName.trim()}%');
+        } else if (hasId) {
+          query = query.eq('employee_id', employeeId.trim());
+        } else if (hasName) {
+          query = query.ilike('employee_name', '%${employeeName.trim()}%');
+        }
+
+        if (since != null) {
+          query = query.gte('event_timestamp', since.toUtc().toIso8601String());
+        }
+
+        final List<dynamic> response = await query
             .order('event_timestamp', ascending: false)
             .range(from, from + pageSize - 1);
 

@@ -65,12 +65,22 @@ class TimesheetCubit extends Cubit<TimesheetState> {
       // Render local records immediately (Instant load)
       _calculateAndEmitTimesheet(empId, currentUser);
 
-      // Async cloud sync in background (non-blocking)
+      // Async cloud sync in background (non-blocking, strictly scoped to this employee)
       try {
-        final cloudRecords = await SupabaseService().fetchAttendanceRecordsFromSupabase();
+        final String? empName = (currentUser != null &&
+                currentUser.fullName.trim().isNotEmpty)
+            ? currentUser.fullName
+            : (currentUser != null && currentUser.name.trim().isNotEmpty
+                ? currentUser.name
+                : null);
+
+        final cloudRecords = await SupabaseService().fetchAttendanceRecordsFromSupabase(
+          employeeId: empId,
+          employeeName: empName,
+          since: DateTime.now().subtract(const Duration(days: 90)),
+        );
         if (cloudRecords.isNotEmpty) {
           _db.saveAttendanceRecordsBatch(cloudRecords);
-          await _db.sanitizeDuplicateEmployees();
           // Refresh timesheet UI if new cloud records were fetched
           _calculateAndEmitTimesheet(empId, currentUser);
         }

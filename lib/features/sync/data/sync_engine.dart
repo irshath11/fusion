@@ -204,7 +204,7 @@ class SyncEngine {
                   !exactAddress.contains('Timeout') &&
                   !exactAddress.contains('Error')) {
                 recordToSync = record.copyWith(address: exactAddress);
-                _db.updateAttendanceRecord(recordToSync);
+                _db.saveAttendanceRecord(recordToSync, persist: false);
               }
             } catch (_) {}
           }
@@ -228,7 +228,7 @@ class SyncEngine {
             if (publicPhotoUrl != null && publicPhotoUrl.isNotEmpty) {
               recordToSync =
                   recordToSync.copyWith(photoBase64: publicPhotoUrl);
-              _db.updateAttendanceRecord(recordToSync);
+              _db.saveAttendanceRecord(recordToSync, persist: false);
             }
             syncedIds.add(recordToSync.id);
             syncedCount++;

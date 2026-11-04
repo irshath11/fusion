@@ -12,6 +12,7 @@ import '../domain/attendance_record.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../admin/domain/office_entity.dart';
 import '../../../core/utils/employee_directory_helper.dart';
+import '../../sync/data/sync_engine.dart';
 
 abstract class AttendanceState extends Equatable {
   @override

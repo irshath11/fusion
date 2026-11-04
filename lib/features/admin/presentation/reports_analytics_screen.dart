@@ -426,11 +426,12 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
     for (final emp in filteredEmployees) {
       final empRecords = allRecords
-          .where((r) => _recordMatchesEmployee(r, emp))
-          .toList();
+          .where((r) => _recordMatchesEmployee(r, emp));
       final datesCount = empRecords
-          .map((r) =>
-              DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()))
+          .map((r) {
+            final t = r.eventTimestamp;
+            return '${t.year}-${t.month}-${t.day}';
+          })
           .toSet()
           .length;
 

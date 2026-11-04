@@ -68,7 +68,7 @@ class LocationService {
       double lat, double lng) async {
     try {
       final placemarks = await placemarkFromCoordinates(lat, lng)
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(milliseconds: 1500));
       if (placemarks.isNotEmpty) {
         final place = placemarks.first;
         final List<String> addressParts = [];
@@ -124,7 +124,7 @@ class LocationService {
     try {
       // 1. Check if location services (GPS) are enabled on device
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled()
-          .timeout(const Duration(seconds: 3), onTimeout: () => false);
+          .timeout(const Duration(seconds: 2), onTimeout: () => false);
 
       if (!serviceEnabled) {
         return LocationDataResult(
@@ -139,7 +139,7 @@ class LocationService {
 
       // 2. Check and request location permission
       LocationPermission permission = await Geolocator.checkPermission()
-          .timeout(const Duration(seconds: 3),
+          .timeout(const Duration(seconds: 2),
               onTimeout: () => LocationPermission.denied);
 
       if (permission == LocationPermission.denied) {
@@ -170,25 +170,40 @@ class LocationService {
         );
       }
 
-      // 3. Hardware GPS acquisition with high accuracy & reliable fallbacks
+      // 3. Hardware GPS acquisition: check fresh cached position first, then medium-accuracy lock
       Position? position;
-      try {
-        position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-          timeLimit: const Duration(seconds: 8),
-        );
-      } catch (_) {
-        try {
-          position = await Geolocator.getLastKnownPosition();
-        } catch (_) {}
 
-        if (position == null) {
+      // 3a. If a valid location fix was acquired recently (<90s) with good accuracy (<50m), return immediately
+      try {
+        final lastKnown = await Geolocator.getLastKnownPosition();
+        if (lastKnown != null) {
+          final age = DateTime.now().difference(lastKnown.timestamp);
+          if (age.inSeconds <= 90 && lastKnown.accuracy <= 50.0) {
+            position = lastKnown;
+          }
+        }
+      } catch (_) {}
+
+      // 3b. Otherwise request active fix with balanced accuracy (fast multi-source lock)
+      if (position == null) {
+        try {
+          position = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.medium,
+            timeLimit: const Duration(seconds: 4),
+          );
+        } catch (_) {
           try {
-            position = await Geolocator.getCurrentPosition(
-              desiredAccuracy: LocationAccuracy.medium,
-              timeLimit: const Duration(seconds: 5),
-            );
+            position = await Geolocator.getLastKnownPosition();
           } catch (_) {}
+
+          if (position == null) {
+            try {
+              position = await Geolocator.getCurrentPosition(
+                desiredAccuracy: LocationAccuracy.low,
+                timeLimit: const Duration(seconds: 2),
+              );
+            } catch (_) {}
+          }
         }
       }
 
