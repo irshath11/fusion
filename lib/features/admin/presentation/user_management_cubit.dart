@@ -433,6 +433,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         bypassGeofence: bypassGeofence,
         email: email,
         employeeCode: employeeCode,
+        employeeName: employeeName,
         actorUserId: actorUserId,
       );
 

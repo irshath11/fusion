@@ -259,8 +259,8 @@ class LocalDatabaseService {
     }
 
     final effectiveBypass = override ??
-        (matchedEmp?.bypassGeofence == true
-            ? true
+        (matchedEmp != null
+            ? matchedEmp.bypassGeofence
             : (matchedUser?.bypassGeofence ?? u.bypassGeofence));
 
     return u.copyWith(
@@ -654,7 +654,19 @@ class LocalDatabaseService {
 
   void setEmployees(List<EmployeeEntity> employees) {
     _employees.clear();
-    _employees.addAll(employees);
+    for (final e in employees) {
+      final override = getGeofenceOverride(
+        userId: e.id,
+        email: e.email,
+        employeeCode: e.employeeCode,
+        name: e.name,
+      );
+      if (override != null) {
+        _employees.add(e.copyWith(bypassGeofence: override));
+      } else {
+        _employees.add(e);
+      }
+    }
     _persistEmployees();
     refreshCurrentUser();
   }
@@ -760,7 +772,7 @@ class LocalDatabaseService {
       }
     }
 
-    // Also check if any matching employee in _employees has bypassGeofence
+    // Check if any matching employee in _employees has bypassGeofence
     for (final e in _employees) {
       if ((userId != null && userId.trim().isNotEmpty && e.id.toLowerCase() == userId.trim().toLowerCase()) ||
           (employeeCode != null && employeeCode.trim().isNotEmpty && e.employeeCode.toLowerCase() == employeeCode.trim().toLowerCase()) ||
@@ -773,7 +785,24 @@ class LocalDatabaseService {
             employeeName: name,
             employeeEmail: email,
           )) {
-        if (e.bypassGeofence) return true;
+        return e.bypassGeofence;
+      }
+    }
+
+    // Check if any matching user in _users has bypassGeofence
+    for (final u in _users) {
+      if ((userId != null && userId.trim().isNotEmpty && u.id.toLowerCase() == userId.trim().toLowerCase()) ||
+          (employeeCode != null && employeeCode.trim().isNotEmpty && (u.employeeCode ?? '').toLowerCase() == employeeCode.trim().toLowerCase()) ||
+          (email != null && email.trim().isNotEmpty && u.email.trim().toLowerCase() == email.trim().toLowerCase()) ||
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: u.id,
+            recordEmployeeName: u.fullName,
+            employeeId: userId,
+            employeeCode: employeeCode,
+            employeeName: name,
+            employeeEmail: email,
+          )) {
+        return u.bypassGeofence;
       }
     }
 
@@ -1757,7 +1786,28 @@ class LocalDatabaseService {
     return empRecords.where((r) {
       final localEv = r.eventTimestamp.toLocal();
       final rDate = DateTime(localEv.year, localEv.month, localEv.day);
-      return rDate.isAtSameMomentAs(today);
+      if (!rDate.isAtSameMomentAs(today)) return false;
+
+      // If this checkout concluded an overnight shift that started on a previous day,
+      // it belongs to that previous day's shift and does not block today's new shift
+      if (r.workflowStep == WorkflowStep.officeCheckOut ||
+          r.workflowStep == WorkflowStep.emergencyCheckOut) {
+        final priorIn = empRecords.lastWhere(
+          (p) =>
+              p.eventTimestamp.isBefore(r.eventTimestamp) &&
+              (p.workflowStep == WorkflowStep.officeCheckIn ||
+                  p.workflowStep == WorkflowStep.siteCheckIn ||
+                  p.workflowStep == WorkflowStep.emergencyCheckIn),
+          orElse: () => r,
+        );
+        final pDate = DateTime(priorIn.eventTimestamp.year,
+            priorIn.eventTimestamp.month, priorIn.eventTimestamp.day);
+        if (pDate.isBefore(today)) {
+          return false;
+        }
+      }
+
+      return true;
     }).toList();
   }
 

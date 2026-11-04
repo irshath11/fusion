@@ -672,16 +672,13 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen>
               e.email.trim().toLowerCase() == user.email.trim().toLowerCase()),
     );
     final isEmpBypassed = empMatches.isNotEmpty && empMatches.any((e) => e.bypassGeofence);
-
-    final isGeofenceBypassed = (user?.bypassGeofence ?? false) ||
-        isEmpBypassed ||
-        (_db.getGeofenceOverride(
-              userId: user?.id,
-              email: user?.email,
-              employeeCode: user?.employeeCode,
-              name: user?.fullName,
-            ) ??
-            false);
+    final override = _db.getGeofenceOverride(
+      userId: user?.id,
+      email: user?.email,
+      employeeCode: user?.employeeCode,
+      name: user?.fullName,
+    );
+    final isGeofenceBypassed = override ?? ((user?.bypassGeofence ?? false) || isEmpBypassed);
 
     final destinations = const [
       NavDestinationItem(

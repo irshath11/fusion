@@ -220,7 +220,7 @@ class AttendanceCubit extends Cubit<AttendanceState> {
               employeeCode: emp.employeeCode,
               name: emp.name,
             );
-        final bool isGeofenceBypassed = (override ?? false) || emp.bypassGeofence || user.bypassGeofence;
+        final bool isGeofenceBypassed = override ?? (emp.bypassGeofence || user.bypassGeofence);
         if (isGeofenceBypassed) {
           isGeofenceValid = true;
           debugPrint('Geofence check bypassed for ${emp.name} (bypassGeofence is enabled)');

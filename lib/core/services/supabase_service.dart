@@ -538,9 +538,7 @@ class SupabaseService {
             map['assigned_office_name'] = empRow['assigned_office_name'];
           }
           if (empRow['bypass_geofence'] != null) {
-            final userBypass = map['bypass_geofence'] == true;
-            final empBypass = empRow['bypass_geofence'] == true;
-            map['bypass_geofence'] = userBypass || empBypass;
+            map['bypass_geofence'] = empRow['bypass_geofence'] == true;
           }
         }
 
@@ -660,6 +658,10 @@ class SupabaseService {
           }
         }
 
+        final bool bypassGeofence = empRow?['bypass_geofence'] != null
+            ? (empRow!['bypass_geofence'] == true)
+            : (u['bypass_geofence'] == true || u['bypassGeofence'] == true);
+
         result.add(EmployeeEntity(
           id: userId.isNotEmpty
               ? userId
@@ -674,6 +676,7 @@ class SupabaseService {
           assignedOfficeId: assignedOfficeId,
           assignedOfficeName: assignedOfficeName,
           isActive: isActive,
+          bypassGeofence: bypassGeofence,
         ));
       }
 
@@ -709,6 +712,7 @@ class SupabaseService {
                 r.employeeCode.toLowerCase() == empCode.toLowerCase()));
 
         if (!alreadyAdded) {
+          final bool eBypass = (e['bypass_geofence'] ?? e['bypassGeofence'] ?? false) == true;
           result.add(EmployeeEntity(
             id: e['user_id']?.toString() ??
                 (empId.isNotEmpty ? empId : empCode),
@@ -722,6 +726,7 @@ class SupabaseService {
             assignedOfficeId: assignedOfficeId,
             assignedOfficeName: assignedOfficeName,
             isActive: e['is_active'] ?? true,
+            bypassGeofence: eBypass,
           ));
         }
       }
@@ -1150,6 +1155,7 @@ class SupabaseService {
     required bool bypassGeofence,
     String? email,
     String? employeeCode,
+    String? employeeName,
     String? actorUserId,
   }) async {
     if (!_isInitialized || client == null) return false;
@@ -1168,16 +1174,18 @@ class SupabaseService {
 
       // Update in users table
       try {
-        if (_isValidUuid(targetId)) {
+        final orClausesUsers = <String>[];
+        if (_isValidUuid(targetId)) orClausesUsers.add('id.eq.$targetId');
+        if (cleanId.isNotEmpty) orClausesUsers.add('firebase_uid.eq.$cleanId');
+        if (cleanId != targetId) orClausesUsers.add('id.eq.$cleanId');
+        if (email != null && email.trim().isNotEmpty) orClausesUsers.add('email.eq.${email.trim()}');
+        if (employeeCode != null && employeeCode.trim().isNotEmpty) orClausesUsers.add('employee_code.eq.${employeeCode.trim()}');
+
+        if (orClausesUsers.isNotEmpty) {
           await client!.from('users').update({
             'bypass_geofence': bypassGeofence,
             'updated_at': DateTime.now().toIso8601String(),
-          }).eq('id', targetId);
-        } else {
-          await client!.from('users').update({
-            'bypass_geofence': bypassGeofence,
-            'updated_at': DateTime.now().toIso8601String(),
-          }).eq('firebase_uid', cleanId);
+          }).or(orClausesUsers.join(','));
         }
       } catch (e) {
         debugPrint('Supabase bypass_geofence update users error: $e');
@@ -1195,6 +1203,9 @@ class SupabaseService {
         }
         if (email != null && email.trim().isNotEmpty) {
           orClauses.add('email.eq.${email.trim()}');
+        }
+        if (employeeName != null && employeeName.trim().isNotEmpty) {
+          orClauses.add('name.eq.${employeeName.trim()}');
         }
         await client!.from('employees').update({
           'bypass_geofence': bypassGeofence,
