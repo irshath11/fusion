@@ -11,6 +11,7 @@ import '../../../core/utils/role_permissions.dart';
 import '../../../core/utils/employee_directory_helper.dart';
 import '../../../core/utils/photo_attachment_helper.dart';
 import '../../../core/widgets/employee_avatar.dart';
+import '../../../core/widgets/app_animated_tab_switcher.dart';
 import '../../../database/local_database_service.dart';
 import '../../auth/domain/user_entity.dart';
 
@@ -26,6 +27,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
   final LocalDatabaseService _db = LocalDatabaseService();
   String _searchQuery = '';
   String _selectedRoleFilter = 'ALL';
+  int _selectedGeofenceTab = 0; // 0 = Enabled, 1 = Disabled
+  bool _showAllGeofence = false;
 
   @override
   Widget build(BuildContext context) {
@@ -69,8 +72,37 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
             users = state.previousUsers;
           }
 
+          // Calculate counts for Geofence Enabled vs Disabled
+          int enabledCount = 0;
+          int disabledCount = 0;
+          for (final u in users) {
+            final override = _db.getGeofenceOverride(
+              userId: u.id,
+              email: u.email,
+              employeeCode: u.employeeCode,
+              name: u.fullName,
+            );
+            final isBypassed = override ?? u.bypassGeofence;
+            if (isBypassed) {
+              disabledCount++;
+            } else {
+              enabledCount++;
+            }
+          }
+
           // Apply filters
           final filteredUsers = users.where((u) {
+            final override = _db.getGeofenceOverride(
+              userId: u.id,
+              email: u.email,
+              employeeCode: u.employeeCode,
+              name: u.fullName,
+            );
+            final isBypassed = override ?? u.bypassGeofence;
+            final matchesGeofenceTab = _showAllGeofence ||
+                (_selectedGeofenceTab == 0 ? !isBypassed : isBypassed);
+            if (!matchesGeofenceTab) return false;
+
             final q = _searchQuery.toLowerCase().trim();
             final isAzharAlias = (q == 'azhar' || q == 'azharudeen') &&
                 (u.fullName.toLowerCase().contains('azar') || u.employeeCode == '1021');
@@ -150,6 +182,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                       assignedOfficeId,
                       assignedOfficeName,
                       photoUrl,
+                      bypassGeofence,
                     }) {
                       context.read<UserManagementCubit>().createUser(
                             fullName: fullName,
@@ -164,6 +197,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                             assignedOfficeId: assignedOfficeId,
                             assignedOfficeName: assignedOfficeName,
                             photoUrl: photoUrl,
+                            bypassGeofence: bypassGeofence ?? false,
                           );
                     },
                   ),
@@ -176,6 +210,30 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
             ),
             body: Column(
               children: [
+                // Geofence Enabled vs Disabled Segregation Tabs
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16.0, 12.0, 16.0, 4.0),
+                  child: AppAnimatedTabSwitcher(
+                    selectedIndex: _showAllGeofence ? -1 : _selectedGeofenceTab,
+                    tabs: [
+                      TabItemData(
+                        label: 'Enabled ($enabledCount)',
+                        icon: Icons.fmd_good_rounded,
+                      ),
+                      TabItemData(
+                        label: 'Disabled ($disabledCount)',
+                        icon: Icons.public_rounded,
+                      ),
+                    ],
+                    onTabChanged: (index) {
+                      setState(() {
+                        _selectedGeofenceTab = index;
+                        _showAllGeofence = false;
+                      });
+                    },
+                  ),
+                ),
+
                 // Filter & Search Bar
                 Padding(
                   padding: const EdgeInsets.symmetric(
@@ -196,7 +254,36 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
+                      // "All" Toggle Chip
+                      FilterChip(
+                        avatar: Icon(
+                          _showAllGeofence
+                              ? Icons.groups_rounded
+                              : Icons.groups_outlined,
+                          size: 16,
+                          color: _showAllGeofence
+                              ? AppColors.primary
+                              : Colors.grey,
+                        ),
+                        label: Text(
+                          'All (${users.length})',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: _showAllGeofence
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                            color: _showAllGeofence
+                                ? AppColors.primary
+                                : null,
+                          ),
+                        ),
+                        selected: _showAllGeofence,
+                        onSelected: (val) {
+                          setState(() => _showAllGeofence = val);
+                        },
+                      ),
+                      const SizedBox(width: 8),
                       DropdownButton<String>(
                         value: _selectedRoleFilter,
                         items: const [
@@ -229,9 +316,29 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                 else if (filteredUsers.isEmpty)
                   Expanded(
                     child: Center(
-                      child: Text(
-                        'No user records found matching criteria.',
-                        style: TextStyle(color: AppColors.textSecondaryLight),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            _selectedGeofenceTab == 0
+                                ? Icons.fmd_good_outlined
+                                : Icons.public_off_outlined,
+                            size: 48,
+                            color: Colors.grey.withValues(alpha: 0.5),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            _showAllGeofence
+                                ? 'No employee records found matching criteria.'
+                                : _selectedGeofenceTab == 0
+                                    ? 'No Geofence-Enabled employees found.'
+                                    : 'No Geofence-Disabled employees found.',
+                            style: TextStyle(
+                              color: AppColors.textSecondaryLight,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   )
@@ -525,6 +632,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                                       assignedOfficeId,
                                                       assignedOfficeName,
                                                       photoUrl,
+                                                      bypassGeofence,
                                                     }) {
                                                       cubit.updateUser(
                                                         userId: user.id,
@@ -543,6 +651,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                                         assignedOfficeName:
                                                             assignedOfficeName,
                                                         photoUrl: photoUrl,
+                                                        bypassGeofence: bypassGeofence,
                                                       );
                                                     },
                                                   ),
@@ -557,6 +666,14 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                                         user.id, picked);
                                                   }
                                                 });
+                                              } else if (val == 'toggle_geofence') {
+                                                cubit.toggleGeofenceBypass(
+                                                  user.id,
+                                                  !user.bypassGeofence,
+                                                  email: user.email,
+                                                  employeeCode: user.employeeCode,
+                                                  employeeName: user.fullName,
+                                                );
                                               } else if (val ==
                                                   'toggle_status') {
                                                 cubit.setUserActiveStatus(
@@ -590,6 +707,34 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                                         size: 18),
                                                     SizedBox(width: 8),
                                                     Text('Attach Photo'),
+                                                  ],
+                                                ),
+                                              ),
+                                              PopupMenuItem(
+                                                value: 'toggle_geofence',
+                                                child: Row(
+                                                  children: [
+                                                    Icon(
+                                                      user.bypassGeofence
+                                                          ? Icons.fmd_good_outlined
+                                                          : Icons.public_rounded,
+                                                      size: 18,
+                                                      color: user.bypassGeofence
+                                                          ? AppColors.primary
+                                                          : Colors.purple,
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Text(
+                                                      user.bypassGeofence
+                                                          ? 'Enable Geofence (Office)'
+                                                          : 'Disable Geofence (Anywhere)',
+                                                      style: TextStyle(
+                                                        color: user.bypassGeofence
+                                                            ? AppColors.primary
+                                                            : Colors.purple,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
                                                   ],
                                                 ),
                                               ),
@@ -649,7 +794,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                 const Divider(height: 1, thickness: 0.8),
                                 const SizedBox(height: 12),
 
-                                // Bottom Details Chips: Email, Phone, Office, Status Pill
+                                // Bottom Details Chips: Email, Phone, Office, Status Pill, Geofence Pill
                                 Wrap(
                                   spacing: 8,
                                   runSpacing: 8,
@@ -668,8 +813,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                         icon: Icons.phone_android_outlined,
                                         label: user.phoneNumber!,
                                         textColor: isDark
-                                            ? palette.textSecondaryDark
-                                            : palette.textSecondaryLight,
+                                          ? palette.textSecondaryDark
+                                          : palette.textSecondaryLight,
                                       ),
                                     _buildInfoChip(
                                       icon: Icons.business_outlined,
@@ -692,6 +837,51 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                           ? AppColors.success
                                           : AppColors.error,
                                       isBold: true,
+                                    ),
+                                    _buildInfoChip(
+                                      icon: user.bypassGeofence
+                                          ? Icons.public_rounded
+                                          : Icons.fmd_good_rounded,
+                                      label: user.bypassGeofence
+                                          ? 'Geofence: Disabled (Anywhere)'
+                                          : 'Geofence: Enabled (Enforced)',
+                                      bgColor: user.bypassGeofence
+                                          ? Colors.purple.withValues(alpha: 0.12)
+                                          : AppColors.primary.withValues(alpha: 0.12),
+                                      textColor: user.bypassGeofence
+                                          ? (isDark
+                                              ? Colors.purple.shade200
+                                              : Colors.purple.shade700)
+                                          : AppColors.primary,
+                                      isBold: true,
+                                      tooltip: isSelf
+                                          ? 'Your geofence status'
+                                          : (user.bypassGeofence
+                                              ? 'Geofence is disabled (Anywhere check-in). Tap to enable (enforce office radius).'
+                                              : 'Geofence is enabled (Office check-in enforced). Tap to disable (allow anywhere check-in).'),
+                                      trailing: isSelf
+                                          ? null
+                                          : Icon(
+                                              Icons.swap_horiz_rounded,
+                                              size: 13,
+                                              color: user.bypassGeofence
+                                                  ? (isDark
+                                                      ? Colors.purple.shade200
+                                                      : Colors.purple.shade700)
+                                                  : AppColors.primary,
+                                            ),
+                                      onTap: isSelf
+                                          ? null
+                                          : () {
+                                              final cubit = context.read<UserManagementCubit>();
+                                              cubit.toggleGeofenceBypass(
+                                                user.id,
+                                                !user.bypassGeofence,
+                                                email: user.email,
+                                                employeeCode: user.employeeCode,
+                                                employeeName: user.fullName,
+                                              );
+                                            },
                                     ),
                                   ],
                                 ),
@@ -745,8 +935,11 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
     Color? bgColor,
     required Color textColor,
     bool isBold = false,
+    VoidCallback? onTap,
+    String? tooltip,
+    Widget? trailing,
   }) {
-    return Container(
+    final chip = Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: bgColor ?? Colors.grey.withValues(alpha: 0.08),
@@ -765,8 +958,29 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
               fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
             ),
           ),
+          if (trailing != null) ...[
+            const SizedBox(width: 4),
+            trailing,
+          ],
         ],
       ),
     );
+
+    if (onTap != null) {
+      final button = InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: chip,
+      );
+      if (tooltip != null) {
+        return Tooltip(message: tooltip, child: button);
+      }
+      return button;
+    }
+
+    if (tooltip != null) {
+      return Tooltip(message: tooltip, child: chip);
+    }
+    return chip;
   }
 }

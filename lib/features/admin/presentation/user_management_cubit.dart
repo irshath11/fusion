@@ -317,6 +317,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
     String? assignedOfficeId,
     String? assignedOfficeName,
     String? photoUrl,
+    bool bypassGeofence = false,
   }) async {
     emit(UserManagementLoading(previousUsers: _currentUsers));
     try {
@@ -396,6 +397,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         assignedOfficeName: assignedOfficeName,
         isActive: true,
         photoUrl: photoUrl,
+        bypassGeofence: bypassGeofence,
       );
       _db.saveEmployee(newLocalEmp);
 
@@ -415,6 +417,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         assignedOfficeId: assignedOfficeId,
         assignedOfficeName: assignedOfficeName,
         actorUserId: actorUserId,
+        bypassGeofence: bypassGeofence,
       );
 
       if (createdUser != null) {
@@ -435,6 +438,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
           assignedOfficeName: assignedOfficeName,
           isActive: true,
           photoUrl: photoUrl,
+          bypassGeofence: bypassGeofence,
         );
         _db.saveEmployee(officialLocalEmp);
         emit(UserManagementActionSuccess(
@@ -462,6 +466,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
     String? assignedOfficeId,
     String? assignedOfficeName,
     String? photoUrl,
+    bool? bypassGeofence,
   }) async {
     emit(UserManagementLoading(previousUsers: _currentUsers));
     try {
@@ -480,6 +485,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
           phoneNumber: phoneNumber?.trim() ?? existingUser.phoneNumber,
           role: role ?? existingUser.role,
           photoUrl: photoUrl ?? existingUser.photoUrl,
+          bypassGeofence: bypassGeofence ?? existingUser.bypassGeofence,
         );
         _db.saveUser(updatedUser);
       }
@@ -518,8 +524,19 @@ class UserManagementCubit extends Cubit<UserManagementState> {
             assignedOfficeName ?? existingEmp.assignedOfficeName,
         isActive: existingEmp.isActive,
         photoUrl: photoUrl ?? existingEmp.photoUrl,
+        bypassGeofence: bypassGeofence ?? existingEmp.bypassGeofence,
       );
       _db.saveEmployee(updatedEmp);
+
+      if (bypassGeofence != null) {
+        _db.toggleEmployeeGeofenceBypass(
+          userId,
+          bypassGeofence,
+          email: email,
+          employeeCode: employeeCode,
+          employeeName: fullName,
+        );
+      }
 
       await _supabase.updateUserInSupabase(
         userId: userId,
@@ -534,12 +551,60 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         useDefaultOffice: useDefaultOffice,
         assignedOfficeId: assignedOfficeId,
         actorUserId: actorUserId,
+        bypassGeofence: bypassGeofence,
       );
 
       emit(UserManagementActionSuccess('User profile updated successfully.'));
       await fetchUsers();
     } catch (e) {
       emit(UserManagementError('Failed to update user: ${e.toString()}'));
+    }
+  }
+
+  Future<void> toggleGeofenceBypass(
+    String userId,
+    bool bypassGeofence, {
+    String? email,
+    String? employeeCode,
+    String? employeeName,
+  }) async {
+    emit(UserManagementLoading());
+    try {
+      final orgId =
+          _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
+      final actorUserId = _db.currentUser?.id;
+
+      // 1. Immediately update local Hive databases so the UI switches instantly
+      _db.toggleEmployeeGeofenceBypass(
+        userId,
+        bypassGeofence,
+        email: email,
+        employeeCode: employeeCode,
+        employeeName: employeeName,
+      );
+
+      // 2. Persist to Supabase cloud
+      await _supabase.setEmployeeGeofenceBypass(
+        userId: userId,
+        orgId: orgId,
+        bypassGeofence: bypassGeofence,
+        email: email,
+        employeeCode: employeeCode,
+        employeeName: employeeName,
+        actorUserId: actorUserId,
+      );
+
+      final empName = employeeName != null && employeeName.trim().isNotEmpty
+          ? employeeName.trim()
+          : 'Employee';
+      final msg = bypassGeofence
+          ? 'Geofencing removed for $empName. Main office check-in allowed from ANY location.'
+          : 'Geofencing enabled for $empName. Check-in restricted to assigned office location.';
+      emit(UserManagementActionSuccess(msg));
+      await fetchUsers();
+    } catch (e) {
+      emit(UserManagementError(
+          'Failed to update geofence bypass setting: ${e.toString()}'));
     }
   }
 

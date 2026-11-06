@@ -750,7 +750,8 @@
         employeeCode: emp.employee_code || (official ? official.employeeId : `EMP-${u.id.substring(0, 4).toUpperCase()}`),
         designation: emp.designation || (official ? official.designation : 'Staff'),
         department: emp.department || (official ? official.department : 'Operations'),
-        assignedOfficeId: emp.assigned_office_id
+        assignedOfficeId: emp.assigned_office_id,
+        bypassGeofence: u.bypass_geofence === true || emp.bypass_geofence === true
       };
     });
 
@@ -777,7 +778,8 @@
           employeeCode: emp.employee_code || (official ? official.employeeId : `EMP-${emp.id.substring(0, 4).toUpperCase()}`),
           designation: emp.designation || (official ? official.designation : 'Staff'),
           department: emp.department || (official ? official.department : 'Operations'),
-          assignedOfficeId: emp.assigned_office_id
+          assignedOfficeId: emp.assigned_office_id,
+          bypassGeofence: emp.bypass_geofence === true
         });
       }
     });
@@ -802,7 +804,8 @@
           employeeCode: m.employeeId,
           designation: m.designation,
           department: m.department,
-          assignedOfficeId: null
+          assignedOfficeId: null,
+          bypassGeofence: false
         });
       }
     });
@@ -1018,26 +1021,73 @@
     renderOverviewCardsAlerts();
   }
 
+  let activeEmployeeGeofenceTab = 'enabled'; // 'enabled', 'disabled', or 'all'
+
+  window.setEmployeeGeofenceTab = function (tab) {
+    activeEmployeeGeofenceTab = tab;
+    const btnEnabled = document.getElementById('tab-emp-enabled');
+    const btnDisabled = document.getElementById('tab-emp-disabled');
+    const btnAll = document.getElementById('tab-emp-all');
+
+    if (btnEnabled) {
+      btnEnabled.className = tab === 'enabled' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+    }
+    if (btnDisabled) {
+      btnDisabled.className = tab === 'disabled' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+    }
+    if (btnAll) {
+      btnAll.className = tab === 'all' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+    }
+
+    renderEmployeeTable();
+  };
+
   function renderEmployeeTable() {
     if (!employeeTableBody) return;
     const query = (employeeSearchInput?.value || '').toLowerCase();
 
-    const filtered = employeesData.filter(e =>
+    // 1. Calculate Geofence counts
+    const enabledCount = employeesData.filter(e => e.bypassGeofence !== true).length;
+    const disabledCount = employeesData.filter(e => e.bypassGeofence === true).length;
+    const allCount = employeesData.length;
+
+    const countEnabledEl = document.getElementById('count-emp-enabled');
+    if (countEnabledEl) countEnabledEl.textContent = enabledCount;
+    const countDisabledEl = document.getElementById('count-emp-disabled');
+    if (countDisabledEl) countDisabledEl.textContent = disabledCount;
+    const countAllEl = document.getElementById('count-emp-all');
+    if (countAllEl) countAllEl.textContent = allCount;
+
+    // 2. Filter by Geofence Tab
+    const tabFiltered = employeesData.filter(e => {
+      if (activeEmployeeGeofenceTab === 'enabled') return e.bypassGeofence !== true;
+      if (activeEmployeeGeofenceTab === 'disabled') return e.bypassGeofence === true;
+      return true;
+    });
+
+    const filtered = tabFiltered.filter(e =>
       e.name.toLowerCase().includes(query) ||
       e.employeeCode.toLowerCase().includes(query) ||
       e.email.toLowerCase().includes(query)
     );
 
-    document.getElementById('employee-count-badge').textContent = `${filtered.length} Employees`;
+    const tabLabel = activeEmployeeGeofenceTab === 'enabled' ? 'Enabled' : activeEmployeeGeofenceTab === 'disabled' ? 'Disabled' : 'Total';
+    document.getElementById('employee-count-badge').textContent = `${filtered.length} ${tabLabel} Employees`;
 
     if (filtered.length === 0) {
-      employeeTableBody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">No matching employees found.</td></tr>`;
+      const emptyMsg = activeEmployeeGeofenceTab === 'enabled'
+        ? 'No Geofence-Enabled employees found.'
+        : activeEmployeeGeofenceTab === 'disabled'
+          ? 'No Geofence-Disabled employees found.'
+          : 'No matching employees found.';
+      employeeTableBody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 28px;">${emptyMsg}</td></tr>`;
       return;
     }
 
     employeeTableBody.innerHTML = filtered.map(e => {
       const assignedOffice = officesData.find(o => o.id === e.assignedOfficeId);
       const officeDisplay = assignedOffice ? assignedOffice.name : 'Main HQ Office';
+      const isBypass = e.bypassGeofence === true;
 
       return `
         <tr>
@@ -1055,6 +1105,14 @@
             <span class="badge badge-neutral">
               ${e.role}
             </span>
+          </td>
+          <td>
+            <button type="button" class="btn btn-sm"
+              style="cursor: pointer; border: 1px solid ${isBypass ? 'rgba(245, 158, 11, 0.4)' : 'rgba(59, 130, 246, 0.3)'}; background: ${isBypass ? 'rgba(245, 158, 11, 0.15)' : 'rgba(59, 130, 246, 0.1)'}; color: ${isBypass ? '#fbbf24' : '#60a5fa'}; padding: 4px 9px; border-radius: 6px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; transition: all 0.2s; white-space: nowrap;"
+              onclick="window.toggleEmployeeGeofence('${e.id}', ${isBypass})"
+              title="${isBypass ? 'Geofence is DISABLED. Click to ENFORCE office check-in.' : 'Geofence is ENFORCED. Click to ALLOW check-in anywhere.'}">
+              <span>${isBypass ? '🌐 Anywhere (Disabled)' : '📍 Office (Enforced)'}</span>
+            </button>
           </td>
           <td style="text-align: right;">
             <button class="btn btn-secondary btn-sm" onclick="window.editEmployee('${e.id}')">Edit</button>
@@ -1405,6 +1463,10 @@
     document.getElementById('emp-designation').value = emp.designation;
     document.getElementById('emp-department').value = emp.department;
     document.getElementById('emp-role').value = emp.role;
+    const bypassCheckbox = document.getElementById('emp-bypass-geofence');
+    if (bypassCheckbox) {
+      bypassCheckbox.checked = emp.bypassGeofence === true;
+    }
 
     document.getElementById('drawer-title').textContent = 'Edit Employee Details';
     openEmployeeDrawer();
@@ -1420,6 +1482,10 @@
     drawer.classList.remove('active');
     employeeForm.reset();
     document.getElementById('emp-id').value = '';
+    const bypassCheckbox = document.getElementById('emp-bypass-geofence');
+    if (bypassCheckbox) {
+      bypassCheckbox.checked = false;
+    }
   }
 
   async function saveEmployee() {
@@ -1431,6 +1497,8 @@
     const designation = document.getElementById('emp-designation').value.trim();
     const department = document.getElementById('emp-department').value.trim();
     const role = document.getElementById('emp-role').value;
+    const bypassCheckbox = document.getElementById('emp-bypass-geofence');
+    const bypassGeofence = bypassCheckbox ? bypassCheckbox.checked : false;
 
     if (!empCode || !name || !email) {
       alert('Please fill in all required fields.');
@@ -1444,22 +1512,147 @@
           full_name: name,
           phone_number: phone,
           role: role,
+          bypass_geofence: bypassGeofence,
           updated_at: new Date().toISOString()
         }).eq('id', empId);
 
         await supabaseClient.from('employees').update({
           designation: designation,
           department: department,
+          bypass_geofence: bypassGeofence,
           updated_at: new Date().toISOString()
         }).eq('user_id', empId);
+      } else {
+        // Create new employee
+        const newUserId = 'usr_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+        await supabaseClient.from('users').insert({
+          id: newUserId,
+          email: email,
+          full_name: name,
+          phone_number: phone,
+          role: role,
+          bypass_geofence: bypassGeofence,
+          is_active: true,
+          created_at: new Date().toISOString()
+        });
+
+        await supabaseClient.from('employees').insert({
+          user_id: newUserId,
+          employee_code: empCode,
+          full_name: name,
+          email: email,
+          phone_number: phone,
+          designation: designation,
+          department: department,
+          bypass_geofence: bypassGeofence,
+          is_active: true,
+          created_at: new Date().toISOString()
+        });
       }
 
       closeEmployeeDrawer();
       loadAllCloudData();
+      showToast(
+        bypassGeofence
+          ? `✓ Saved employee: Geofence disabled (anywhere check-in allowed).`
+          : `✓ Saved employee: Office geofence boundary enforced.`,
+        'success'
+      );
     } catch (e) {
       alert('Failed to save employee: ' + e.message);
     }
   }
+
+  // Quick 1-click toggle for Geofence Bypass (Enforce Office vs Allow Anywhere)
+  window.toggleEmployeeGeofence = async function (empId, currentBypass) {
+    const newBypass = !currentBypass;
+    const emp = employeesData.find(e => e.id === empId || e.userId === empId || e.employeeTableId === empId);
+    const empName = emp ? emp.name : 'Employee';
+
+    // Optimistically update memory and table UI
+    if (emp) {
+      emp.bypassGeofence = newBypass;
+    }
+    renderEmployeeTable();
+
+    try {
+      if (supabaseClient) {
+        const targetUserId = emp?.userId || (empId.startsWith('usr') ? empId : null);
+        const targetEmpId = emp?.employeeTableId || empId;
+
+        const promises = [];
+        if (targetUserId) {
+          promises.push(
+            supabaseClient.from('users').update({
+              bypass_geofence: newBypass,
+              updated_at: new Date().toISOString()
+            }).eq('id', targetUserId)
+          );
+        } else if (empId) {
+          promises.push(
+            supabaseClient.from('users').update({
+              bypass_geofence: newBypass,
+              updated_at: new Date().toISOString()
+            }).eq('id', empId)
+          );
+        }
+
+        promises.push(
+          supabaseClient.from('employees').update({
+            bypass_geofence: newBypass,
+            updated_at: new Date().toISOString()
+          }).or(`user_id.eq.${targetUserId || empId},id.eq.${targetEmpId || empId},employee_code.eq.${emp?.employeeCode || empId}`)
+        );
+
+        await Promise.allSettled(promises);
+      }
+
+      showToast(
+        newBypass
+          ? `🌐 Geofence Disabled for ${empName}: Allowed to check in from Anywhere.`
+          : `📍 Geofence Enabled for ${empName}: Office boundary is now Enforced.`,
+        newBypass ? 'warning' : 'success'
+      );
+    } catch (e) {
+      console.error('Failed to toggle geofence bypass:', e);
+      if (emp) {
+        emp.bypassGeofence = currentBypass;
+        renderEmployeeTable();
+      }
+      showToast(`Failed to update geofence: ${e.message}`, 'error');
+    }
+  };
+
+  // Modern Toast Notification Utility
+  function showToast(message, type = 'info') {
+    let container = document.getElementById('fusion-toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'fusion-toast-container';
+      container.style.cssText = 'position: fixed; bottom: 24px; right: 24px; z-index: 999999; display: flex; flex-direction: column; gap: 8px; pointer-events: none;';
+      document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    const bg = type === 'success' ? '#059669' : type === 'warning' ? '#d97706' : type === 'error' ? '#dc2626' : '#2563eb';
+    toast.style.cssText = `
+      min-width: 280px; max-width: 440px; padding: 12px 18px; border-radius: 8px; font-size: 13px; font-weight: 500;
+      color: #ffffff; background: ${bg}; box-shadow: 0 10px 25px rgba(0,0,0,0.35); pointer-events: auto;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px; transition: all 0.25s ease;
+      transform: translateY(12px); opacity: 0;
+    `;
+    toast.textContent = message;
+    container.appendChild(toast);
+    requestAnimationFrame(() => {
+      toast.style.transform = 'translateY(0)';
+      toast.style.opacity = '1';
+    });
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(12px)';
+      setTimeout(() => toast.remove(), 250);
+    }, 3800);
+  }
+  window.showToast = showToast;
 
   // Export CSV
   function exportReportsCSV() {

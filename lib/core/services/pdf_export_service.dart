@@ -22,12 +22,6 @@ class PdfExportService {
   }) async {
     final pdf = pw.Document();
 
-    double grandReg = 0.0;
-    double grandOt = 0.0;
-    int grandLeaves = 0;
-    int grandSundays = 0;
-    int grandDaysWorked = 0;
-
     final List<Map<String, dynamic>> empRows = [];
     final activeCycle = salaryCycle ?? SalaryCycle.current();
 
@@ -84,12 +78,6 @@ class PdfExportService {
 
       final int daysWorked = leaveSummary.daysWorked;
 
-      grandReg += regHours;
-      grandOt += otHours;
-      grandDaysWorked += daysWorked;
-      grandLeaves += leaveSummary.leaveDays;
-      grandSundays += leaveSummary.sundayWeeklyOffs;
-
       empRows.add({
         'code': empEntity.employeeCode,
         'name': empEntity.name,
@@ -127,8 +115,6 @@ class PdfExportService {
       zeroLeaves += (r['leaves'] as int);
       zeroSundays += (r['sundays'] as int);
     }
-
-    final grandCombined = grandReg + grandOt;
 
     pdf.addPage(
       pw.MultiPage(
@@ -365,22 +351,22 @@ class PdfExportService {
                         pw.Column(children: [
                           pw.Text('Sunday Offs', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
                           pw.SizedBox(height: 2),
-                          pw.Text('${zeroSundays}d', style: const pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.purple800)),
+                          pw.Text('${zeroSundays}d', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.purple800)),
                         ]),
                         pw.Column(children: [
                           pw.Text('Regular Hours', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
                           pw.SizedBox(height: 2),
-                          pw.Text('0.0h', style: const pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                          pw.Text('0.0h', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
                         ]),
                         pw.Column(children: [
                           pw.Text('Overtime OT', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
                           pw.SizedBox(height: 2),
-                          pw.Text('+0.0h', style: const pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                          pw.Text('+0.0h', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
                         ]),
                         pw.Column(children: [
                           pw.Text('Combined Total', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
                           pw.SizedBox(height: 2),
-                          pw.Text('0.0h', style: const pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                          pw.Text('0.0h', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
                         ]),
                       ],
                     ),

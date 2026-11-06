@@ -269,6 +269,19 @@
               </div>
             </div>
 
+            <!-- Geofence Enabled / Disabled Segregation Tabs -->
+            <div class="employee-segregation-tabs" style="display: flex; gap: 8px; margin: 16px 0 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; align-items: center;">
+              <button type="button" id="tab-emp-enabled" class="btn btn-sm btn-primary" onclick="window.setEmployeeGeofenceTab('enabled')" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; border-radius: 20px; padding: 6px 14px;">
+                <span>📍 Enabled (<span id="count-emp-enabled">0</span>)</span>
+              </button>
+              <button type="button" id="tab-emp-disabled" class="btn btn-sm btn-secondary" onclick="window.setEmployeeGeofenceTab('disabled')" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; border-radius: 20px; padding: 6px 14px;">
+                <span>🌐 Disabled (<span id="count-emp-disabled">0</span>)</span>
+              </button>
+              <button type="button" id="tab-emp-all" class="btn btn-sm btn-secondary" onclick="window.setEmployeeGeofenceTab('all')" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; border-radius: 20px; padding: 6px 14px; margin-left: auto;">
+                <span>👥 All (<span id="count-emp-all">0</span>)</span>
+              </button>
+            </div>
+
             <div class="data-table-container">
               <table class="data-table">
                 <thead>
@@ -280,6 +293,7 @@
                     <th>Department</th>
                     <th>Assigned Office</th>
                     <th>Status</th>
+                    <th>Geofence</th>
                     <th style="text-align: right;">Actions</th>
                   </tr>
                 </thead>
@@ -688,6 +702,16 @@
             <option value="EMPLOYEE">EMPLOYEE (Standard Staff)</option>
             <option value="ADMIN">ADMIN (Administrative Access)</option>
           </select>
+        </div>
+
+        <div class="form-group" style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 14px; margin-top: 6px;">
+          <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; margin-bottom: 0;">
+            <div>
+              <div style="font-weight: 600; font-size: 13px; color: var(--text-primary);">Disable Geofence (Allow Anywhere)</div>
+              <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 2px;">When enabled, this employee can check in from any location without office proximity restrictions.</div>
+            </div>
+            <input type="checkbox" id="emp-bypass-geofence" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary);">
+          </label>
         </div>
       </form>
     </div>
