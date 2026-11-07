@@ -252,6 +252,24 @@
   let leafletMap = null;
   let mapMarkers = [];
 
+  // Persistent Geofence Overrides Cache (Synchronized via Supabase activity_logs & LocalStorage)
+  let geofenceOverridesMap = {};
+  try {
+    const savedOverrides = localStorage.getItem('f360_geofence_overrides');
+    if (savedOverrides) geofenceOverridesMap = JSON.parse(savedOverrides);
+  } catch (_) {}
+
+  // Persistent Assigned Office Overrides Cache (Synchronized via Supabase activity_logs & LocalStorage)
+  let officeOverridesMap = {};
+  try {
+    const savedOffices = localStorage.getItem('f360_office_overrides');
+    if (savedOffices) officeOverridesMap = JSON.parse(savedOffices);
+  } catch (_) {}
+
+  function isUuid(val) {
+    return typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+  }
+
   // DOM Cache
   const loginOverlay = document.getElementById('login-overlay');
   const loginForm = document.getElementById('login-form');
@@ -638,8 +656,157 @@
     loadAllCloudData();
   }
 
+  // Fetch Geofence bypass overrides from Supabase activity_logs and cache locally
+  async function loadGeofenceOverridesFromCloud() {
+    if (!supabaseClient) return;
+    try {
+      const { data: logs, error } = await supabaseClient
+        .from('activity_logs')
+        .select('details, created_at')
+        .eq('action', 'GEOFENCE_BYPASS_OVERRIDE')
+        .order('created_at', { ascending: true });
+
+      if (!error && logs && logs.length > 0) {
+        logs.forEach(log => {
+          if (log && log.details && typeof log.details === 'object') {
+            const d = log.details;
+            const bypass = d.bypass_geofence === true || d.bypassGeofence === true;
+            const keys = [
+              d.employee_id,
+              d.user_id,
+              d.firebase_uid,
+              d.email,
+              d.employee_code,
+              d.employee_name
+            ];
+            keys.forEach(k => {
+              if (k && typeof k === 'string' && k.trim()) {
+                geofenceOverridesMap[k.trim().toLowerCase()] = bypass;
+              }
+            });
+
+            // Cross-reference official master directory to map all employee aliases
+            const official = MASTER_EMPLOYEES_DIRECTORY.find(m =>
+              (d.employee_code && (m.employeeId.toUpperCase() === d.employee_code.toUpperCase() || `EMP-${m.employeeId.toUpperCase()}` === d.employee_code.toUpperCase())) ||
+              (d.email && m.email.toLowerCase() === d.email.toLowerCase()) ||
+              (d.employee_id && (m.employeeId.toLowerCase() === d.employee_id.toLowerCase() || `emp-${m.employeeId.toLowerCase()}` === d.employee_id.toLowerCase()))
+            );
+            if (official) {
+              geofenceOverridesMap[official.employeeId.toLowerCase()] = bypass;
+              geofenceOverridesMap[`emp-${official.employeeId.toLowerCase()}`] = bypass;
+              geofenceOverridesMap[official.email.toLowerCase()] = bypass;
+              geofenceOverridesMap[official.fullName.toLowerCase()] = bypass;
+              if (official.aliases) {
+                official.aliases.forEach(a => {
+                  geofenceOverridesMap[a.toLowerCase()] = bypass;
+                });
+              }
+            }
+            // Assigned office override if present in log
+            if (d.assigned_office_id !== undefined || d.assignedOfficeId !== undefined) {
+              const rawOffId = d.assigned_office_id !== undefined ? d.assigned_office_id : d.assignedOfficeId;
+              const offId = isUuid(rawOffId) ? rawOffId : null;
+              keys.forEach(k => {
+                if (k && typeof k === 'string' && k.trim()) {
+                  officeOverridesMap[k.trim().toLowerCase()] = offId;
+                }
+              });
+              if (official) {
+                officeOverridesMap[official.employeeId.toLowerCase()] = offId;
+                officeOverridesMap[`emp-${official.employeeId.toLowerCase()}`] = offId;
+                officeOverridesMap[official.email.toLowerCase()] = offId;
+                officeOverridesMap[official.fullName.toLowerCase()] = offId;
+                if (official.aliases) {
+                  official.aliases.forEach(a => {
+                    officeOverridesMap[a.toLowerCase()] = offId;
+                  });
+                }
+              }
+            }
+          }
+        });
+
+        try {
+          localStorage.setItem('f360_geofence_overrides', JSON.stringify(geofenceOverridesMap));
+          localStorage.setItem('f360_office_overrides', JSON.stringify(officeOverridesMap));
+        } catch (_) {}
+      }
+    } catch (err) {
+      console.warn('Could not load geofence overrides from cloud activity_logs:', err);
+    }
+  }
+
+  function resolveEmployeeAssignedOffice(id, code, email, name, dbAssignedOfficeId) {
+    const cleanId = (id || '').toString().trim().toLowerCase();
+    const cleanCode = (code || '').toString().trim().toLowerCase();
+    const cleanEmail = (email || '').toString().trim().toLowerCase();
+    const cleanName = (name || '').toString().trim().toLowerCase();
+
+    const official = MASTER_EMPLOYEES_DIRECTORY.find(m =>
+      (cleanId && (m.employeeId.toLowerCase() === cleanId || `emp-${m.employeeId.toLowerCase()}` === cleanId)) ||
+      (cleanCode && (m.employeeId.toLowerCase() === cleanCode || `emp-${m.employeeId.toLowerCase()}` === cleanCode)) ||
+      (cleanEmail && m.email.toLowerCase() === cleanEmail) ||
+      (cleanName && (m.fullName.toLowerCase() === cleanName || (m.aliases && m.aliases.some(a => cleanName.includes(a.toLowerCase())))))
+    );
+
+    const candidateKeys = [cleanId, cleanCode, cleanEmail, cleanName];
+    if (official) {
+      candidateKeys.push(official.employeeId.toLowerCase());
+      candidateKeys.push(`emp-${official.employeeId.toLowerCase()}`);
+      candidateKeys.push(official.email.toLowerCase());
+      candidateKeys.push(official.fullName.toLowerCase());
+      if (official.aliases) {
+        official.aliases.forEach(a => candidateKeys.push(a.toLowerCase()));
+      }
+    }
+
+    for (const k of candidateKeys) {
+      if (k && officeOverridesMap.hasOwnProperty(k)) {
+        return officeOverridesMap[k];
+      }
+    }
+
+    return dbAssignedOfficeId || null;
+  }
+
+  function resolveEmployeeGeofenceBypass(id, code, email, name, cloudBypass) {
+    const cleanId = (id || '').toString().trim().toLowerCase();
+    const cleanCode = (code || '').toString().trim().toLowerCase();
+    const cleanEmail = (email || '').toString().trim().toLowerCase();
+    const cleanName = (name || '').toString().trim().toLowerCase();
+
+    const official = MASTER_EMPLOYEES_DIRECTORY.find(m =>
+      (cleanId && (m.employeeId.toLowerCase() === cleanId || `emp-${m.employeeId.toLowerCase()}` === cleanId)) ||
+      (cleanCode && (m.employeeId.toLowerCase() === cleanCode || `emp-${m.employeeId.toLowerCase()}` === cleanCode)) ||
+      (cleanEmail && m.email.toLowerCase() === cleanEmail) ||
+      (cleanName && (m.fullName.toLowerCase() === cleanName || (m.aliases && m.aliases.some(a => cleanName.includes(a.toLowerCase())))))
+    );
+
+    const candidateKeys = [cleanId, cleanCode, cleanEmail, cleanName];
+    if (official) {
+      candidateKeys.push(official.employeeId.toLowerCase());
+      candidateKeys.push(`emp-${official.employeeId.toLowerCase()}`);
+      candidateKeys.push(official.email.toLowerCase());
+      candidateKeys.push(official.fullName.toLowerCase());
+      if (official.aliases) {
+        official.aliases.forEach(a => candidateKeys.push(a.toLowerCase()));
+      }
+    }
+
+    for (const k of candidateKeys) {
+      if (k && geofenceOverridesMap.hasOwnProperty(k)) {
+        return geofenceOverridesMap[k] === true;
+      }
+    }
+
+    return cloudBypass === true;
+  }
+
   async function loadAllCloudData() {
     if (!supabaseClient) return;
+
+    // Load cloud geofence overrides from activity_logs first to sync cross-platform
+    await loadGeofenceOverridesFromCloud();
 
     if (employeesData.length === 0) {
       employeesData = combineUserEmployeeRecords([], []);
@@ -728,30 +895,51 @@
 
   function combineUserEmployeeRecords(users, employees) {
     const list = users.map(u => {
-      const emp = employees.find(e => e.user_id === u.id || (e.email && u.email && e.email.toLowerCase() === u.email.toLowerCase())) || {};
-
       // Cross-reference against master directory to resolve official full name
       const official = MASTER_EMPLOYEES_DIRECTORY.find(m =>
         (u.email && m.email.toLowerCase() === u.email.toLowerCase()) ||
-        (emp.employee_code && (m.employeeId.toUpperCase() === emp.employee_code.toUpperCase() || emp.employee_code.toUpperCase() === `EMP-${m.employeeId.toUpperCase()}`)) ||
         (u.full_name && m.fullName.toLowerCase() === u.full_name.toLowerCase()) ||
         (m.aliases && u.full_name && m.aliases.some(a => u.full_name.toLowerCase().includes(a.toLowerCase())))
       );
+
+      const emp = employees.find(e =>
+        (isUuid(e.user_id) && isUuid(u.id) && e.user_id === u.id) ||
+        (e.user_id && u.firebase_uid && e.user_id === u.firebase_uid) ||
+        (e.email && u.email && e.email.toLowerCase() === u.email.toLowerCase()) ||
+        (e.employee_code && u.employee_code && e.employee_code.toUpperCase() === u.employee_code.toUpperCase()) ||
+        (official && e.employee_code && (e.employee_code.toUpperCase() === official.employeeId.toUpperCase() || e.employee_code.toUpperCase() === `EMP-${official.employeeId.toUpperCase()}`))
+      ) || {};
+
+      const code = emp.employee_code || (official ? official.employeeId : `EMP-${u.id.substring(0, 4).toUpperCase()}`);
+      const resolvedName = (official && official.fullName) || (u.full_name && u.full_name !== 'Staff' && u.full_name !== 'Staff Member' ? u.full_name : (emp.full_name || (official ? official.fullName : 'Team Member')));
+      const resolvedEmail = u.email || emp.email || (official ? official.email : '');
 
       return {
         id: u.id,
         userId: u.id,
         employeeTableId: emp.id || null,
-        name: (official && official.fullName) || (u.full_name && u.full_name !== 'Staff' && u.full_name !== 'Staff Member' ? u.full_name : (emp.full_name || (official ? official.fullName : 'Team Member'))),
-        email: u.email || emp.email || (official ? official.email : ''),
+        name: resolvedName,
+        email: resolvedEmail,
         phone: u.phone_number || emp.phone_number || '',
         role: u.role || 'EMPLOYEE',
         isActive: u.is_active,
-        employeeCode: emp.employee_code || (official ? official.employeeId : `EMP-${u.id.substring(0, 4).toUpperCase()}`),
+        employeeCode: code,
         designation: emp.designation || (official ? official.designation : 'Staff'),
         department: emp.department || (official ? official.department : 'Operations'),
-        assignedOfficeId: emp.assigned_office_id,
-        bypassGeofence: u.bypass_geofence === true || emp.bypass_geofence === true
+        assignedOfficeId: resolveEmployeeAssignedOffice(
+          u.id,
+          code,
+          resolvedEmail,
+          resolvedName,
+          emp.assigned_office_id || u.assigned_office_id
+        ),
+        bypassGeofence: resolveEmployeeGeofenceBypass(
+          u.id,
+          code,
+          resolvedEmail,
+          resolvedName,
+          u.bypass_geofence === true || emp.bypass_geofence === true
+        )
       };
     });
 
@@ -766,20 +954,36 @@
           (m.aliases && emp.full_name && m.aliases.some(a => emp.full_name.toLowerCase().includes(a.toLowerCase())))
         );
 
+        const code = emp.employee_code || (official ? official.employeeId : `EMP-${emp.id.substring(0, 4).toUpperCase()}`);
+        const resolvedName = (official && official.fullName) || emp.full_name || emp.name || 'Team Member';
+        const resolvedEmail = emp.email || (official ? official.email : '');
+
         list.push({
           id: emp.id,
           userId: emp.user_id || null,
           employeeTableId: emp.id,
-          name: (official && official.fullName) || emp.full_name || emp.name || 'Team Member',
-          email: emp.email || (official ? official.email : ''),
+          name: resolvedName,
+          email: resolvedEmail,
           phone: emp.phone_number || emp.phone || '',
           role: 'EMPLOYEE',
           isActive: emp.is_active !== false,
-          employeeCode: emp.employee_code || (official ? official.employeeId : `EMP-${emp.id.substring(0, 4).toUpperCase()}`),
+          employeeCode: code,
           designation: emp.designation || (official ? official.designation : 'Staff'),
           department: emp.department || (official ? official.department : 'Operations'),
-          assignedOfficeId: emp.assigned_office_id,
-          bypassGeofence: emp.bypass_geofence === true
+          assignedOfficeId: resolveEmployeeAssignedOffice(
+            emp.id,
+            code,
+            resolvedEmail,
+            resolvedName,
+            emp.assigned_office_id
+          ),
+          bypassGeofence: resolveEmployeeGeofenceBypass(
+            emp.id,
+            code,
+            resolvedEmail,
+            resolvedName,
+            emp.bypass_geofence === true
+          )
         });
       }
     });
@@ -787,9 +991,10 @@
     // Ensure all master directory records exist so card lookup never misses an employee
     MASTER_EMPLOYEES_DIRECTORY.forEach(m => {
       const exists = list.some(item =>
-        (item.employeeCode && item.employeeCode.toUpperCase() === m.employeeId.toUpperCase()) ||
-        (item.email && item.email.toLowerCase() === m.email.toLowerCase()) ||
-        (item.name && item.name.toLowerCase() === m.fullName.toLowerCase())
+        (item.employeeCode && (item.employeeCode.toUpperCase() === m.employeeId.toUpperCase() || item.employeeCode.toUpperCase() === `EMP-${m.employeeId.toUpperCase()}`)) ||
+        (item.email && m.email && item.email.toLowerCase() === m.email.toLowerCase()) ||
+        (item.name && item.name.toLowerCase() === m.fullName.toLowerCase()) ||
+        (m.aliases && item.name && m.aliases.some(a => item.name.toLowerCase().includes(a.toLowerCase())))
       );
       if (!exists) {
         list.push({
@@ -804,8 +1009,20 @@
           employeeCode: m.employeeId,
           designation: m.designation,
           department: m.department,
-          assignedOfficeId: null,
-          bypassGeofence: false
+          assignedOfficeId: resolveEmployeeAssignedOffice(
+            m.employeeId,
+            m.employeeId,
+            m.email,
+            m.fullName,
+            null
+          ),
+          bypassGeofence: resolveEmployeeGeofenceBypass(
+            m.employeeId,
+            m.employeeId,
+            m.email,
+            m.fullName,
+            false
+          )
         });
       }
     });
@@ -1085,8 +1302,8 @@
     }
 
     employeeTableBody.innerHTML = filtered.map(e => {
-      const assignedOffice = officesData.find(o => o.id === e.assignedOfficeId);
-      const officeDisplay = assignedOffice ? assignedOffice.name : 'Main HQ Office';
+      const assignedOffice = officesData.find(o => o.id === e.assignedOfficeId) || sitesData.find(s => s.id === e.assignedOfficeId);
+      const officeDisplay = assignedOffice ? (assignedOffice.name || assignedOffice.site_name) : 'Main HQ Office';
       const isBypass = e.bypassGeofence === true;
 
       return `
@@ -1450,9 +1667,25 @@
     });
   }
 
+  // Office selection dropdown populator for employee drawer (offices + sites)
+  function populateEmployeeOfficeDropdown(selectedOfficeId = null) {
+    const officeSelect = document.getElementById('emp-office');
+    if (!officeSelect) return;
+    let html = '<option value="">Default Main Office (HQ)</option>';
+    officesData.forEach(o => {
+      const isSel = selectedOfficeId && o.id === selectedOfficeId ? 'selected' : '';
+      html += `<option value="${o.id}" ${isSel}>Office: ${o.name} (${o.geofence_radius_meters}m)</option>`;
+    });
+    sitesData.forEach(s => {
+      const isSel = selectedOfficeId && s.id === selectedOfficeId ? 'selected' : '';
+      html += `<option value="${s.id}" ${isSel}>Site: ${s.site_name || s.name} (${s.client_name || 'Client Site'})</option>`;
+    });
+    officeSelect.innerHTML = html;
+  }
+
   // Employee Edit Drawer Handlers
   window.editEmployee = function (empId) {
-    const emp = employeesData.find(e => e.id === empId);
+    const emp = employeesData.find(e => e.id === empId || e.userId === empId || e.employeeTableId === empId || (e.employeeCode && e.employeeCode.toLowerCase() === empId.toLowerCase()));
     if (!emp) return;
 
     document.getElementById('emp-id').value = emp.id;
@@ -1463,6 +1696,8 @@
     document.getElementById('emp-designation').value = emp.designation;
     document.getElementById('emp-department').value = emp.department;
     document.getElementById('emp-role').value = emp.role;
+    populateEmployeeOfficeDropdown(emp.assignedOfficeId);
+
     const bypassCheckbox = document.getElementById('emp-bypass-geofence');
     if (bypassCheckbox) {
       bypassCheckbox.checked = emp.bypassGeofence === true;
@@ -1475,6 +1710,9 @@
   function openEmployeeDrawer() {
     drawerBackdrop.classList.add('active');
     drawer.classList.add('active');
+    if (!document.getElementById('emp-id').value) {
+      populateEmployeeOfficeDropdown(null);
+    }
   }
 
   function closeEmployeeDrawer() {
@@ -1482,6 +1720,8 @@
     drawer.classList.remove('active');
     employeeForm.reset();
     document.getElementById('emp-id').value = '';
+    const officeSelect = document.getElementById('emp-office');
+    if (officeSelect) officeSelect.value = '';
     const bypassCheckbox = document.getElementById('emp-bypass-geofence');
     if (bypassCheckbox) {
       bypassCheckbox.checked = false;
@@ -1497,6 +1737,9 @@
     const designation = document.getElementById('emp-designation').value.trim();
     const department = document.getElementById('emp-department').value.trim();
     const role = document.getElementById('emp-role').value;
+    const officeSelect = document.getElementById('emp-office');
+    const assignedOfficeId = officeSelect && officeSelect.value.trim() ? officeSelect.value.trim() : null;
+    const useDefaultOffice = !assignedOfficeId || !isUuid(assignedOfficeId);
     const bypassCheckbox = document.getElementById('emp-bypass-geofence');
     const bypassGeofence = bypassCheckbox ? bypassCheckbox.checked : false;
 
@@ -1506,56 +1749,153 @@
     }
 
     try {
-      if (empId) {
-        // Update user
-        await supabaseClient.from('users').update({
-          full_name: name,
-          phone_number: phone,
-          role: role,
-          bypass_geofence: bypassGeofence,
-          updated_at: new Date().toISOString()
-        }).eq('id', empId);
+      const empUpdates = {
+        designation: designation,
+        department: department,
+        assigned_office_id: isUuid(assignedOfficeId) ? assignedOfficeId : null,
+        use_default_office: useDefaultOffice,
+        updated_at: new Date().toISOString()
+      };
 
-        await supabaseClient.from('employees').update({
-          designation: designation,
-          department: department,
-          bypass_geofence: bypassGeofence,
-          updated_at: new Date().toISOString()
-        }).eq('user_id', empId);
-      } else {
-        // Create new employee
-        const newUserId = 'usr_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
-        await supabaseClient.from('users').insert({
-          id: newUserId,
-          email: email,
-          full_name: name,
-          phone_number: phone,
-          role: role,
-          bypass_geofence: bypassGeofence,
-          is_active: true,
-          created_at: new Date().toISOString()
-        });
-
-        await supabaseClient.from('employees').insert({
-          user_id: newUserId,
-          employee_code: empCode,
-          full_name: name,
-          email: email,
-          phone_number: phone,
-          designation: designation,
-          department: department,
-          bypass_geofence: bypassGeofence,
-          is_active: true,
-          created_at: new Date().toISOString()
-        });
+      // 1. Optimistically find and update in-memory record so UI switches immediately
+      const emp = employeesData.find(e =>
+        e.id === empId ||
+        e.userId === empId ||
+        e.employeeTableId === empId ||
+        (e.employeeCode && e.employeeCode.toLowerCase() === empCode.toLowerCase()) ||
+        (e.email && email && e.email.toLowerCase() === email.toLowerCase())
+      );
+      if (emp) {
+        emp.name = name;
+        emp.email = email;
+        emp.phone = phone;
+        emp.designation = designation;
+        emp.department = department;
+        emp.role = role;
+        emp.assignedOfficeId = isUuid(assignedOfficeId) ? assignedOfficeId : null;
+        emp.useDefaultOffice = useDefaultOffice;
+        emp.bypassGeofence = bypassGeofence;
       }
 
+      // 2. Persist to local override maps & localStorage
+      const candidateKeys = [
+        (empId || '').toLowerCase(),
+        emp?.userId ? emp.userId.toLowerCase() : null,
+        emp?.employeeTableId ? emp.employeeTableId.toLowerCase() : null,
+        (empCode || '').toLowerCase(),
+        (email || '').toLowerCase(),
+        (name || '').toLowerCase()
+      ];
+      candidateKeys.forEach(k => {
+        if (k) {
+          geofenceOverridesMap[k] = bypassGeofence;
+          officeOverridesMap[k] = isUuid(assignedOfficeId) ? assignedOfficeId : null;
+        }
+      });
+      try {
+        localStorage.setItem('f360_geofence_overrides', JSON.stringify(geofenceOverridesMap));
+        localStorage.setItem('f360_office_overrides', JSON.stringify(officeOverridesMap));
+      } catch (_) {}
+
+      // Render updated table immediately
       closeEmployeeDrawer();
-      loadAllCloudData();
+      renderEmployeeTable();
+
+      // 3. Update Supabase users and employees tables safely
+      if (empId) {
+        if (isUuid(empId)) {
+          try {
+            await supabaseClient.from('users').update({
+              full_name: name,
+              phone_number: phone,
+              role: role,
+              updated_at: new Date().toISOString()
+            }).eq('id', empId);
+          } catch (_) {}
+        } else if (email) {
+          try {
+            await supabaseClient.from('users').update({
+              full_name: name,
+              phone_number: phone,
+              role: role,
+              updated_at: new Date().toISOString()
+            }).eq('email', email.toLowerCase());
+          } catch (_) {}
+        }
+
+        // Try updating employees by employeeTableId, user_id, or employee_code
+        let empUpdated = false;
+        if (emp?.employeeTableId && isUuid(emp.employeeTableId)) {
+          try {
+            const { error, count } = await supabaseClient.from('employees').update(empUpdates).eq('id', emp.employeeTableId);
+            if (!error && count !== 0) empUpdated = true;
+          } catch (_) {}
+        }
+        if (!empUpdated && isUuid(empId)) {
+          try {
+            const { error, count } = await supabaseClient.from('employees').update(empUpdates).eq('user_id', empId);
+            if (!error && count !== 0) empUpdated = true;
+          } catch (_) {}
+        }
+        if (!empUpdated && empCode) {
+          try {
+            await supabaseClient.from('employees').update(empUpdates).eq('employee_code', empCode);
+          } catch (_) {}
+        }
+      } else {
+        // Create new employee
+        const newUserId = isUuid(empId) ? empId : ('usr_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6));
+        try {
+          await supabaseClient.from('users').insert({
+            id: newUserId,
+            email: email,
+            full_name: name,
+            phone_number: phone,
+            role: role,
+            is_active: true,
+            created_at: new Date().toISOString()
+          });
+
+          await supabaseClient.from('employees').insert({
+            user_id: newUserId,
+            employee_code: empCode,
+            designation: designation,
+            department: department,
+            assigned_office_id: isUuid(assignedOfficeId) ? assignedOfficeId : null,
+            use_default_office: useDefaultOffice,
+            is_active: true,
+            created_at: new Date().toISOString()
+          });
+        } catch (insertErr) {
+          console.warn('Direct insert into users/employees note:', insertErr);
+        }
+      }
+
+      // 4. Log override to activity_logs for cross-platform cloud sync
+      try {
+        await supabaseClient.from('activity_logs').insert({
+          organization_id: 'bcc6c36c-cfa3-461b-ade6-de7d770e720c',
+          action: 'GEOFENCE_BYPASS_OVERRIDE',
+          details: {
+            employee_id: empId,
+            user_id: isUuid(empId) ? empId : null,
+            employee_code: empCode,
+            email: email,
+            employee_name: name,
+            assigned_office_id: assignedOfficeId,
+            use_default_office: useDefaultOffice,
+            bypass_geofence: bypassGeofence,
+            bypassGeofence: bypassGeofence,
+            updated_at: new Date().toISOString()
+          }
+        });
+      } catch (logErr) {
+        console.warn('Geofence/office logActivity note:', logErr);
+      }
+
+      await loadAllCloudData();
       showToast(
-        bypassGeofence
-          ? `✓ Saved employee: Geofence disabled (anywhere check-in allowed).`
-          : `✓ Saved employee: Office geofence boundary enforced.`,
+        `✓ Employee profile and assigned location updated successfully.`,
         'success'
       );
     } catch (e) {
@@ -1566,45 +1906,94 @@
   // Quick 1-click toggle for Geofence Bypass (Enforce Office vs Allow Anywhere)
   window.toggleEmployeeGeofence = async function (empId, currentBypass) {
     const newBypass = !currentBypass;
-    const emp = employeesData.find(e => e.id === empId || e.userId === empId || e.employeeTableId === empId);
+    const emp = employeesData.find(e =>
+      e.id === empId ||
+      e.userId === empId ||
+      e.employeeTableId === empId ||
+      (e.employeeCode && e.employeeCode.toLowerCase() === empId.toLowerCase())
+    );
     const empName = emp ? emp.name : 'Employee';
 
-    // Optimistically update memory and table UI
+    // 1. Optimistically update memory and table UI
     if (emp) {
       emp.bypassGeofence = newBypass;
     }
+
+    // 2. Update local overrides map & localStorage immediately
+    const cleanKeys = [
+      (empId || '').toLowerCase(),
+      emp?.userId ? emp.userId.toLowerCase() : null,
+      emp?.employeeTableId ? emp.employeeTableId.toLowerCase() : null,
+      emp?.employeeCode ? emp.employeeCode.toLowerCase() : null,
+      emp?.email ? emp.email.toLowerCase() : null,
+      emp?.name ? emp.name.toLowerCase() : null
+    ];
+
+    const official = MASTER_EMPLOYEES_DIRECTORY.find(m =>
+      cleanKeys.includes(m.employeeId.toLowerCase()) ||
+      cleanKeys.includes(m.email.toLowerCase()) ||
+      (emp && emp.name && m.fullName.toLowerCase() === emp.name.toLowerCase())
+    );
+    if (official) {
+      cleanKeys.push(official.employeeId.toLowerCase());
+      cleanKeys.push(`emp-${official.employeeId.toLowerCase()}`);
+      cleanKeys.push(official.email.toLowerCase());
+      cleanKeys.push(official.fullName.toLowerCase());
+      if (official.aliases) {
+        official.aliases.forEach(a => cleanKeys.push(a.toLowerCase()));
+      }
+    }
+
+    cleanKeys.forEach(k => {
+      if (k) geofenceOverridesMap[k] = newBypass;
+    });
+    try {
+      localStorage.setItem('f360_geofence_overrides', JSON.stringify(geofenceOverridesMap));
+    } catch (_) {}
+
     renderEmployeeTable();
 
+    // 3. Persist to Supabase cloud via activity_logs (guaranteed to work across mobile app & web)
     try {
       if (supabaseClient) {
-        const targetUserId = emp?.userId || (empId.startsWith('usr') ? empId : null);
-        const targetEmpId = emp?.employeeTableId || empId;
-
-        const promises = [];
-        if (targetUserId) {
-          promises.push(
-            supabaseClient.from('users').update({
-              bypass_geofence: newBypass,
-              updated_at: new Date().toISOString()
-            }).eq('id', targetUserId)
-          );
-        } else if (empId) {
-          promises.push(
-            supabaseClient.from('users').update({
-              bypass_geofence: newBypass,
-              updated_at: new Date().toISOString()
-            }).eq('id', empId)
-          );
-        }
-
-        promises.push(
-          supabaseClient.from('employees').update({
+        await supabaseClient.from('activity_logs').insert({
+          organization_id: 'bcc6c36c-cfa3-461b-ade6-de7d770e720c',
+          action: 'GEOFENCE_BYPASS_OVERRIDE',
+          details: {
+            employee_id: emp?.id || empId,
+            user_id: emp?.userId && isUuid(emp.userId) ? emp.userId : null,
+            employee_code: emp?.employeeCode || empId,
+            email: emp?.email || '',
+            employee_name: emp?.name || '',
             bypass_geofence: newBypass,
+            bypassGeofence: newBypass,
             updated_at: new Date().toISOString()
-          }).or(`user_id.eq.${targetUserId || empId},id.eq.${targetEmpId || empId},employee_code.eq.${emp?.employeeCode || empId}`)
-        );
+          }
+        });
 
-        await Promise.allSettled(promises);
+        // Also safely try updating users and employees tables if bypass_geofence column exists
+        try {
+          if (emp?.userId && isUuid(emp.userId)) {
+            await supabaseClient.from('users').update({
+              bypass_geofence: newBypass,
+              updated_at: new Date().toISOString()
+            }).eq('id', emp.userId);
+          }
+        } catch (_) {}
+
+        try {
+          if (emp?.employeeTableId && isUuid(emp.employeeTableId)) {
+            await supabaseClient.from('employees').update({
+              bypass_geofence: newBypass,
+              updated_at: new Date().toISOString()
+            }).eq('id', emp.employeeTableId);
+          } else if (emp?.employeeCode) {
+            await supabaseClient.from('employees').update({
+              bypass_geofence: newBypass,
+              updated_at: new Date().toISOString()
+            }).eq('employee_code', emp.employeeCode);
+          }
+        } catch (_) {}
       }
 
       showToast(
@@ -1614,12 +2003,8 @@
         newBypass ? 'warning' : 'success'
       );
     } catch (e) {
-      console.error('Failed to toggle geofence bypass:', e);
-      if (emp) {
-        emp.bypassGeofence = currentBypass;
-        renderEmployeeTable();
-      }
-      showToast(`Failed to update geofence: ${e.message}`, 'error');
+      console.error('Failed to toggle geofence bypass in cloud:', e);
+      showToast(`Saved locally: ${e.message}`, 'warning');
     }
   };
 

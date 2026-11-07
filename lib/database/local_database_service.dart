@@ -693,6 +693,35 @@ class LocalDatabaseService {
     }
     _persistEmployees();
 
+    // Also sync matching user in _users so employee location and details immediately update
+    for (int i = 0; i < _users.length; i++) {
+      final u = _users[i];
+      if (u.id == employee.id ||
+          (u.email.isNotEmpty && employee.email.isNotEmpty && u.email.trim().toLowerCase() == employee.email.trim().toLowerCase()) ||
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: employee.id,
+            recordEmployeeName: employee.name,
+            employeeId: u.id,
+            employeeCode: u.employeeCode,
+            employeeName: u.fullName,
+            employeeEmail: u.email,
+          )) {
+        _users[i] = u.copyWith(
+          employeeCode: employee.employeeCode,
+          designation: employee.designation,
+          department: employee.department,
+          phoneNumber: employee.mobileNumber,
+          useDefaultOffice: employee.useDefaultOffice,
+          clearAssignedOffice:
+              employee.useDefaultOffice || employee.assignedOfficeId == null,
+          assignedOfficeId: employee.assignedOfficeId,
+          assignedOfficeName: employee.assignedOfficeName,
+          bypassGeofence: employee.bypassGeofence,
+        );
+      }
+    }
+    _persistUsers();
+
     if (_currentUser != null) {
       final cur = _currentUser!;
       if (cur.id == employee.id ||
@@ -816,6 +845,8 @@ class LocalDatabaseService {
 
     return null;
   }
+
+  Map<String, bool> get geofenceBypassOverrides => Map.unmodifiable(_geofenceBypassOverrides);
 
   void toggleEmployeeGeofenceBypass(
     String idOrEmail,

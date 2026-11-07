@@ -207,6 +207,10 @@ class UserManagementCubit extends Cubit<UserManagementState> {
           organizationId: orgId,
           isActive: e.isActive,
           photoUrl: photo,
+          useDefaultOffice: e.useDefaultOffice,
+          assignedOfficeId: e.assignedOfficeId,
+          assignedOfficeName: e.assignedOfficeName,
+          bypassGeofence: e.bypassGeofence,
         );
         userMap[key] = localUser;
       } else {
@@ -248,6 +252,14 @@ class UserManagementCubit extends Cubit<UserManagementState> {
           fullName: completeName,
           employeeCode: officialId,
           photoUrl: photo,
+          useDefaultOffice: e.useDefaultOffice,
+          clearAssignedOffice:
+              e.useDefaultOffice || e.assignedOfficeId == null,
+          assignedOfficeId: e.assignedOfficeId,
+          assignedOfficeName: e.assignedOfficeName,
+          designation: e.designation.isNotEmpty ? e.designation : existing.designation,
+          department: e.department.isNotEmpty ? e.department : existing.department,
+          bypassGeofence: e.bypassGeofence,
         );
       }
     }
@@ -473,10 +485,15 @@ class UserManagementCubit extends Cubit<UserManagementState> {
       final orgId =
           _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
       final actorUserId = _db.currentUser?.id;
+      final effectiveUseDefault = useDefaultOffice ?? (assignedOfficeId == null);
+      final effectiveOfficeId = effectiveUseDefault ? null : assignedOfficeId;
+      final effectiveOfficeName = effectiveUseDefault ? null : assignedOfficeName;
 
       // Update local UserEntity if present
       final localUsers = _db.getUsers();
-      final userIndex = localUsers.indexWhere((u) => u.id == userId || u.email == userId);
+      final userIndex = localUsers.indexWhere((u) =>
+          u.id == userId ||
+          (email != null && u.email.trim().toLowerCase() == email.trim().toLowerCase()));
       if (userIndex >= 0) {
         final existingUser = localUsers[userIndex];
         final updatedUser = existingUser.copyWith(
@@ -484,6 +501,15 @@ class UserManagementCubit extends Cubit<UserManagementState> {
           email: (email != null && email.trim().isNotEmpty) ? email.trim() : existingUser.email,
           phoneNumber: phoneNumber?.trim() ?? existingUser.phoneNumber,
           role: role ?? existingUser.role,
+          employeeCode: (employeeCode != null && employeeCode.trim().isNotEmpty)
+              ? employeeCode.trim()
+              : existingUser.employeeCode,
+          designation: designation?.trim() ?? existingUser.designation,
+          department: department?.trim() ?? existingUser.department,
+          useDefaultOffice: effectiveUseDefault,
+          clearAssignedOffice: effectiveUseDefault,
+          assignedOfficeId: effectiveOfficeId,
+          assignedOfficeName: effectiveOfficeName,
           photoUrl: photoUrl ?? existingUser.photoUrl,
           bypassGeofence: bypassGeofence ?? existingUser.bypassGeofence,
         );
@@ -518,10 +544,9 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         email: (email != null && email.trim().isNotEmpty) ? email.trim() : existingEmp.email,
         designation: designation?.trim() ?? existingEmp.designation,
         department: department?.trim() ?? existingEmp.department,
-        useDefaultOffice: useDefaultOffice ?? existingEmp.useDefaultOffice,
-        assignedOfficeId: assignedOfficeId ?? existingEmp.assignedOfficeId,
-        assignedOfficeName:
-            assignedOfficeName ?? existingEmp.assignedOfficeName,
+        useDefaultOffice: effectiveUseDefault,
+        assignedOfficeId: effectiveOfficeId,
+        assignedOfficeName: effectiveOfficeName,
         isActive: existingEmp.isActive,
         photoUrl: photoUrl ?? existingEmp.photoUrl,
         bypassGeofence: bypassGeofence ?? existingEmp.bypassGeofence,
@@ -548,8 +573,8 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         employeeCode: employeeCode,
         designation: designation,
         department: department,
-        useDefaultOffice: useDefaultOffice,
-        assignedOfficeId: assignedOfficeId,
+        useDefaultOffice: effectiveUseDefault,
+        assignedOfficeId: effectiveOfficeId,
         actorUserId: actorUserId,
         bypassGeofence: bypassGeofence,
       );

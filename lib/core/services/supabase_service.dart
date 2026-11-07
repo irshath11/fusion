@@ -1013,44 +1013,69 @@ class SupabaseService {
       }
       if (designation != null) empUpdates['designation'] = designation.trim();
       if (department != null) empUpdates['department'] = department.trim();
-      if (useDefaultOffice != null)
-        empUpdates['use_default_office'] = useDefaultOffice;
-      if (assignedOfficeId != null) {
+      if (useDefaultOffice == true) {
+        empUpdates['use_default_office'] = true;
+        empUpdates['assigned_office_id'] = null;
+      } else if (assignedOfficeId != null) {
         empUpdates['assigned_office_id'] =
             _isValidUuid(assignedOfficeId) ? assignedOfficeId : null;
+        empUpdates['use_default_office'] = (empUpdates['assigned_office_id'] == null);
+      } else if (useDefaultOffice != null) {
+        empUpdates['use_default_office'] = useDefaultOffice;
       }
+
+      final isTargetUuid = _isValidUuid(targetId);
+      final isCleanUuid = _isValidUuid(cleanId);
+      final uuidToUse = isTargetUuid ? targetId : (isCleanUuid ? cleanId : null);
+
+      try {
+        if (uuidToUse != null) {
+          final existingEmp = await client!
+              .from('employees')
+              .select('id')
+              .eq('user_id', uuidToUse)
+              .maybeSingle();
+
+          if (existingEmp != null) {
+            await client!.from('employees').update(empUpdates).eq('user_id', uuidToUse);
+          } else {
+            final targetOrgId =
+                await ensureOrganizationExistsInCloud(orgId) ?? orgId;
+            empUpdates['user_id'] = uuidToUse;
+            empUpdates['organization_id'] = targetOrgId;
+            empUpdates['employee_code'] = employeeCode?.trim() ?? 'EMP-000';
+            empUpdates['designation'] = designation?.trim() ?? 'Staff';
+            empUpdates['department'] = department?.trim() ?? 'Operations';
+            empUpdates['use_default_office'] = useDefaultOffice ?? true;
+            empUpdates['is_deleted'] = false;
+            empUpdates['created_at'] = DateTime.now().toIso8601String();
+            await client!.from('employees').upsert(empUpdates);
+          }
+        } else if (employeeCode != null && employeeCode.trim().isNotEmpty) {
+          await client!.from('employees').update(empUpdates).eq('employee_code', employeeCode.trim());
+        }
+      } catch (empErr) {
+        debugPrint('Could not update employees table: $empErr');
+      }
+
+      // If bypass_geofence is also requested, delegate to setEmployeeGeofenceBypass
       if (bypassGeofence != null) {
-        empUpdates['bypass_geofence'] = bypassGeofence;
-      }
-
-      final lookupId = _isValidUuid(targetId) ? targetId : cleanId;
-      final existingEmp = await client!
-          .from('employees')
-          .select('id')
-          .eq('user_id', lookupId)
-          .maybeSingle();
-
-      if (existingEmp != null) {
-        await client!.from('employees').update(empUpdates).eq('user_id', lookupId);
-      } else {
-        final targetOrgId =
-            await ensureOrganizationExistsInCloud(orgId) ?? orgId;
-        empUpdates['user_id'] = lookupId;
-        empUpdates['organization_id'] = targetOrgId;
-        empUpdates['employee_code'] = employeeCode?.trim() ?? 'EMP-000';
-        empUpdates['designation'] = designation?.trim() ?? 'Staff';
-        empUpdates['department'] = department?.trim() ?? 'Operations';
-        empUpdates['use_default_office'] = useDefaultOffice ?? true;
-        empUpdates['is_deleted'] = false;
-        empUpdates['created_at'] = DateTime.now().toIso8601String();
-        await client!.from('employees').upsert(empUpdates);
+        await setEmployeeGeofenceBypass(
+          userId: userId,
+          orgId: orgId,
+          bypassGeofence: bypassGeofence,
+          email: email,
+          employeeCode: employeeCode,
+          employeeName: fullName,
+          actorUserId: actorUserId,
+        );
       }
 
       if (_isValidUuid(orgId)) {
         await logActivity(
           orgId: orgId,
           actorUserId: _isValidUuid(actorUserId) ? actorUserId : null,
-          targetUserId: _isValidUuid(lookupId) ? lookupId : null,
+          targetUserId: _isValidUuid(targetId) ? targetId : null,
           action: ActivityLogAction.employeeUpdated.dbValue,
           details: {
             'updated_name': fullName,
@@ -1091,14 +1116,36 @@ class SupabaseService {
           ? existingUser.id
           : cleanId;
 
-      // Update in users table
+      // 1. Log activity override to Supabase activity_logs for cloud cross-platform sync
+      final validOrgId = _isValidUuid(orgId) ? orgId : 'bcc6c36c-cfa3-461b-ade6-de7d770e720c';
+      try {
+        await logActivity(
+          orgId: validOrgId,
+          actorUserId: _isValidUuid(actorUserId) ? actorUserId : null,
+          targetUserId: _isValidUuid(targetId) ? targetId : null,
+          action: 'GEOFENCE_BYPASS_OVERRIDE',
+          details: {
+            'employee_id': targetId,
+            'user_id': targetId,
+            'firebase_uid': cleanId,
+            'email': email,
+            'employee_code': employeeCode,
+            'employee_name': employeeName,
+            'bypass_geofence': bypassGeofence,
+            'bypassGeofence': bypassGeofence,
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+        );
+      } catch (e) {
+        debugPrint('Supabase logActivity for geofence error: $e');
+      }
+
+      // 2. Update in users table if bypass_geofence column exists
       try {
         final orClausesUsers = <String>[];
         if (_isValidUuid(targetId)) orClausesUsers.add('id.eq.$targetId');
-        if (cleanId.isNotEmpty) orClausesUsers.add('firebase_uid.eq.$cleanId');
-        if (cleanId != targetId) orClausesUsers.add('id.eq.$cleanId');
+        if (cleanId.isNotEmpty && cleanId != targetId) orClausesUsers.add('firebase_uid.eq.$cleanId');
         if (email != null && email.trim().isNotEmpty) orClausesUsers.add('email.eq.${email.trim()}');
-        if (employeeCode != null && employeeCode.trim().isNotEmpty) orClausesUsers.add('employee_code.eq.${employeeCode.trim()}');
 
         if (orClausesUsers.isNotEmpty) {
           await client!.from('users').update({
@@ -1107,37 +1154,69 @@ class SupabaseService {
           }).or(orClausesUsers.join(','));
         }
       } catch (e) {
-        debugPrint('Supabase bypass_geofence update users error: $e');
+        debugPrint('Supabase bypass_geofence update users note: $e');
       }
 
-      // Update in employees table
+      // 3. Update in employees table if bypass_geofence column exists
       try {
-        final orClauses = <String>['user_id.eq.$targetId', 'id.eq.$targetId'];
-        if (cleanId != targetId) {
-          orClauses.add('user_id.eq.$cleanId');
-          orClauses.add('id.eq.$cleanId');
+        final orClauses = <String>[];
+        if (_isValidUuid(targetId)) {
+          orClauses.add('user_id.eq.$targetId');
+          orClauses.add('id.eq.$targetId');
         }
         if (employeeCode != null && employeeCode.trim().isNotEmpty) {
           orClauses.add('employee_code.eq.${employeeCode.trim()}');
         }
-        if (email != null && email.trim().isNotEmpty) {
-          orClauses.add('email.eq.${email.trim()}');
+        if (orClauses.isNotEmpty) {
+          await client!.from('employees').update({
+            'bypass_geofence': bypassGeofence,
+            'updated_at': DateTime.now().toIso8601String(),
+          }).or(orClauses.join(','));
         }
-        if (employeeName != null && employeeName.trim().isNotEmpty) {
-          orClauses.add('name.eq.${employeeName.trim()}');
-        }
-        await client!.from('employees').update({
-          'bypass_geofence': bypassGeofence,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).or(orClauses.join(','));
       } catch (e) {
-        debugPrint('Supabase bypass_geofence update employees error: $e');
+        debugPrint('Supabase bypass_geofence update employees note: $e');
       }
 
       return true;
     } catch (e) {
       debugPrint('Supabase setEmployeeGeofenceBypass error: $e');
       return false;
+    }
+  }
+
+  /// Fetch Geofence bypass overrides from Supabase activity_logs and apply to local storage
+  Future<void> fetchGeofenceOverridesFromCloud() async {
+    if (!_isInitialized || client == null) return;
+    try {
+      final List<dynamic> logs = await client!
+          .from('activity_logs')
+          .select('details, created_at')
+          .eq('action', 'GEOFENCE_BYPASS_OVERRIDE')
+          .order('created_at', ascending: true);
+
+      final db = LocalDatabaseService();
+      for (final item in logs) {
+        if (item is Map && item['details'] != null && item['details'] is Map) {
+          final details = item['details'] as Map;
+          final idOrEmail = (details['employee_id'] ?? details['user_id'] ?? details['userId'] ?? details['email'] ?? '').toString().trim();
+          final bypass = details['bypass_geofence'] == true || details['bypassGeofence'] == true;
+          final email = details['email']?.toString();
+          final employeeCode = (details['employee_code'] ?? details['employeeCode'])?.toString();
+          final employeeName = (details['employee_name'] ?? details['name'])?.toString();
+
+          if (idOrEmail.isNotEmpty || (email != null && email.isNotEmpty) || (employeeCode != null && employeeCode.isNotEmpty)) {
+            db.toggleEmployeeGeofenceBypass(
+              idOrEmail.isNotEmpty ? idOrEmail : (employeeCode ?? email!),
+              bypass,
+              email: email,
+              employeeCode: employeeCode,
+              employeeName: employeeName,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Supabase fetchGeofenceOverridesFromCloud note: $e');
     }
   }
 
@@ -1149,6 +1228,8 @@ class SupabaseService {
       if (cloudOffices.isNotEmpty) {
         LocalDatabaseService().setOffices(cloudOffices);
       }
+
+      await fetchGeofenceOverridesFromCloud();
 
       final cloudEmployees = await fetchEmployeesFromSupabase();
       LocalDatabaseService().setEmployees(cloudEmployees);
