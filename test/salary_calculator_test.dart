@@ -7,6 +7,61 @@ import 'package:attendance_app/features/salary/domain/employee_salary_config.dar
 import 'package:attendance_app/features/salary/domain/daily_salary_record.dart';
 import 'package:attendance_app/features/salary/utils/salary_calculator.dart';
 
+
+AttendanceRecord _createRecord({
+  required String id,
+  required String employeeId,
+  required String employeeName,
+  required WorkflowStep workflowStep,
+  required DateTime eventTimestamp,
+  double latitude = 25.0,
+  double longitude = 55.0,
+  double gpsAccuracy = 5.0,
+  String address = 'Office',
+  String deviceId = 'dev-test',
+  String photoBase64 = '',
+  bool isGeofenceValid = true,
+  double? manualOvertimeHours,
+  String? remarks,
+}) {
+  return AttendanceRecord(
+    id: id,
+    employeeId: employeeId,
+    employeeName: employeeName,
+    workflowStep: workflowStep,
+    eventTimestamp: eventTimestamp,
+    latitude: latitude,
+    longitude: longitude,
+    gpsAccuracy: gpsAccuracy,
+    address: address,
+    deviceId: deviceId,
+    photoBase64: photoBase64,
+    isGeofenceValid: isGeofenceValid,
+    manualOvertimeHours: manualOvertimeHours,
+    remarks: remarks,
+  );
+}
+
+EmployeeEntity _createEmployee({
+  required String id,
+  required String employeeCode,
+  required String name,
+  String mobileNumber = '+971501234567',
+  String email = 'test@example.com',
+  String designation = 'Staff',
+  String department = 'Fusion',
+}) {
+  return EmployeeEntity(
+    id: id,
+    employeeCode: employeeCode,
+    name: name,
+    mobileNumber: mobileNumber,
+    email: email,
+    designation: designation,
+    department: department,
+  );
+}
+
 void main() {
   group('SalaryCalculator & Day-Wise Payroll Tests', () {
     final employee = EmployeeEntity(
@@ -58,7 +113,7 @@ void main() {
 
       // Add check-ins for the 6 days before Sunday
       for (int day = 31; day <= 31; day++) {
-        records.add(AttendanceRecord(
+        records.add(_createRecord(
           id: 'rec-aug-$day',
           employeeId: employee.id,
           employeeName: employee.name,
@@ -69,7 +124,7 @@ void main() {
         ));
       }
       for (int day = 1; day <= 5; day++) {
-        records.add(AttendanceRecord(
+        records.add(_createRecord(
           id: 'rec-sep-$day',
           employeeId: employee.id,
           employeeName: employee.name,
@@ -84,7 +139,7 @@ void main() {
 
       // Add check-ins for Monday 2026-09-07 and Tuesday 2026-09-08
       for (int day = 7; day <= 8; day++) {
-        records.add(AttendanceRecord(
+        records.add(_createRecord(
           id: 'rec-sep-$day',
           employeeId: employee.id,
           employeeName: employee.name,
@@ -278,7 +333,7 @@ void main() {
       final List<AttendanceRecord> records = [];
 
       for (int day = 1; day <= 10; day++) {
-        records.add(AttendanceRecord(
+        records.add(_createRecord(
           id: 'rec-riyas-$day-in',
           employeeId: 'emp-riyas',
           employeeName: riyasConfig.employeeName,
@@ -287,7 +342,7 @@ void main() {
           latitude: 25.0,
           longitude: 55.0,
         ));
-        records.add(AttendanceRecord(
+        records.add(_createRecord(
           id: 'rec-riyas-$day-out',
           employeeId: 'emp-riyas',
           employeeName: riyasConfig.employeeName,
@@ -328,7 +383,7 @@ void main() {
       // Monday: 2026-09-07 (worked!)
       // Suppose the employee did NOT work any day prior to this Sunday (e.g. joined or on leave Mon-Sat 31 Aug - 05 Sep).
       final cycle = SalaryCycle.forMonth(2026, 9);
-      final employee = EmployeeEntity(
+      final employee = _createEmployee(
         id: 'emp-nowfal',
         employeeCode: '1054',
         name: 'Nowfal Rizwan',
@@ -346,7 +401,7 @@ void main() {
 
       // Only add attendance for Monday 2026-09-07
       final List<AttendanceRecord> records = [
-        AttendanceRecord(
+        _createRecord(
           id: 'rec-mon-1',
           employeeId: employee.id,
           employeeName: employee.name,
@@ -387,7 +442,7 @@ void main() {
 
     test('Office Staff: 0 Days initial, then manual office attendance input calculates full salary', () {
       final cycle = SalaryCycle.forMonth(2026, 9);
-      final officeEmployee = EmployeeEntity(
+      final officeEmployee = _createEmployee(
         id: 'emp-office-01',
         employeeCode: '2001',
         name: 'Sarah Office Manager',
@@ -426,7 +481,7 @@ void main() {
         final d = start.add(Duration(days: i));
         if (d.weekday == DateTime.sunday) continue;
         daysAdded++;
-        manualRecords.add(AttendanceRecord(
+        manualRecords.add(_createRecord(
           id: 'office_2001_${i}_in',
           employeeId: officeEmployee.id,
           employeeName: officeEmployee.name,
@@ -480,7 +535,7 @@ void main() {
       final List<AttendanceRecord> records = [];
       for (int i = 0; i < 5; i++) {
         final d = cycle.startDate.add(Duration(days: i));
-        records.add(AttendanceRecord(
+        records.add(_createRecord(
           id: 'rec-manual-ot-$i-in',
           employeeId: 'emp-3001',
           employeeName: 'Ahmed Engineer',
@@ -489,7 +544,7 @@ void main() {
           latitude: 25.0,
           longitude: 55.0,
         ));
-        records.add(AttendanceRecord(
+        records.add(_createRecord(
           id: 'rec-manual-ot-$i-out',
           employeeId: 'emp-3001',
           employeeName: 'Ahmed Engineer',
