@@ -121,6 +121,22 @@ class EmployeeDirectoryHelper {
       department: 'Neo',
       aliases: ['abishek', 'abhishek'],
     ),
+    OfficialEmployeeRecord(
+      employeeId: 'N-1014',
+      fullName: 'Ahamed Meeran Sheik Abdul Kadar',
+      photoAsset: 'assets/images/employees/N-1014.png',
+      email: 'meeran@fusionmaint.com',
+      designation: 'Operations',
+      department: 'Neo',
+      aliases: [
+        'meeran',
+        'ahamed meeran',
+        'ahamed meeran sheik abdul kadar',
+        'emp-meeran',
+        'emp-n-1014',
+        'n-1014',
+      ],
+    ),
 
     // --- Fusion Maintenance Division ---
     OfficialEmployeeRecord(
@@ -398,6 +414,19 @@ class EmployeeDirectoryHelper {
     );
     if (recordOfficial != null && targetOfficial != null) {
       if (recordOfficial.employeeId == targetOfficial.employeeId) return true;
+    }
+
+    // 5. Fallback substring/token matching between record and target names
+    if (tName.isNotEmpty && rName.isNotEmpty) {
+      if (tName.contains(rName) || rName.contains(tName)) return true;
+      final tTokens = tName.split(RegExp(r'\s+')).where((s) => s.length > 2).toSet();
+      final rTokens = rName.split(RegExp(r'\s+')).where((s) => s.length > 2).toSet();
+      if (tTokens.isNotEmpty && rTokens.isNotEmpty) {
+        final intersection = tTokens.intersection(rTokens);
+        if (intersection.length >= 2 || (tTokens.length == 1 && intersection.isNotEmpty)) {
+          return true;
+        }
+      }
     }
 
     return false;

@@ -129,8 +129,23 @@ class SalaryCycle {
     return '${DateFormat('dd MMM').format(startDate)} - ${DateFormat('dd MMM yyyy').format(endDate)}';
   }
 
-  /// Dual-month cycle name: e.g. "Aug - Sep 2026"
+  /// Official primary salary month name (e.g. "November 2026")
   String get salaryMonthName {
+    return DateFormat('MMMM yyyy').format(DateTime(salaryYear, salaryMonth, 1));
+  }
+
+  /// 3-letter abbreviation of the salary month (e.g. "Nov")
+  String get salaryMonthAbbr {
+    return DateFormat('MMM').format(DateTime(salaryYear, salaryMonth, 1));
+  }
+
+  /// Short format of the salary month (e.g. "Nov 2026")
+  String get salaryMonthShort {
+    return DateFormat('MMM yyyy').format(DateTime(salaryYear, salaryMonth, 1));
+  }
+
+  /// Dual-month cycle period name: e.g. "Oct - Nov 2026"
+  String get dualMonthName {
     final startM = DateFormat('MMM').format(startDate);
     final endM = DateFormat('MMM yyyy').format(endDate);
     return '$startM - $endM';

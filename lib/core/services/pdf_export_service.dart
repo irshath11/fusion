@@ -10,6 +10,11 @@ import '../utils/leave_calculator.dart';
 import '../utils/salary_cycle_helper.dart';
 import '../utils/timesheet_calculator.dart';
 import '../utils/employee_directory_helper.dart';
+import '../../features/salary/domain/employee_salary_config.dart';
+import '../../features/salary/domain/daily_salary_record.dart';
+import '../../features/salary/domain/employee_salary_summary.dart';
+import '../../features/salary/utils/salary_calculator.dart';
+import '../../database/local_database_service.dart';
 
 class PdfExportService {
   /// Generates a formatted PDF binary document for cumulative employee hours report
@@ -1476,6 +1481,389 @@ class PdfExportService {
       filename: 'Cumulative_Workforce_Attendance_Report.pdf',
     );
     return 'Cumulative PDF report downloaded.';
+  }
+
+  // ===========================================================================
+  // WORKFORCE SALARY & PAYROLL PDF GENERATION
+  // ===========================================================================
+
+  /// Builds a formatted workforce payroll sheet PDF for a salary cycle
+  static Future<Uint8List> buildWorkforceSalaryPdfBytes({
+    required String organizationName,
+    required List<EmployeeEntity> employees,
+    required List<AttendanceRecord> records,
+    required SalaryCycle cycle,
+    Map<String, EmployeeSalaryConfig>? salaryConfigs,
+  }) async {
+    final pdf = pw.Document();
+    final configs = salaryConfigs ?? LocalDatabaseService().getEmployeeSalaryMap();
+
+    final workforceSummary = SalaryCalculator.calculateWorkforcePayroll(
+      employees: employees,
+      salaryConfigs: configs,
+      records: records,
+      cycle: cycle,
+    );
+
+    final summaries = workforceSummary.employeeSummaries;
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(24),
+        build: (pw.Context context) {
+          return [
+            // Header
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      organizationName.toUpperCase(),
+                      style: pw.TextStyle(
+                        fontSize: 16,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.indigo900,
+                      ),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      'OFFICIAL WORKFORCE SALARY & PAYROLL REGISTER',
+                      style: pw.TextStyle(
+                        fontSize: 10,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      'SALARY CYCLE: ${cycle.shortPeriodLabel}',
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.indigo800,
+                      ),
+                    ),
+                    pw.Text(
+                      'Generated: ${DateFormat("dd MMM yyyy, HH:mm").format(DateTime.now())}',
+                      style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 10),
+
+            // Summary Financial Metrics Banner
+            pw.Container(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.indigo50,
+                borderRadius: pw.BorderRadius.circular(6),
+                border: pw.Border.all(color: PdfColors.indigo200),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Total Payroll Cost', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                      pw.Text(
+                        'AED ${workforceSummary.totalPayroll.toStringAsFixed(2)}',
+                        style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900),
+                      ),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Fixed Earned', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                      pw.Text(
+                        'AED ${workforceSummary.totalFixedEarned.toStringAsFixed(2)}',
+                        style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Variable Earned', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                      pw.Text(
+                        'AED ${workforceSummary.totalVariableEarned.toStringAsFixed(2)}',
+                        style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Overtime Earned (${workforceSummary.totalOtHours.toStringAsFixed(1)}h)', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                      pw.Text(
+                        'AED ${workforceSummary.totalOtEarned.toStringAsFixed(2)}',
+                        style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.orange900),
+                      ),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Payable Days', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                      pw.Text(
+                        '${workforceSummary.totalWorkforcePayableDays}d (${workforceSummary.totalWorkforceDaysWorked}d worked + ${workforceSummary.totalWorkforcePaidSundays}d Sun)',
+                        style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 12),
+
+            // Main Payroll Table
+            pw.TableHelper.fromTextArray(
+              headers: [
+                'Code',
+                'Employee Name',
+                'Dept',
+                'Fixed',
+                'Variable',
+                'Worked',
+                'Sun Off',
+                'Payable',
+                'Earned Fixed',
+                'Earned Var',
+                'OT Hours',
+                'Earned OT',
+                'Total Salary (AED)',
+              ],
+              data: [
+                ...summaries.map((s) => [
+                      s.employeeCode,
+                      s.employeeName,
+                      s.department,
+                      s.config.fixedSalary.toStringAsFixed(0),
+                      s.config.variableSalary.toStringAsFixed(0),
+                      '${s.daysWorked}d',
+                      '+${s.paidSundays}d',
+                      '${s.totalPayableDays}d',
+                      s.earnedFixedSalary.toStringAsFixed(2),
+                      s.earnedVariableSalary.toStringAsFixed(2),
+                      '${s.totalOvertimeHours.toStringAsFixed(1)}h',
+                      s.earnedOtSalary.toStringAsFixed(2),
+                      s.grossTotalSalary.toStringAsFixed(2),
+                    ]),
+                [
+                  'TOTAL',
+                  '${summaries.length} Employees',
+                  '',
+                  '',
+                  '',
+                  '${workforceSummary.totalWorkforceDaysWorked}d',
+                  '${workforceSummary.totalWorkforcePaidSundays}d',
+                  '${workforceSummary.totalWorkforcePayableDays}d',
+                  workforceSummary.totalFixedEarned.toStringAsFixed(2),
+                  workforceSummary.totalVariableEarned.toStringAsFixed(2),
+                  '${workforceSummary.totalOtHours.toStringAsFixed(1)}h',
+                  workforceSummary.totalOtEarned.toStringAsFixed(2),
+                  workforceSummary.totalPayroll.toStringAsFixed(2),
+                ],
+              ],
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 7.5),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo900),
+              cellStyle: const pw.TextStyle(fontSize: 7.5),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              cellAlignment: pw.Alignment.centerLeft,
+            ),
+            pw.SizedBox(height: 14),
+
+            // Policy & Footnote
+            pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey100,
+                borderRadius: pw.BorderRadius.circular(4),
+              ),
+              child: pw.Text(
+                'Salary Calculation Rules: Daily Basic = Basic/Days in Month • Daily Variable = Variable/Days in Month • Hourly OT Rate = (Basic Salary / Days in Month) / 8 hrs (Variable allowance is strictly excluded from OT rate calculation). '
+                'In-between Sundays surrounded by worked days are credited as Paid Weekly Offs (e.g. 8 worked days + 1 in-between Sunday = 9 credited days). Total Salary = Earned Basic + Earned Variable + Earned OT.',
+                style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700),
+              ),
+            ),
+          ];
+        },
+      ),
+    );
+
+    return pdf.save();
+  }
+
+  /// Exports workforce salary PDF and opens native sharing dialog
+  static Future<void> exportWorkforceSalaryPdf({
+    required String organizationName,
+    required List<EmployeeEntity> employees,
+    required List<AttendanceRecord> records,
+    required SalaryCycle cycle,
+  }) async {
+    final bytes = await buildWorkforceSalaryPdfBytes(
+      organizationName: organizationName,
+      employees: employees,
+      records: records,
+      cycle: cycle,
+    );
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'Workforce_Salary_Payroll_${cycle.id}.pdf',
+    );
+  }
+
+  /// Exports individual employee payslip PDF with day-by-day calculations
+  static Future<void> exportEmployeeSalarySlipPdf({
+    required String organizationName,
+    required EmployeeSalarySummary summary,
+  }) async {
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(28),
+        build: (pw.Context context) {
+          return [
+            // Company Header
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      organizationName.toUpperCase(),
+                      style: pw.TextStyle(
+                        fontSize: 16,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.indigo900,
+                      ),
+                    ),
+                    pw.Text('EMPLOYEE PAYSLIP & DAY-WISE LEDGER', style: pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text('Period: ${summary.cycle.shortPeriodLabel}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                    pw.Text('Date: ${DateFormat("dd MMM yyyy").format(DateTime.now())}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 12),
+
+            // Employee Profile & Salary Base Details
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey300),
+                borderRadius: pw.BorderRadius.circular(6),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Employee Name: ${summary.employeeName}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                      pw.Text('Employee Code: ${summary.employeeCode}', style: const pw.TextStyle(fontSize: 9)),
+                      pw.Text('Department: ${summary.department}', style: const pw.TextStyle(fontSize: 9)),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('Monthly Fixed: AED ${summary.config.fixedSalary.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 9)),
+                      pw.Text('Monthly Variable: AED ${summary.config.variableSalary.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 9)),
+                      pw.Text('Daily Rate: AED ${summary.config.dailyBaseRate.toStringAsFixed(2)}/day', style: const pw.TextStyle(fontSize: 9)),
+                      pw.Text('Hourly OT Rate: AED ${summary.hourlyOtRate.toStringAsFixed(2)}/hr', style: const pw.TextStyle(fontSize: 9, color: PdfColors.orange900)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 12),
+
+            // Pay Summary
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.indigo50,
+                borderRadius: pw.BorderRadius.circular(6),
+                border: pw.Border.all(color: PdfColors.indigo200),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'NET SALARY CREDITED: AED ${summary.grossTotalSalary.toStringAsFixed(2)}',
+                    style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900),
+                  ),
+                  pw.Text(
+                    '${summary.totalPayableDays} Payable Days (${summary.daysWorked}d worked + ${summary.paidSundays}d Sun off)',
+                    style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 12),
+
+            // Day-Wise Calculation Ledger Table
+            pw.TableHelper.fromTextArray(
+              headers: ['Date', 'Day', 'Status', 'Regular', 'OT Hours', 'Fixed', 'Variable', 'OT Credit', 'Day Total', 'Cumul Total'],
+              data: summary.dailyRecords.map((r) => [
+                    DateFormat('dd MMM').format(r.date),
+                    DateFormat('EEE').format(r.date),
+                    r.status.label,
+                    '${r.regularHours.toStringAsFixed(1)}h',
+                    '${r.overtimeHours.toStringAsFixed(1)}h',
+                    r.isPayable ? r.dailyFixedCredit.toStringAsFixed(1) : '-',
+                    r.isPayable ? r.dailyVariableCredit.toStringAsFixed(1) : '-',
+                    r.dailyOtCredit > 0 ? r.dailyOtCredit.toStringAsFixed(1) : '-',
+                    r.isPayable ? r.dailyTotalSalary.toStringAsFixed(2) : '-',
+                    r.isPayable ? r.cumulativeSalary.toStringAsFixed(2) : '-',
+                  ]).toList(),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 7.5),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo900),
+              cellStyle: const pw.TextStyle(fontSize: 7),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+              cellAlignment: pw.Alignment.centerLeft,
+            ),
+            pw.SizedBox(height: 10),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(6),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey100,
+                borderRadius: pw.BorderRadius.circular(4),
+              ),
+              child: pw.Text(
+                'Note: Hourly Overtime Rate is strictly derived from Basic Salary ONLY: (Basic Salary / Days in Month) / 8 hrs. Variable allowance is excluded from the OT rate calculation.',
+                style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700),
+              ),
+            ),
+          ];
+        },
+      ),
+    );
+
+    final bytes = await pdf.save();
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'Payslip_${summary.employeeCode}_${summary.cycle.id}.pdf',
+    );
   }
 }
 

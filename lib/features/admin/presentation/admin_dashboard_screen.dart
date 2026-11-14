@@ -7,6 +7,7 @@ import 'office_management_screen.dart';
 import 'work_site_management_screen.dart';
 import 'live_tracking_map_screen.dart';
 import 'reports_analytics_screen.dart';
+import '../../salary/presentation/salary_payroll_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'ownership_transfer_dialog.dart';
@@ -75,6 +76,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       icon: Icons.analytics_outlined,
       activeIcon: Icons.analytics_rounded,
       label: 'Reports',
+    ),
+    NavDestinationItem(
+      icon: Icons.payments_outlined,
+      activeIcon: Icons.payments_rounded,
+      label: 'Salary & Payroll',
     ),
   ];
 
@@ -203,6 +209,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   const LiveTrackingMapScreen(key: ValueKey('live_map_tab')),
                   const ReportsAnalyticsScreen(
                       key: ValueKey('reports_analytics_tab')),
+                  const SalaryPayrollScreen(
+                      key: ValueKey('salary_payroll_tab')),
                 ],
               ),
             ),
@@ -980,6 +988,28 @@ class AdminOverviewTab extends StatelessWidget {
                 side: BorderSide(
                   color: primary.withValues(alpha: 0.35),
                 ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                onNavigateTab?.call(7); // Navigate to Salary & Payroll tab
+              },
+              icon: const Icon(Icons.payments_rounded, size: 16),
+              label: const Text(
+                'Open Salary & Payroll Module',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primary,
+                foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),

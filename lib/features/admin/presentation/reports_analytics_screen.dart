@@ -18,6 +18,12 @@ import '../../../core/widgets/app_animated_tab_switcher.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../attendance/domain/attendance_record.dart';
 import '../../timesheet/domain/timesheet_entry.dart';
+import '../../salary/domain/employee_salary_config.dart';
+import '../../salary/domain/daily_salary_record.dart';
+import '../../salary/domain/employee_salary_summary.dart';
+import '../../salary/utils/salary_calculator.dart';
+import '../../salary/presentation/edit_salary_dialog.dart';
+import '../../salary/presentation/put_office_attendance_dialog.dart';
 import 'admin_edit_attendance_dialog.dart';
 
 class ReportsAnalyticsScreen extends StatefulWidget {
@@ -2243,7 +2249,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           const Divider(height: 20),
 
           const SizedBox(height: 4),
-          // Sub-Tab Navigation Bar: Attendance & Timesheet Logs vs Emergency Duty Details vs Leave Records
+          // Sub-Tab Navigation Bar: Attendance & Timesheet Logs vs Emergency Duty Details vs Leave Records vs Salary Calc
           AppAnimatedTabSwitcher(
             selectedIndex: _empDetailSubTab,
             tabs: const [
@@ -2258,6 +2264,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               TabItemData(
                 label: 'Leave Records',
                 icon: Icons.event_busy_rounded,
+              ),
+              TabItemData(
+                label: 'Salary & Daily Calc',
+                icon: Icons.payments_rounded,
               ),
             ],
             onTabChanged: (index) {
@@ -2282,6 +2292,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             _buildEmployeeLeaveRecordsSubTab(
               emp,
               empLeaveSummary,
+              isDark,
+              palette,
+              activePrimary,
+            )
+          else if (_empDetailSubTab == 3)
+            _buildEmployeeSalarySubTab(
+              emp,
+              empRecords,
+              _selectedSalaryCycle ?? SalaryCycle.current(),
               isDark,
               palette,
               activePrimary,
@@ -3881,6 +3900,574 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildEmployeeSalarySubTab(
+    EmployeeEntity emp,
+    List<AttendanceRecord> empRecords,
+    SalaryCycle cycle,
+    bool isDark,
+    dynamic palette,
+    Color activePrimary,
+  ) {
+    final salaryConfig = _db.getEmployeeSalary(
+          employeeCode: emp.employeeCode,
+          employeeId: emp.id,
+          employeeName: emp.name,
+        ) ??
+        EmployeeSalaryConfig(
+          employeeCode: emp.employeeCode,
+          employeeId: emp.id,
+          employeeName: emp.name,
+          department: emp.department.isNotEmpty ? emp.department : 'General',
+          fixedSalary: 1200.0,
+          variableSalary: 600.0,
+        );
+
+    final summary = SalaryCalculator.calculateEmployeeSalary(
+      config: salaryConfig,
+      employee: emp,
+      records: empRecords,
+      cycle: cycle,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. Policy & Calculation Rule Banner
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: activePrimary.withValues(alpha: isDark ? 0.15 : 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: activePrimary.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.info_outline_rounded, color: activePrimary, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Day-Wise Salary & In-Between Sunday Weekly Off Rule',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: activePrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Fixed and Variable rates are calculated daily (Base / Days in Month). In-between Sundays between worked days are credited as Paid Weekly Offs (e.g. 8 days worked + 1 in-between Sunday = 9 credited days). Overtime is strictly credited from Basic Salary only: (Basic Salary / Days in Month) / 8.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? palette.textSecondaryDark : Colors.grey.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // 2. Base Configuration & Edit Bar
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isDark ? palette.surfaceDark : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark ? palette.cardBorderDark : Colors.grey.shade200,
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Basic Salary', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                        Text(
+                          'AED ${salaryConfig.basicSalary.toStringAsFixed(0)}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        Text(
+                          'AED ${summary.dailyRecords.isNotEmpty ? summary.dailyRecords.first.dailyFixedCredit.toStringAsFixed(2) : salaryConfig.dailyFixedRate.toStringAsFixed(2)}/d',
+                          style: TextStyle(fontSize: 10, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Variable / Allow.', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                        Text(
+                          'AED ${salaryConfig.variableSalary.toStringAsFixed(0)}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        Text(
+                          'AED ${summary.dailyRecords.isNotEmpty ? summary.dailyRecords.first.dailyVariableCredit.toStringAsFixed(2) : salaryConfig.dailyVariableRate.toStringAsFixed(2)}/d',
+                          style: TextStyle(fontSize: 10, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Hourly OT Rate', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                        Text(
+                          salaryConfig.otIncludedInVariable
+                              ? 'AED 0.00'
+                              : 'AED ${summary.hourlyOtRate.toStringAsFixed(2)}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        Text(
+                          salaryConfig.otIncludedInVariable ? 'Fixed in Var' : '(Basic / Days) / 8',
+                          style: const TextStyle(fontSize: 10, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Monthly Base', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                        Text(
+                          'AED ${salaryConfig.monthlyBaseTotal.toStringAsFixed(0)}',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: activePrimary),
+                        ),
+                        const Text('Fixed + Var', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: summary.daysWorked == 0 ? Colors.amber[700] : activePrimary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                ),
+                icon: const Icon(Icons.post_add_rounded, size: 15),
+                label: Text(
+                  summary.daysWorked == 0 ? 'Put Attendance' : 'Attendance',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () {
+                  PutOfficeAttendanceDialog.show(
+                    context,
+                    summary: summary,
+                    onAttendanceSaved: () => setState(() {}),
+                  );
+                },
+              ),
+              const SizedBox(width: 6),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: activePrimary,
+                  side: BorderSide(color: activePrimary),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                ),
+                icon: const Icon(Icons.edit_rounded, size: 15),
+                label: const Text('Edit', style: TextStyle(fontSize: 11)),
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => EditSalaryDialog(
+                      employee: emp,
+                      existingConfig: salaryConfig,
+                      onSaved: () => setState(() {}),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        // 2.5 Quick Toggle for Fixed OT in Variable (Zero OT)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: salaryConfig.otIncludedInVariable
+                ? activePrimary.withValues(alpha: isDark ? 0.2 : 0.08)
+                : (isDark ? palette.surfaceDark : Colors.white),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: salaryConfig.otIncludedInVariable
+                  ? activePrimary.withValues(alpha: 0.4)
+                  : (isDark ? palette.cardBorderDark : Colors.grey.shade200),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(
+                      salaryConfig.otIncludedInVariable
+                          ? Icons.check_circle_rounded
+                          : Icons.schedule_rounded,
+                      size: 16,
+                      color: salaryConfig.otIncludedInVariable
+                          ? activePrimary
+                          : Colors.grey,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Fixed OT Included in Variable Salary',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: salaryConfig.otIncludedInVariable
+                                  ? activePrimary
+                                  : (isDark ? Colors.white70 : Colors.black87),
+                            ),
+                          ),
+                          Text(
+                            salaryConfig.otIncludedInVariable
+                                ? 'Overtime is set to AED 0.00 (already included in variable allowance)'
+                                : 'Overtime is calculated strictly from Basic Salary',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isDark ? palette.textSecondaryDark : palette.textSecondaryLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch.adaptive(
+                value: salaryConfig.otIncludedInVariable,
+                activeColor: activePrimary,
+                onChanged: (val) {
+                  final updated = salaryConfig.copyWith(otIncludedInVariable: val);
+                  _db.saveEmployeeSalary(updated, persist: true);
+                  setState(() {});
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Office Staff Attendance Prompt (if 0 days logged)
+        if (summary.daysWorked == 0) ...[
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: isDark ? 0.16 : 0.1),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '0 Days Logged (Office Staff Attendance Needed)',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.amber),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${emp.name} has 0 days of attendance recorded for ${cycle.shortPeriodLabel}. '
+                        'Office staff do not clock in via the mobile application. '
+                        'Use "Put Office Attendance" to bulk mark worked days (e.g., 26 days) or record specific dates to calculate salary automatically.',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          height: 1.3,
+                          color: isDark ? Colors.grey[300] : Colors.grey[800],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          PutOfficeAttendanceDialog.show(
+                            context,
+                            summary: summary,
+                            onAttendanceSaved: () => setState(() {}),
+                          );
+                        },
+                        icon: const Icon(Icons.post_add_rounded, size: 16),
+                        label: const Text(
+                          'Put Office Attendance Now',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.amber[700],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        // 3. Cycle Earned Salary Metric Card
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: isDark
+                  ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
+                  : [const Color(0xFF1E3A8A), const Color(0xFF1D4ED8)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'CYCLE EARNED SALARY',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${summary.totalPayableDays} Payable Days (${summary.daysWorked}d worked + ${summary.paidSundays}d Sun)',
+                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'AED ${summary.grossTotalSalary.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Fixed: AED ${summary.earnedFixedSalary.toStringAsFixed(2)}',
+                      style: const TextStyle(color: Colors.white, fontSize: 11),
+                    ),
+                    Text(
+                      'Var: AED ${summary.earnedVariableSalary.toStringAsFixed(2)}',
+                      style: const TextStyle(color: Colors.white, fontSize: 11),
+                    ),
+                    Text(
+                      'OT: +AED ${summary.earnedOtSalary.toStringAsFixed(2)} (${summary.totalOvertimeHours.toStringAsFixed(1)}h)',
+                      style: const TextStyle(color: Color(0xFFFDE047), fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // 4. Day-by-Day Salary Ledger
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Day-by-Day Salary Ledger (${cycle.shortPeriodLabel})',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: isDark ? palette.textPrimaryDark : palette.textPrimaryLight,
+              ),
+            ),
+            Text(
+              '${summary.totalPayableDays} Credited Days',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: activePrimary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        ...summary.dailyRecords.map((r) {
+          final isSunday = r.isSunday;
+          final isPayable = r.isPayable;
+          final dateStr = DateFormat('dd MMM (EEE)').format(r.date);
+
+          Color statusColor;
+          String statusLabel;
+          switch (r.status) {
+            case DailySalaryStatus.present:
+              statusColor = Colors.green;
+              statusLabel = 'Present (${r.regularHours.toStringAsFixed(1)}h)';
+              if (r.overtimeHours > 0) statusLabel += ' + ${r.overtimeHours.toStringAsFixed(1)}h OT';
+              break;
+            case DailySalaryStatus.paidSundayOff:
+              statusColor = Colors.blue;
+              statusLabel = r.remarks?.isNotEmpty == true ? r.remarks! : 'Paid Sunday Off';
+              break;
+            case DailySalaryStatus.sundayDuty:
+              statusColor = Colors.orange;
+              statusLabel = 'Sunday Duty (${r.overtimeHours.toStringAsFixed(1)}h OT)';
+              break;
+            case DailySalaryStatus.absent:
+              statusColor = Colors.red;
+              statusLabel = 'Absent / Leave';
+              break;
+            case DailySalaryStatus.unpaidSundayOff:
+              statusColor = Colors.grey;
+              statusLabel = 'Unpaid Sunday';
+              break;
+            case DailySalaryStatus.futureDay:
+              statusColor = Colors.grey.shade400;
+              statusLabel = 'Upcoming';
+              break;
+          }
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: isDark ? palette.surfaceDark : Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: r.status == DailySalaryStatus.paidSundayOff
+                    ? activePrimary.withValues(alpha: 0.3)
+                    : (isDark ? palette.cardBorderDark : Colors.grey.shade200),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isSunday ? Colors.amber.withValues(alpha: 0.15) : (isDark ? Colors.grey.shade800 : Colors.grey.shade100),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    dateStr,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: isSunday ? Colors.amber.shade900 : (isDark ? Colors.white70 : Colors.black87),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              r.status.label,
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                                color: statusColor,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              statusLabel,
+                              style: TextStyle(fontSize: 10.5, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (isPayable) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Fixed: +${r.dailyFixedCredit.toStringAsFixed(1)} | Var: +${r.dailyVariableCredit.toStringAsFixed(1)}${r.dailyOtCredit > 0 ? " | OT: +${r.dailyOtCredit.toStringAsFixed(1)}" : ""}',
+                          style: TextStyle(fontSize: 9.5, color: isDark ? Colors.grey[500] : Colors.grey[500]),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      isPayable ? '+AED ${r.dailyTotalSalary.toStringAsFixed(2)}' : 'AED 0.00',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: isPayable ? Colors.green.shade700 : Colors.grey,
+                      ),
+                    ),
+                    if (isPayable)
+                      Text(
+                        'Total: AED ${r.cumulativeSalary.toStringAsFixed(0)} (${r.cumulativePayableDays}d)',
+                        style: TextStyle(fontSize: 9.5, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
     );
   }
 

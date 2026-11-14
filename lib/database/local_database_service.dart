@@ -11,6 +11,8 @@ import '../features/admin/domain/employee_entity.dart';
 import '../features/admin/domain/office_entity.dart';
 import '../features/admin/domain/work_site_entity.dart';
 import '../features/attendance/domain/attendance_record.dart';
+import '../features/salary/domain/employee_salary_config.dart';
+import '../features/salary/data/default_salary_data.dart';
 import '../core/utils/employee_directory_helper.dart';
 
 class LocalDatabaseService {
@@ -32,6 +34,7 @@ class LocalDatabaseService {
   final List<OfficeEntity> _offices = [];
   final List<WorkSiteEntity> _workSites = [];
   final List<AttendanceRecord> _attendanceRecords = [];
+  final List<EmployeeSalaryConfig> _employeeSalaries = [];
 
   // Initialize with Hive persistence & seed enterprise defaults
   Future<void> init() async {
@@ -124,20 +127,36 @@ class LocalDatabaseService {
         } catch (_) {}
       }
 
-      if (kIsWeb) {
-        clearAttendanceCache();
-      } else {
-        final savedAttendanceJson = _settingsBox?.get('attendance_records_json');
-        if (savedAttendanceJson != null &&
-            savedAttendanceJson.toString().isNotEmpty) {
-          try {
-            final List<dynamic> decoded = jsonDecode(savedAttendanceJson);
-            _attendanceRecords.clear();
-            for (final item in decoded) {
-              _attendanceRecords.add(AttendanceRecord.fromJson(item));
+      final savedAttendanceJson = _settingsBox?.get('attendance_records_json');
+      if (savedAttendanceJson != null &&
+          savedAttendanceJson.toString().isNotEmpty) {
+        try {
+          final List<dynamic> decoded = jsonDecode(savedAttendanceJson);
+          _attendanceRecords.clear();
+          for (final item in decoded) {
+            _attendanceRecords.add(AttendanceRecord.fromJson(item));
+          }
+        } catch (_) {}
+      }
+
+      final savedSalariesJson = _settingsBox?.get('salaries_json');
+      if (savedSalariesJson != null && savedSalariesJson.toString().isNotEmpty) {
+        try {
+          final List<dynamic> decoded = jsonDecode(savedSalariesJson);
+          _employeeSalaries.clear();
+          for (final item in decoded) {
+            final cfg = EmployeeSalaryConfig.fromJson(item);
+            if (!_isExcludedSalaryOwner(cfg.employeeName, cfg.employeeCode)) {
+              _employeeSalaries.add(cfg);
             }
-          } catch (_) {}
-        }
+          }
+        } catch (_) {}
+      }
+      if (_employeeSalaries.isEmpty) {
+        _employeeSalaries.addAll(DefaultSalaryData.defaultConfigs);
+        _persistEmployeeSalaries();
+      } else {
+        _employeeSalaries.removeWhere((s) => _isExcludedSalaryOwner(s.employeeName, s.employeeCode));
       }
 
       // Check live setup status against Supabase table 'organizations'
@@ -162,6 +181,7 @@ class LocalDatabaseService {
     _persistEmployees();
     _persistWorkSites();
     _persistAttendanceRecords();
+    _persistEmployeeSalaries();
   }
 
   // Setup Wizard Flag
@@ -750,6 +770,131 @@ class LocalDatabaseService {
     _persistEmployees();
   }
 
+  // ===========================================================================
+  // Employee Salary Management & Day-Wise Payroll Settings
+  // ===========================================================================
+
+  void _persistEmployeeSalaries() {
+    _settingsBox?.put(
+      'salaries_json',
+      jsonEncode(_employeeSalaries.map((s) => s.toJson()).toList()),
+    );
+  }
+
+  bool _isExcludedSalaryOwner(String name, String code) {
+    final n = name.trim().toLowerCase();
+    final c = code.trim().toLowerCase();
+    if (c == '1058' || c == 'emp-1058') return true;
+    if (n.contains('nasur') ||
+        n.contains('alnaser') ||
+        n.contains('al naser') ||
+        n.contains('al-naser') ||
+        n.contains('nasrudeen') ||
+        n.contains('nasruddin') ||
+        n.contains('nasirudeen')) {
+      return true;
+    }
+    if (n.contains('siraj') || n.contains('sirajudeen') || n.contains('sirajuddin')) {
+      return true;
+    }
+    if (n.contains('asik') || n.contains('saheel') || n.contains('ashik') || n.contains('sahil')) {
+      return true;
+    }
+    return false;
+  }
+
+  /// Returns all stored salary configurations, guaranteed to include master defaults
+  List<EmployeeSalaryConfig> getEmployeeSalaries() {
+    if (_employeeSalaries.isEmpty) {
+      _employeeSalaries.addAll(DefaultSalaryData.defaultConfigs);
+      _persistEmployeeSalaries();
+    }
+    _employeeSalaries.removeWhere((s) => _isExcludedSalaryOwner(s.employeeName, s.employeeCode));
+    return List.unmodifiable(_employeeSalaries);
+  }
+
+  /// Returns a map for rapid O(1) salary configuration resolution
+  Map<String, EmployeeSalaryConfig> getEmployeeSalaryMap() {
+    final list = getEmployeeSalaries();
+    final Map<String, EmployeeSalaryConfig> map = {};
+    for (final s in list) {
+      if (s.employeeCode.isNotEmpty) {
+        map[s.employeeCode.toUpperCase()] = s;
+        map[s.employeeCode] = s;
+      }
+      if (s.employeeId != null && s.employeeId!.isNotEmpty) {
+        map[s.employeeId!] = s;
+      }
+      if (s.employeeName.isNotEmpty) {
+        map[s.employeeName.toLowerCase().trim()] = s;
+      }
+    }
+    return map;
+  }
+
+  /// Resolves the exact salary configuration for an employee by code, id, or name
+  EmployeeSalaryConfig? getEmployeeSalary({
+    String? employeeCode,
+    String? employeeId,
+    String? employeeName,
+  }) {
+    final list = getEmployeeSalaries();
+    final cleanCode = (employeeCode ?? '').trim().toUpperCase();
+    final cleanId = (employeeId ?? '').trim();
+    final cleanName = (employeeName ?? '').trim().toLowerCase();
+
+    for (final s in list) {
+      if (cleanCode.isNotEmpty && s.employeeCode.toUpperCase() == cleanCode) {
+        return s;
+      }
+      if (cleanId.isNotEmpty && s.employeeId == cleanId) {
+        return s;
+      }
+      if (cleanName.isNotEmpty && s.employeeName.toLowerCase().trim() == cleanName) {
+        return s;
+      }
+      if (EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: cleanId,
+        recordEmployeeName: cleanName,
+        employeeCode: s.employeeCode,
+        employeeName: s.employeeName,
+      )) {
+        return s;
+      }
+    }
+    return null;
+  }
+
+  /// Saves or updates an employee's fixed and variable salary configuration
+  void saveEmployeeSalary(EmployeeSalaryConfig config, {bool persist = true}) {
+    if (_isExcludedSalaryOwner(config.employeeName, config.employeeCode)) {
+      return;
+    }
+    final index = _employeeSalaries.indexWhere((s) =>
+        (s.employeeCode.isNotEmpty && s.employeeCode.toUpperCase() == config.employeeCode.toUpperCase()) ||
+        (s.employeeId != null && config.employeeId != null && s.employeeId == config.employeeId) ||
+        (s.employeeName.trim().toLowerCase() == config.employeeName.trim().toLowerCase()));
+
+    if (index >= 0) {
+      _employeeSalaries[index] = config;
+    } else {
+      _employeeSalaries.add(config);
+    }
+    if (persist) {
+      _persistEmployeeSalaries();
+    }
+  }
+
+  /// Bulk saves or updates salary configurations
+  void saveEmployeeSalariesBatch(List<EmployeeSalaryConfig> configs, {bool persist = true}) {
+    for (final c in configs) {
+      saveEmployeeSalary(c, persist: false);
+    }
+    if (persist) {
+      _persistEmployeeSalaries();
+    }
+  }
+
   bool? getGeofenceOverride({
     String? userId,
     String? email,
@@ -1080,6 +1225,44 @@ class LocalDatabaseService {
       saveAttendanceRecord(record, persist: false);
     }
     _persistAttendanceRecords();
+  }
+
+  /// Persists office attendance calendar records locally and syncs them to Supabase cloud DB.
+  Future<bool> saveOfficeAttendanceBatch({
+    required List<AttendanceRecord> newRecords,
+    List<String> deletedRecordIds = const [],
+  }) async {
+    // 1. Remove deleted records locally
+    if (deletedRecordIds.isNotEmpty) {
+      final deleteSet = deletedRecordIds.toSet();
+      _attendanceRecords.removeWhere((r) => deleteSet.contains(r.id));
+    }
+
+    // 2. Add or update new records locally
+    for (final record in newRecords) {
+      saveAttendanceRecord(record, persist: false);
+    }
+    _persistAttendanceRecords();
+
+    // 3. Sync deletions to Supabase Cloud DB
+    if (deletedRecordIds.isNotEmpty) {
+      try {
+        await SupabaseService().deleteAttendanceRecords(deletedRecordIds);
+      } catch (e) {
+        debugPrint('Supabase delete office attendance error: $e');
+      }
+    }
+
+    // 4. Sync new records to Supabase Cloud DB
+    if (newRecords.isNotEmpty) {
+      try {
+        await SupabaseService().saveAdminAttendanceOverride(records: newRecords);
+      } catch (e) {
+        debugPrint('Supabase save office attendance error: $e');
+      }
+    }
+
+    return true;
   }
 
   void updateAttendanceRecord(AttendanceRecord updatedRecord) {
