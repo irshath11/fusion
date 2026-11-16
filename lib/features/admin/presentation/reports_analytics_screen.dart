@@ -20,7 +20,6 @@ import '../../attendance/domain/attendance_record.dart';
 import '../../timesheet/domain/timesheet_entry.dart';
 import '../../salary/domain/employee_salary_config.dart';
 import '../../salary/domain/daily_salary_record.dart';
-import '../../salary/domain/employee_salary_summary.dart';
 import '../../salary/utils/salary_calculator.dart';
 import '../../salary/presentation/edit_salary_dialog.dart';
 import '../../salary/presentation/put_office_attendance_dialog.dart';
