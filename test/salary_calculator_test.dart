@@ -163,11 +163,11 @@ void main() {
       // Worked days = 6 + 2 = 8 days
       expect(summary.daysWorked, 8);
 
-      // In-between paid Sundays = 1 (the Sunday on Sep 6 surrounded by worked days)
-      expect(summary.paidSundays, 1);
+      // Paid Sundays = 2 (Aug 30 because Mon Aug 31 worked, and Sep 6 in-between)
+      expect(summary.paidSundays, 2);
 
-      // Total payable days = 8 + 1 = 9 days!
-      expect(summary.totalPayableDays, 9);
+      // Total payable days = 8 + 2 = 10 days
+      expect(summary.totalPayableDays, 10);
 
       // Day-wise check on Sunday 2026-09-06:
       final sundayRecord = summary.dailyRecords.firstWhere(
@@ -180,14 +180,14 @@ void main() {
       expect(sundayRecord.dailyTotalSalary, closeTo(86.67, 0.01));
 
       // Financial verification:
-      // Earned Fixed = 9 * 50 = 450.0
-      expect(summary.earnedFixedSalary, 450.0);
+      // Earned Fixed = 10 * 50 = 500.0
+      expect(summary.earnedFixedSalary, 500.0);
 
-      // Earned Variable = 9 * (1100 / 30) = 330.0
-      expect(summary.earnedVariableSalary, closeTo(330.0, 0.01));
+      // Earned Variable = 10 * (1100 / 30) = 366.67
+      expect(summary.earnedVariableSalary, closeTo(366.67, 0.01));
 
-      // Total Gross Salary = 450 + 330 = 780.0
-      expect(summary.grossTotalSalary, closeTo(780.0, 0.01));
+      // Total Gross Salary = 500 + 366.67 = 866.67
+      expect(summary.grossTotalSalary, closeTo(866.67, 0.01));
     });
 
     test('Handwritten sheet case: Ramesh Gopal (Fixed: 1500, Variable: 500, 5 days, 12.5h OT = 411.46)', () {
