@@ -57,6 +57,9 @@ dependencies:
   latlong2: ^0.10.1
   file_picker: ^11.0.3
 
+dependency_overrides:
+  camera_web: ^0.3.6
+
 flutter:
   uses-material-design: true
 
