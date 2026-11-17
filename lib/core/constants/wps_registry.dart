@@ -283,6 +283,16 @@ class WpsMasterRegistry {
       defaultBasicSalary: 1500.0,
     ),
     WpsEmployeeRecord(
+      employeeCode: '1058',
+      fullName: 'Al Naser Samsudeen',
+      workPermitNo: '127445488',
+      personalNo: '10007068473900',
+      bankName: 'DIB',
+      bankAccountNo: 'AE130240003580188455101',
+      division: 'Fusion',
+      defaultBasicSalary: 2000.0,
+    ),
+    WpsEmployeeRecord(
       employeeCode: '1059',
       fullName: 'Saleem Allapitchai',
       workPermitNo: '127555347',

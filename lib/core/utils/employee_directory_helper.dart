@@ -272,7 +272,18 @@ class EmployeeDirectoryHelper {
       email: 'naser@gmail.com',
       designation: 'Technician',
       department: 'Fusion',
-      aliases: ['naser', 'al naser', 'alnaser'],
+      aliases: [
+        'naser',
+        'al naser',
+        'alnaser',
+        'al naser samsudeen',
+        'alnaser samsudeen',
+        'al-naser',
+        'al-naser samsudeen',
+        'emp-1058',
+        '1058',
+        'emp-naser',
+      ],
     ),
     OfficialEmployeeRecord(
       employeeId: '1059',
@@ -475,6 +486,7 @@ class EmployeeDirectoryHelper {
       if (tEmail.isNotEmpty && tEmail == oEmail) return true;
       if (tName.isNotEmpty && tName == oName) return true;
       if (tName.isNotEmpty && recordOfficial.aliases.any((a) => a.toLowerCase() == tName)) return true;
+      if (tIdNorm.isNotEmpty && rIdNorm == tIdNorm) return true;
       return false;
     }
 
@@ -488,14 +500,18 @@ class EmployeeDirectoryHelper {
       if (rName.isNotEmpty && rName == oName) return true;
       if (rName.isNotEmpty && targetOfficial.aliases.any((a) => a.toLowerCase() == rName)) return true;
       if (rIdNorm.isNotEmpty && targetOfficial.aliases.any((a) => a.toLowerCase() == rIdNorm)) return true;
+      if (tIdNorm.isNotEmpty && rIdNorm == tIdNorm) return true;
       return false;
     }
 
     // Case 4D: Neither resolves to an official record (unlisted custom employees).
-    // If both have explicit, non-empty IDs/codes that differ, they are definitely different employees.
-    if (rIdNorm.isNotEmpty && (tIdNorm.isNotEmpty || tCodeNorm.isNotEmpty)) {
-      if (tIdNorm.isNotEmpty && rIdNorm != tIdNorm) return false;
-      if (tCodeNorm.isNotEmpty && rIdNorm != tCodeNorm) return false;
+    // If target has explicit ID or Code, check if record ID matches either one:
+    final hasTargetIdOrCode = tIdNorm.isNotEmpty || tCodeNorm.isNotEmpty;
+    if (rIdNorm.isNotEmpty && hasTargetIdOrCode) {
+      final matchesAnyTargetId = (tIdNorm.isNotEmpty && rIdNorm == tIdNorm) ||
+          (tCodeNorm.isNotEmpty && rIdNorm == tCodeNorm);
+      if (matchesAnyTargetId) return true;
+      return false;
     }
 
     // Exact normalized name match
