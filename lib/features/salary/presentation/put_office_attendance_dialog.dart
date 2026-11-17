@@ -58,9 +58,17 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
     super.initState();
     final cycle = widget.summary.cycle;
     final config = widget.summary.config;
-    final empId = widget.summary.employeeId ?? config.employeeId ?? config.employeeCode;
     final empCode = widget.summary.employeeCode;
     final empName = widget.summary.employeeName;
+    final empFromDb = LocalDatabaseService().getEmployees().where((e) =>
+        EmployeeDirectoryHelper.matchesEmployeeIdentity(
+          recordEmployeeId: e.id,
+          recordEmployeeName: e.name,
+          employeeId: widget.summary.employeeId,
+          employeeCode: empCode,
+          employeeName: empName,
+        )).firstOrNull;
+    final empId = empFromDb?.id ?? widget.summary.employeeId ?? config.employeeId ?? config.employeeCode;
 
     // Generate all dates in the salary cycle
     _cycleDates = [];
@@ -84,19 +92,21 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
         employeeName: empName,
       );
       final isCalendarRecord = r.deviceId == 'OFFICE_CALENDAR_ENTRY' ||
+          r.remarks == 'Office Attendance (Calendar)' ||
           r.id.startsWith('office_') ||
-          r.remarks == 'Office Attendance (Calendar)';
+          r.address.contains('Calendar Entry');
       return matches && cycle.contains(r.eventTimestamp) && isCalendarRecord;
     }).toList();
 
-    double existingOt = 0.0;
+    final Map<String, double> otByDate = {};
     for (final r in existingRecords) {
       final key = DateFormat('yyyyMMdd').format(r.eventTimestamp);
       _selectedDateKeys.add(key);
       if (r.manualOvertimeHours != null && r.manualOvertimeHours! > 0) {
-        existingOt += r.manualOvertimeHours!;
+        otByDate[key] = r.manualOvertimeHours!;
       }
     }
+    final existingOt = otByDate.values.fold<double>(0.0, (sum, val) => sum + val);
 
     if (existingOt > 0) {
       _totalOtHours = existingOt;
@@ -224,9 +234,17 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
     try {
       final cycle = widget.summary.cycle;
       final config = widget.summary.config;
-      final empId = widget.summary.employeeId ?? config.employeeId ?? config.employeeCode;
       final empName = widget.summary.employeeName;
       final empCode = widget.summary.employeeCode;
+      final empFromDb = LocalDatabaseService().getEmployees().where((e) =>
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: e.id,
+            recordEmployeeName: e.name,
+            employeeId: widget.summary.employeeId,
+            employeeCode: empCode,
+            employeeName: empName,
+          )).firstOrNull;
+      final empId = empFromDb?.id ?? widget.summary.employeeId ?? config.employeeId ?? config.employeeCode;
 
       // 1. Identify and remove any calendar records in this cycle whose date is NOT in _selectedDateKeys
       final allRecords = LocalDatabaseService().getAttendanceRecords();
@@ -239,8 +257,9 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
           employeeName: empName,
         );
         final isCalendarRecord = r.deviceId == 'OFFICE_CALENDAR_ENTRY' ||
+            r.remarks == 'Office Attendance (Calendar)' ||
             r.id.startsWith('office_') ||
-            r.remarks == 'Office Attendance (Calendar)';
+            r.address.contains('Calendar Entry');
         return matches && cycle.contains(r.eventTimestamp) && isCalendarRecord;
       }).toList();
 
@@ -269,8 +288,8 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
         final checkInDt = DateTime(date.year, date.month, date.day, 9, 0);
         final checkOutDt = DateTime(date.year, date.month, date.day, 18, 0);
 
-        final inId = uuid.v5(Uuid.NAMESPACE_URL, 'office_${empCode}_${dateKey}_in');
-        final outId = uuid.v5(Uuid.NAMESPACE_URL, 'office_${empCode}_${dateKey}_out');
+        final inId = uuid.v5(Namespace.url.value, 'office_${empCode}_${dateKey}_in');
+        final outId = uuid.v5(Namespace.url.value, 'office_${empCode}_${dateKey}_out');
 
         newRecords.add(
           AttendanceRecord(
@@ -378,9 +397,17 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
     try {
       final cycle = widget.summary.cycle;
       final config = widget.summary.config;
-      final empId = widget.summary.employeeId ?? config.employeeId ?? config.employeeCode;
-      final empCode = widget.summary.employeeCode;
       final empName = widget.summary.employeeName;
+      final empCode = widget.summary.employeeCode;
+      final empFromDb = LocalDatabaseService().getEmployees().where((e) =>
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: e.id,
+            recordEmployeeName: e.name,
+            employeeId: widget.summary.employeeId,
+            employeeCode: empCode,
+            employeeName: empName,
+          )).firstOrNull;
+      final empId = empFromDb?.id ?? widget.summary.employeeId ?? config.employeeId ?? config.employeeCode;
 
       final allRecords = LocalDatabaseService().getAttendanceRecords();
       final toRemove = allRecords.where((r) {
@@ -392,8 +419,9 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
           employeeName: empName,
         );
         final isCalendarRecord = r.deviceId == 'OFFICE_CALENDAR_ENTRY' ||
+            r.remarks == 'Office Attendance (Calendar)' ||
             r.id.startsWith('office_') ||
-            r.remarks == 'Office Attendance (Calendar)';
+            r.address.contains('Calendar Entry');
         return matches && cycle.contains(r.eventTimestamp) && isCalendarRecord;
       }).toList();
 

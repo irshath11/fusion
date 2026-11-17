@@ -1774,7 +1774,41 @@ class SupabaseService {
         }
       }
 
-      // 4. Provision employee if known in directory
+      // 4. Search by employee name in employees and users tables
+      if (employeeName.trim().isNotEmpty) {
+        try {
+          final cleanName = employeeName.trim();
+          final empByName = await client!
+              .from('employees')
+              .select('id')
+              .or('name.ilike.%$cleanName%,full_name.ilike.%$cleanName%')
+              .limit(1)
+              .maybeSingle();
+          if (empByName != null && empByName['id'] != null) {
+            return empByName['id'].toString();
+          }
+
+          final userByName = await client!
+              .from('users')
+              .select('id')
+              .ilike('full_name', '%$cleanName%')
+              .limit(1)
+              .maybeSingle();
+          if (userByName != null && userByName['id'] != null) {
+            final empByUser = await client!
+                .from('employees')
+                .select('id')
+                .eq('user_id', userByName['id'].toString())
+                .maybeSingle();
+            if (empByUser != null && empByUser['id'] != null) {
+              return empByUser['id'].toString();
+            }
+            return userByName['id'].toString();
+          }
+        } catch (_) {}
+      }
+
+      // 5. Provision employee if known in directory
       final localOrg = LocalDatabaseService().organization;
       final orgId = localOrg?.id ?? '00000000-0000-0000-0000-000000000001';
       final validOrgId = await ensureOrganizationExistsInCloud(orgId) ?? orgId;
@@ -1810,6 +1844,10 @@ class SupabaseService {
       }
     } catch (e) {
       debugPrint('ensureEmployeeExistsInCloud note: $e');
+    }
+
+    if (_isValidUuid(employeeIdOrUid)) {
+      return employeeIdOrUid;
     }
 
     return null;
@@ -1919,18 +1957,116 @@ class SupabaseService {
     }
   }
 
-  /// Save or update admin attendance override records directly in Supabase DB
+  /// Save or update admin attendance override records directly in Supabase DB using high-speed bulk upsert
   Future<bool> saveAdminAttendanceOverride({
     required List<AttendanceRecord> records,
   }) async {
     if (!_isInitialized || client == null || records.isEmpty) return false;
 
-    bool allSuccess = true;
-    for (final rec in records) {
-      final ok = await insertAttendanceEntry(record: rec);
-      if (!ok) allSuccess = false;
+    try {
+      final localOrg = LocalDatabaseService().organization;
+      final orgId = localOrg?.id ?? '00000000-0000-0000-0000-000000000001';
+      final validOrgId = await ensureOrganizationExistsInCloud(orgId) ?? orgId;
+
+      // Cache resolved employee cloud UUIDs across this batch to avoid repeating lookups
+      final Map<String, String?> resolvedEmployeeIds = {};
+      for (final rec in records) {
+        final key = '${rec.employeeId}|${rec.employeeName}';
+        if (!resolvedEmployeeIds.containsKey(key)) {
+          resolvedEmployeeIds[key] = await ensureEmployeeExistsInCloud(
+            rec.employeeId,
+            rec.employeeName,
+          );
+        }
+      }
+
+      final List<Map<String, dynamic>> payloads = [];
+      for (final record in records) {
+        final key = '${record.employeeId}|${record.employeeName}';
+        final validEmployeeId = resolvedEmployeeIds[key] ??
+            (_isValidUuid(record.employeeId) ? record.employeeId : null);
+
+        if (validEmployeeId == null) {
+          debugPrint('saveAdminAttendanceOverride: No valid employee cloud ID for ${record.employeeName}');
+          continue;
+        }
+
+        String? targetRecordUuid = _isValidUuid(record.id) ? record.id : null;
+
+        final payload = <String, dynamic>{
+          if (targetRecordUuid != null) 'id': targetRecordUuid,
+          'organization_id': validOrgId,
+          'employee_id': validEmployeeId,
+          'employee_name': record.employeeName,
+          'workflow_step': record.workflowStep.name,
+          'event_timestamp': record.eventTimestamp.toIso8601String(),
+          'latitude': record.latitude,
+          'longitude': record.longitude,
+          'is_geofence_valid': record.isGeofenceValid,
+          'photo_url': record.photoBase64.isNotEmpty ? record.photoBase64 : null,
+          'address': record.address,
+          if (record.officeId != null && record.officeId!.isNotEmpty && _isValidUuid(record.officeId))
+            'office_id': record.officeId,
+          if (record.workSiteId != null && record.workSiteId!.isNotEmpty && _isValidUuid(record.workSiteId))
+            'work_site_id': record.workSiteId,
+          if (record.siteName != null && record.siteName!.isNotEmpty)
+            'site_name': record.siteName,
+          'manual_overtime_hours': record.manualOvertimeHours,
+          'remarks': record.remarks,
+          'is_edited': record.isEdited,
+          'edited_by': record.editedBy,
+          'device_id': record.deviceId.isEmpty ? 'OFFICE_CALENDAR_ENTRY' : record.deviceId,
+          'created_at': DateTime.now().toIso8601String(),
+        };
+        payloads.add(payload);
+      }
+
+      if (payloads.isEmpty) return false;
+
+      // Upsert in chunks of 50 to stay within request size limits
+      const chunkSize = 50;
+      for (var i = 0; i < payloads.length; i += chunkSize) {
+        final chunk = payloads.sublist(
+          i,
+          (i + chunkSize > payloads.length) ? payloads.length : i + chunkSize,
+        );
+        int retries = 0;
+        while (retries < 3) {
+          try {
+            await client!.from('attendance_records').upsert(chunk);
+            break;
+          } catch (e) {
+            final errStr = e.toString();
+            if (errStr.contains('PGRST204') || errStr.contains('Could not find the')) {
+              final RegExp regExp = RegExp(r"Could not find the '([^']+)' column");
+              final match = regExp.firstMatch(errStr);
+              if (match != null) {
+                final missingCol = match.group(1);
+                if (missingCol != null) {
+                  for (final item in chunk) {
+                    item.remove(missingCol);
+                  }
+                  retries++;
+                  continue;
+                }
+              }
+            }
+            debugPrint('Supabase bulk upsert chunk error: $e');
+            break;
+          }
+        }
+      }
+      return true;
+    } catch (e) {
+      debugPrint('Supabase saveAdminAttendanceOverride bulk error: $e');
+      // Fallback: try individual inserts if bulk has unexpected schema error
+      for (final rec in records) {
+        try {
+          await insertAttendanceEntry(record: rec);
+        } catch (_) {}
+      }
+      return false;
     }
-    return allSuccess;
   }
 
   /// Delete attendance records by their IDs from Supabase cloud database

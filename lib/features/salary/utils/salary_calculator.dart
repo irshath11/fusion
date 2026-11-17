@@ -326,12 +326,13 @@ class SalaryCalculator {
       }
     }
 
-    // Strictly checks for attendance entered via the newly added calendar-type date-only dialog.
-    // Regular employees with app clock-ins or historical admin edits remain false.
+    // Strictly checks for attendance entered via the calendar-type date-only dialog.
     final bool isCalendarAttendance = cycleRecords.isNotEmpty &&
         cycleRecords.any((r) =>
             r.deviceId == 'OFFICE_CALENDAR_ENTRY' ||
-            (r.remarks == 'Office Attendance (Calendar)' && r.id.startsWith('office_')));
+            r.remarks == 'Office Attendance (Calendar)' ||
+            r.id.startsWith('office_') ||
+            r.address.contains('Calendar Entry'));
 
     return EmployeeSalarySummary(
       employeeCode: empCode,
