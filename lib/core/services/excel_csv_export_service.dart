@@ -723,4 +723,312 @@ class ExcelCsvExportService {
     sheet.setColumnWidth(8, 16.0);
     sheet.setColumnWidth(9, 18.0);
   }
+
+  // ===========================================================================
+  // INTERIM OVERTIME EXCEL EXPORT (26 OCT - 31 OCT 2026)
+  // ===========================================================================
+
+  /// Exports dedicated Excel report for Interim Overtime (26 Oct - 31 Oct 2026)
+  static Future<void> exportInterimOtExcel({
+    required List<EmployeeEntity> employees,
+    required List<AttendanceRecord> records,
+    required Map<String, EmployeeSalaryConfig> salaryConfigs,
+  }) async {
+    final cycle = SalaryCycle.octoberTransition();
+    final bytes = await buildInterimOtExcelBytes(
+      cycle: cycle,
+      employees: employees,
+      records: records,
+      salaryConfigs: salaryConfigs,
+    );
+
+    await Printing.sharePdf(
+      bytes: Uint8List.fromList(bytes),
+      filename: 'Interim_OT_26-31_Oct_2026.xlsx',
+    );
+  }
+
+  /// Builds Excel workbook bytes for Interim Overtime breakdown (26 Oct - 31 Oct 2026)
+  static Future<List<int>> buildInterimOtExcelBytes({
+    required SalaryCycle cycle,
+    required List<EmployeeEntity> employees,
+    required List<AttendanceRecord> records,
+    required Map<String, EmployeeSalaryConfig> salaryConfigs,
+  }) async {
+    final excel = Excel.createExcel();
+
+    // Active staff excluding owners
+    final activeEmployees = employees.where((e) {
+      return !SalaryCalculator.isExcludedOwner(
+        name: e.name,
+        code: e.employeeCode,
+        email: e.email,
+        id: e.id,
+      );
+    }).toList();
+
+    const String sheetAll = 'All Staff Interim OT';
+    final String defaultSheet = excel.getDefaultSheet() ?? 'Sheet1';
+    excel.rename(defaultSheet, sheetAll);
+
+    // 1. All Staff Sheet
+    _populateInterimOtSheet(
+      sheet: excel[sheetAll],
+      sheetTitle: 'ALL STAFF INTERIM OVERTIME (26 OCT – 31 OCT 2026)',
+      cycle: cycle,
+      employees: activeEmployees,
+      records: records,
+      salaryConfigs: salaryConfigs,
+    );
+
+    // 2. Fusion Neo Sheet
+    final neoEmployees = activeEmployees
+        .where((e) => e.department.toLowerCase().contains('neo'))
+        .toList();
+    _populateInterimOtSheet(
+      sheet: excel['Fusion Neo OT'],
+      sheetTitle: 'FUSION NEO BUILDING CONTRACTING - INTERIM OVERTIME (26–31 OCT)',
+      cycle: cycle,
+      employees: neoEmployees,
+      records: records,
+      salaryConfigs: salaryConfigs,
+    );
+
+    // 3. Fusion Electro Sheet
+    final electroEmployees = activeEmployees
+        .where((e) => !e.department.toLowerCase().contains('neo'))
+        .toList();
+    _populateInterimOtSheet(
+      sheet: excel['Fusion Electro OT'],
+      sheetTitle: 'FUSION ELECTRO-MECHANICAL - INTERIM OVERTIME (26–31 OCT)',
+      cycle: cycle,
+      employees: electroEmployees,
+      records: records,
+      salaryConfigs: salaryConfigs,
+    );
+
+    final List<int>? encodedBytes = excel.encode();
+    return encodedBytes ?? [];
+  }
+
+  static void _populateInterimOtSheet({
+    required Sheet sheet,
+    required String sheetTitle,
+    required SalaryCycle cycle,
+    required List<EmployeeEntity> employees,
+    required List<AttendanceRecord> records,
+    required Map<String, EmployeeSalaryConfig> salaryConfigs,
+  }) {
+    // Styles
+    final titleStyle = CellStyle(
+      bold: true,
+      fontSize: 13,
+      fontColorHex: ExcelColor.fromHexString('#1E3A8A'),
+    );
+    final subTitleStyle = CellStyle(
+      fontSize: 10,
+      fontColorHex: ExcelColor.fromHexString('#64748B'),
+    );
+    final tableHeaderStyle = CellStyle(
+      bold: true,
+      fontSize: 10,
+      backgroundColorHex: ExcelColor.fromHexString('#1E3A8A'),
+      fontColorHex: ExcelColor.fromHexString('#FFFFFF'),
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+    );
+    final cellCenterStyle = CellStyle(
+      fontSize: 10,
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+    );
+    final cellTextStyle = CellStyle(
+      fontSize: 10,
+      verticalAlign: VerticalAlign.Center,
+    );
+    final cellNumberStyle = CellStyle(
+      fontSize: 10,
+      horizontalAlign: HorizontalAlign.Right,
+      verticalAlign: VerticalAlign.Center,
+    );
+    final totalStyle = CellStyle(
+      bold: true,
+      fontSize: 11,
+      backgroundColorHex: ExcelColor.fromHexString('#FEF08A'),
+      horizontalAlign: HorizontalAlign.Right,
+      verticalAlign: VerticalAlign.Center,
+    );
+    final totalTextStyle = CellStyle(
+      bold: true,
+      fontSize: 11,
+      backgroundColorHex: ExcelColor.fromHexString('#FEF08A'),
+      verticalAlign: VerticalAlign.Center,
+    );
+
+    // Row 1: Title
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 1))
+      ..value = TextCellValue(sheetTitle)
+      ..cellStyle = titleStyle;
+
+    // Row 2: Subtitle
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 2))
+      ..value = TextCellValue('6-Day Transition Period (26 Oct 2026 – 31 Oct 2026) | Regular Calendar Cycle Begins 1 Nov 2026')
+      ..cellStyle = subTitleStyle;
+
+    // Row 4: Headers
+    final headers = [
+      'SL NO',
+      'EMP ID',
+      'EMPLOYEE NAME',
+      'DEPARTMENT',
+      'BASIC SALARY (AED)',
+      'OT RATE/HR (AED)',
+      '26 OCT (MON)',
+      '27 OCT (TUE)',
+      '28 OCT (WED)',
+      '29 OCT (THU)',
+      '30 OCT (FRI)',
+      '31 OCT (SAT)',
+      'TOTAL OT HOURS',
+      'TOTAL OT PAYABLE (AED)',
+    ];
+
+    for (int col = 0; col < headers.length; col++) {
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: 4))
+        ..value = TextCellValue(headers[col])
+        ..cellStyle = tableHeaderStyle;
+    }
+
+    int currentRow = 5;
+    double grandTotalBasic = 0.0;
+    double grandTotalOtHours = 0.0;
+    double grandTotalOtPay = 0.0;
+
+    for (int i = 0; i < employees.length; i++) {
+      final emp = employees[i];
+      final config = SalaryCalculator.resolveConfig(employee: emp, salaryConfigs: salaryConfigs);
+      final summary = SalaryCalculator.calculateEmployeeSalary(
+        config: config,
+        employee: emp,
+        records: records,
+        cycle: cycle,
+        referenceDate: DateTime(2026, 11, 1),
+      );
+
+      double ot26 = 0.0;
+      double ot27 = 0.0;
+      double ot28 = 0.0;
+      double ot29 = 0.0;
+      double ot30 = 0.0;
+      double ot31 = 0.0;
+
+      for (final r in summary.dailyRecords) {
+        if (r.date.year == 2026 && r.date.month == 10) {
+          switch (r.date.day) {
+            case 26:
+              ot26 = r.overtimeHours;
+              break;
+            case 27:
+              ot27 = r.overtimeHours;
+              break;
+            case 28:
+              ot28 = r.overtimeHours;
+              break;
+            case 29:
+              ot29 = r.overtimeHours;
+              break;
+            case 30:
+              ot30 = r.overtimeHours;
+              break;
+            case 31:
+              ot31 = r.overtimeHours;
+              break;
+          }
+        }
+      }
+
+      grandTotalBasic += config.basicSalary;
+      grandTotalOtHours += summary.totalOvertimeHours;
+      grandTotalOtPay += summary.earnedOtSalary;
+
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: currentRow))
+        ..value = IntCellValue(i + 1)
+        ..cellStyle = cellCenterStyle;
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: currentRow))
+        ..value = TextCellValue(emp.employeeCode)
+        ..cellStyle = cellCenterStyle;
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: currentRow))
+        ..value = TextCellValue(emp.name)
+        ..cellStyle = cellTextStyle;
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: currentRow))
+        ..value = TextCellValue(emp.department)
+        ..cellStyle = cellCenterStyle;
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: currentRow))
+        ..value = DoubleCellValue(config.basicSalary)
+        ..cellStyle = cellNumberStyle;
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: currentRow))
+        ..value = config.otIncludedInVariable
+            ? TextCellValue('Fixed OT')
+            : DoubleCellValue(double.parse(summary.hourlyOtRate.toStringAsFixed(2)))
+        ..cellStyle = cellNumberStyle;
+
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: currentRow))
+        ..value = ot26 > 0 ? DoubleCellValue(ot26) : TextCellValue('-')
+        ..cellStyle = cellCenterStyle;
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 7, rowIndex: currentRow))
+        ..value = ot27 > 0 ? DoubleCellValue(ot27) : TextCellValue('-')
+        ..cellStyle = cellCenterStyle;
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: currentRow))
+        ..value = ot28 > 0 ? DoubleCellValue(ot28) : TextCellValue('-')
+        ..cellStyle = cellCenterStyle;
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: currentRow))
+        ..value = ot29 > 0 ? DoubleCellValue(ot29) : TextCellValue('-')
+        ..cellStyle = cellCenterStyle;
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 10, rowIndex: currentRow))
+        ..value = ot30 > 0 ? DoubleCellValue(ot30) : TextCellValue('-')
+        ..cellStyle = cellCenterStyle;
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 11, rowIndex: currentRow))
+        ..value = ot31 > 0 ? DoubleCellValue(ot31) : TextCellValue('-')
+        ..cellStyle = cellCenterStyle;
+
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 12, rowIndex: currentRow))
+        ..value = DoubleCellValue(double.parse(summary.totalOvertimeHours.toStringAsFixed(1)))
+        ..cellStyle = cellNumberStyle;
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 13, rowIndex: currentRow))
+        ..value = DoubleCellValue(double.parse(summary.earnedOtSalary.toStringAsFixed(2)))
+        ..cellStyle = cellNumberStyle;
+
+      currentRow++;
+    }
+
+    // Totals Row
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: currentRow))
+      ..value = TextCellValue('Total')
+      ..cellStyle = totalTextStyle;
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: currentRow))
+      ..value = DoubleCellValue(double.parse(grandTotalBasic.toStringAsFixed(2)))
+      ..cellStyle = totalStyle;
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 12, rowIndex: currentRow))
+      ..value = DoubleCellValue(double.parse(grandTotalOtHours.toStringAsFixed(1)))
+      ..cellStyle = totalStyle;
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 13, rowIndex: currentRow))
+      ..value = DoubleCellValue(double.parse(grandTotalOtPay.toStringAsFixed(2)))
+      ..cellStyle = totalStyle;
+
+    // Column widths
+    sheet.setColumnWidth(0, 8.0);
+    sheet.setColumnWidth(1, 14.0);
+    sheet.setColumnWidth(2, 30.0);
+    sheet.setColumnWidth(3, 18.0);
+    sheet.setColumnWidth(4, 18.0);
+    sheet.setColumnWidth(5, 16.0);
+    sheet.setColumnWidth(6, 14.0);
+    sheet.setColumnWidth(7, 14.0);
+    sheet.setColumnWidth(8, 14.0);
+    sheet.setColumnWidth(9, 14.0);
+    sheet.setColumnWidth(10, 14.0);
+    sheet.setColumnWidth(11, 14.0);
+    sheet.setColumnWidth(12, 18.0);
+    sheet.setColumnWidth(13, 22.0);
+  }
 }

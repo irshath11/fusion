@@ -1865,5 +1865,184 @@ class PdfExportService {
       filename: 'Payslip_${summary.employeeCode}_${summary.cycle.id}.pdf',
     );
   }
+
+  /// Exports dedicated PDF document for Interim Overtime (26 Oct - 31 Oct 2026)
+  static Future<void> exportInterimOtPdf({
+    required List<EmployeeEntity> employees,
+    required List<AttendanceRecord> records,
+    required Map<String, EmployeeSalaryConfig> salaryConfigs,
+  }) async {
+    final cycle = SalaryCycle.octoberTransition();
+    final pdf = pw.Document();
+
+    final activeEmployees = employees.where((e) {
+      return !SalaryCalculator.isExcludedOwner(
+        name: e.name,
+        code: e.employeeCode,
+        email: e.email,
+        id: e.id,
+      );
+    }).toList();
+
+    // Calculate summaries for transition cycle
+    final List<Map<String, dynamic>> rowData = [];
+    double totalBasic = 0.0;
+    double totalOtHours = 0.0;
+    double totalOtPay = 0.0;
+
+    for (final emp in activeEmployees) {
+      final config = SalaryCalculator.resolveConfig(employee: emp, salaryConfigs: salaryConfigs);
+      final summary = SalaryCalculator.calculateEmployeeSalary(
+        config: config,
+        employee: emp,
+        records: records,
+        cycle: cycle,
+        referenceDate: DateTime(2026, 11, 1),
+      );
+
+      double ot26 = 0.0, ot27 = 0.0, ot28 = 0.0, ot29 = 0.0, ot30 = 0.0, ot31 = 0.0;
+      for (final r in summary.dailyRecords) {
+        if (r.date.year == 2026 && r.date.month == 10) {
+          switch (r.date.day) {
+            case 26: ot26 = r.overtimeHours; break;
+            case 27: ot27 = r.overtimeHours; break;
+            case 28: ot28 = r.overtimeHours; break;
+            case 29: ot29 = r.overtimeHours; break;
+            case 30: ot30 = r.overtimeHours; break;
+            case 31: ot31 = r.overtimeHours; break;
+          }
+        }
+      }
+
+      totalBasic += config.basicSalary;
+      totalOtHours += summary.totalOvertimeHours;
+      totalOtPay += summary.earnedOtSalary;
+
+      rowData.add({
+        'code': emp.employeeCode,
+        'name': emp.name,
+        'dept': emp.department,
+        'basic': config.basicSalary.toStringAsFixed(0),
+        'rate': config.otIncludedInVariable ? 'Fixed' : summary.hourlyOtRate.toStringAsFixed(2),
+        'ot26': ot26 > 0 ? ot26.toStringAsFixed(1) : '-',
+        'ot27': ot27 > 0 ? ot27.toStringAsFixed(1) : '-',
+        'ot28': ot28 > 0 ? ot28.toStringAsFixed(1) : '-',
+        'ot29': ot29 > 0 ? ot29.toStringAsFixed(1) : '-',
+        'ot30': ot30 > 0 ? ot30.toStringAsFixed(1) : '-',
+        'ot31': ot31 > 0 ? ot31.toStringAsFixed(1) : '-',
+        'totalHrs': summary.totalOvertimeHours.toStringAsFixed(1),
+        'totalPay': summary.earnedOtSalary.toStringAsFixed(2),
+      });
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(24),
+        build: (context) {
+          return [
+            // Title Header
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'FUSION ENTERPRISE GROUP',
+                      style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      'INTERIM OVERTIME REPORT (26 OCT – 31 OCT 2026)',
+                      style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      '6-Day Transition Period | Regular Calendar Cycle Begins 1 Nov 2026',
+                      style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      'Generated: ${DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now())}',
+                      style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Text(
+                      'Total OT Hours: ${totalOtHours.toStringAsFixed(1)} hrs',
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.amber800),
+                    ),
+                    pw.Text(
+                      'Total OT Payable: AED ${NumberFormat('#,##0.00').format(totalOtPay)}',
+                      style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.green800),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 12),
+            pw.Divider(thickness: 1, color: PdfColors.grey300),
+            pw.SizedBox(height: 8),
+
+            // Table
+            pw.Table.fromTextArray(
+              headers: ['SL', 'Code', 'Employee Name', 'Dept', 'Basic', 'Rate/h', '26 Oct', '27 Oct', '28 Oct', '29 Oct', '30 Oct', '31 Oct', 'Total Hrs', 'OT Pay (AED)'],
+              data: List.generate(rowData.length, (idx) {
+                final d = rowData[idx];
+                return [
+                  '${idx + 1}',
+                  d['code'],
+                  d['name'],
+                  d['dept'],
+                  d['basic'],
+                  d['rate'],
+                  d['ot26'],
+                  d['ot27'],
+                  d['ot28'],
+                  d['ot29'],
+                  d['ot30'],
+                  d['ot31'],
+                  d['totalHrs'],
+                  d['totalPay'],
+                ];
+              }),
+              headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 8),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo900),
+              cellStyle: const pw.TextStyle(fontSize: 7.5),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+              cellAlignment: pw.Alignment.center,
+              cellAlignments: {
+                2: pw.Alignment.centerLeft,
+                4: pw.Alignment.centerRight,
+                5: pw.Alignment.centerRight,
+                12: pw.Alignment.centerRight,
+                13: pw.Alignment.centerRight,
+              },
+            ),
+            pw.SizedBox(height: 8),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.end,
+              children: [
+                pw.Text(
+                  'Total Basic: AED ${totalBasic.toStringAsFixed(2)}   |   Total OT Hours: ${totalOtHours.toStringAsFixed(1)} hrs   |   Grand Total OT Payable: AED ${NumberFormat('#,##0.00').format(totalOtPay)}',
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.indigo900),
+                ),
+              ],
+            ),
+          ];
+        },
+      ),
+    );
+
+    final bytes = await pdf.save();
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'Interim_OT_26-31_Oct_2026.pdf',
+    );
+  }
 }
 

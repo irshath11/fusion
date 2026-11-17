@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_theme.dart';
 import '../../../core/utils/salary_cycle_helper.dart';
 import '../../../core/widgets/employee_avatar.dart';
 import '../../../database/local_database_service.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../attendance/domain/attendance_record.dart';
+import '../domain/employee_salary_config.dart';
 import '../domain/employee_salary_summary.dart';
 import '../utils/salary_calculator.dart';
 import '../../../core/services/pdf_export_service.dart';
@@ -14,6 +14,7 @@ import '../../../core/services/supabase_service.dart';
 import 'edit_salary_dialog.dart';
 import 'employee_salary_detail_sheet.dart';
 import 'put_office_attendance_dialog.dart';
+import 'interim_ot_breakdown_dialog.dart';
 
 class SalaryPayrollScreen extends StatefulWidget {
   const SalaryPayrollScreen({super.key});
@@ -169,6 +170,70 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
     }
   }
 
+  void _openInterimOtDialog({
+    required List<EmployeeEntity> employees,
+    required List<AttendanceRecord> records,
+    required Map<String, EmployeeSalaryConfig> salaryConfigs,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => InterimOtBreakdownDialog(
+        employees: employees,
+        records: records,
+        salaryConfigs: salaryConfigs,
+        onSwitchToTransitionCycle: () {
+          final transitionCycle = _availableCycles.firstWhere(
+            (c) => c.isTransition,
+            orElse: () => SalaryCycle.octoberTransition(),
+          );
+          setState(() => _selectedCycle = transitionCycle);
+        },
+      ),
+    );
+  }
+
+  Future<void> _exportInterimOtExcel() async {
+    try {
+      final allEmployees = _db
+          .getEmployees()
+          .where((e) => !SalaryCalculator.isExcludedOwner(
+                name: e.name,
+                code: e.employeeCode,
+                email: e.email,
+                id: e.id,
+              ))
+          .toList();
+      final allRecords = _db.getAttendanceRecords();
+      final salaryMap = _db.getEmployeeSalaryMap();
+
+      await ExcelCsvExportService.exportInterimOtExcel(
+        employees: allEmployees,
+        records: allRecords,
+        salaryConfigs: salaryMap,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Interim Overtime Excel (26-31 Oct 2026) generated successfully',
+            ),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error generating Interim OT Excel: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -258,6 +323,15 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
         foregroundColor: isDark ? Colors.white : AppColors.textPrimaryLight,
         actions: [
           IconButton(
+            icon: const Icon(Icons.bolt_rounded, color: Color(0xFFF59E0B)),
+            tooltip: 'Interim OT (26-31 Oct 2026)',
+            onPressed: () => _openInterimOtDialog(
+              employees: allEmployees,
+              records: allRecords,
+              salaryConfigs: salaryMap,
+            ),
+          ),
+          IconButton(
             icon: const Icon(Icons.picture_as_pdf_rounded),
             tooltip: 'Export Payroll PDF',
             onPressed: () async {
@@ -288,6 +362,8 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
                 _exportWpsExcel(division: 'Neo');
               } else if (val == 'ELECTRO') {
                 _exportWpsExcel(division: 'Fusion');
+              } else if (val == 'INTERIM_OT') {
+                _exportInterimOtExcel();
               }
             },
             itemBuilder: (ctx) => [
@@ -327,6 +403,20 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
                     Text(
                       'Fusion Electric WPS (.xlsx)',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'INTERIM_OT',
+                child: Row(
+                  children: [
+                    Icon(Icons.bolt_rounded, color: Color(0xFFF59E0B), size: 18),
+                    SizedBox(width: 10),
+                    Text(
+                      'Interim OT Report (26-31 Oct) (.xlsx)',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
@@ -435,9 +525,9 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        icon: const Icon(Icons.table_view_rounded, size: 15, color: Color(0xFF0F9D58)),
+                        icon: const Icon(Icons.table_view_rounded, size: 14, color: Color(0xFF0F9D58)),
                         label: const Text(
-                          'Fusion Neo WPS',
+                          'Neo WPS',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
@@ -445,7 +535,7 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
                           ),
                         ),
                         style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
                           side: const BorderSide(color: Color(0xFF0F9D58), width: 1.2),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           backgroundColor: const Color(0xFF0F9D58).withValues(alpha: 0.08),
@@ -453,12 +543,12 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
                         onPressed: () => _exportWpsExcel(division: 'Neo'),
                       ),
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 5),
                     Expanded(
                       child: OutlinedButton.icon(
-                        icon: const Icon(Icons.table_view_rounded, size: 15, color: Color(0xFF1A73E8)),
+                        icon: const Icon(Icons.table_view_rounded, size: 14, color: Color(0xFF1A73E8)),
                         label: const Text(
-                          'Fusion Electric WPS',
+                          'Electric WPS',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
@@ -466,7 +556,7 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
                           ),
                         ),
                         style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
                           side: const BorderSide(color: Color(0xFF1A73E8), width: 1.2),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           backgroundColor: const Color(0xFF1A73E8).withValues(alpha: 0.08),
@@ -474,12 +564,12 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
                         onPressed: () => _exportWpsExcel(division: 'Fusion'),
                       ),
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 5),
                     Expanded(
                       child: ElevatedButton.icon(
-                        icon: const Icon(Icons.analytics_rounded, size: 15, color: Colors.white),
+                        icon: const Icon(Icons.analytics_rounded, size: 14, color: Colors.white),
                         label: const Text(
-                          'Total Payroll Excel',
+                          'Total Payroll',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
@@ -487,12 +577,37 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
                           ),
                         ),
                         style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
                           backgroundColor: const Color(0xFF4F46E5),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           elevation: 1,
                         ),
                         onPressed: _exportMasterPayrollExcel,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.bolt_rounded, size: 15, color: Colors.white),
+                        label: const Text(
+                          'Interim OT',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                          backgroundColor: const Color(0xFFD97706),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          elevation: 1,
+                        ),
+                        onPressed: () => _openInterimOtDialog(
+                          employees: allEmployees,
+                          records: allRecords,
+                          salaryConfigs: salaryMap,
+                        ),
                       ),
                     ),
                   ],
@@ -532,6 +647,16 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
             ),
           ),
 
+          // Transition Period Notice Banner (when viewing Nov 2026 or when Transition cycle is active)
+          if (_selectedCycle.isTransition || (_selectedCycle.salaryMonth == 11 && _selectedCycle.salaryYear == 2026))
+            _buildTransitionNoticeBanner(
+              context: context,
+              employees: allEmployees,
+              records: allRecords,
+              salaryConfigs: salaryMap,
+              isDark: isDark,
+            ),
+
           // 2. Executive Payroll Summary Banner (Combined + Fusion Electric + Fusion Neo)
           _buildWorkforceMetricBanner(
             workforceSummary: workforceSummary,
@@ -543,6 +668,85 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
           // 3. Employee Salary List (Separated with status sections and attendance action)
           Expanded(
             child: _buildSalaryList(filteredSummaries, isDark),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTransitionNoticeBanner({
+    required BuildContext context,
+    required List<EmployeeEntity> employees,
+    required List<AttendanceRecord> records,
+    required Map<String, EmployeeSalaryConfig> salaryConfigs,
+    required bool isDark,
+  }) {
+    final isTransitionActive = _selectedCycle.isTransition;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: isTransitionActive
+            ? const Color(0xFFF59E0B).withValues(alpha: 0.12)
+            : const Color(0xFF3B82F6).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isTransitionActive
+              ? const Color(0xFFF59E0B).withValues(alpha: 0.4)
+              : const Color(0xFF3B82F6).withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isTransitionActive ? Icons.bolt_rounded : Icons.info_outline_rounded,
+            color: isTransitionActive ? const Color(0xFFD97706) : const Color(0xFF2563EB),
+            size: 22,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isTransitionActive
+                      ? 'Viewing Interim Overtime (26 Oct – 31 Oct 2026)'
+                      : 'Salary Cycle Changed to Calendar Month (01 Nov – 30 Nov)',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.bold,
+                    color: isTransitionActive ? const Color(0xFFB45309) : const Color(0xFF1E40AF),
+                  ),
+                ),
+                Text(
+                  isTransitionActive
+                      ? '6-day transition window before new calendar cycle began on 1 Nov.'
+                      : 'Attendance data from 26 Oct – 31 Oct is tracked under separate Interim OT.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? Colors.grey[400] : Colors.grey[700],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD97706),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+            ),
+            icon: const Icon(Icons.bolt_rounded, size: 14),
+            label: const Text('View 26-31 Oct OT'),
+            onPressed: () => _openInterimOtDialog(
+              employees: employees,
+              records: records,
+              salaryConfigs: salaryConfigs,
+            ),
           ),
         ],
       ),

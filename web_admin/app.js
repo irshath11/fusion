@@ -1462,56 +1462,72 @@
   }
 
   // Salary Cycle Utilities (25th of month to 24th of next month)
-  // App implemented from Aug – Sep 2026 (25 Aug - 24 Sep). Previous months have no data.
+  // App implemented from Aug – Sep 2026.
+  // Starting Nov 2026, cycle is full calendar month (1st to last day of month, e.g. 1 Nov - 30 Nov).
+  // 26 Oct – 31 Oct 2026 is the 6-day transition window specifically tracking Interim OT.
   function getSalaryCycles() {
     const cycles = [];
     const now = new Date();
-    let ref = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const earliestStart = new Date(2026, 7, 25, 0, 0, 0, 0); // 25 Aug 2026
 
-    while (true) {
-      let y = ref.getFullYear();
-      let m = ref.getMonth();
-      let d = ref.getDate();
-      let start, end;
-      if (d >= 25) {
-        start = new Date(y, m, 25, 0, 0, 0, 0);
-        end = new Date(y, m + 1, 24, 23, 59, 59, 999);
-      } else {
-        start = new Date(y, m - 1, 25, 0, 0, 0, 0);
-        end = new Date(y, m, 24, 23, 59, 59, 999);
-      }
-
-      if (start.getTime() < earliestStart.getTime()) {
-        break;
-      }
-
-      const startStr = `${start.getDate()} ${monthNames[start.getMonth()]}`;
-      const endStr = `${end.getDate()} ${monthNames[end.getMonth()]} ${end.getFullYear()}`;
-      const cycleTitle = `${monthNames[start.getMonth()]} – ${monthNames[end.getMonth()]} ${end.getFullYear()} Cycle`;
-      const label = `${cycleTitle} (${startStr} – ${endStr})`;
+    // 1. Calendar month cycles (from current month down to Nov 2026)
+    let curYear = now.getFullYear();
+    let curMonth = now.getMonth(); // 0-indexed, 10 is Nov
+    while (curYear > 2026 || (curYear === 2026 && curMonth >= 10)) {
+      const start = new Date(curYear, curMonth, 1, 0, 0, 0, 0);
+      const end = new Date(curYear, curMonth + 1, 0, 23, 59, 59, 999);
+      const startStr = `01 ${monthNames[curMonth]}`;
+      const endStr = `${end.getDate()} ${monthNames[curMonth]} ${curYear}`;
+      const cycleTitle = `${monthNames[curMonth]} ${curYear} Cycle`;
       cycles.push({
         id: `cycle_${start.getTime()}`,
         title: cycleTitle,
-        label,
+        label: `${cycleTitle} (${startStr} – ${endStr})`,
         start,
         end
       });
-      ref = new Date(start.getTime() - 24 * 60 * 60 * 1000);
+      curMonth--;
+      if (curMonth < 0) {
+        curMonth = 11;
+        curYear--;
+      }
     }
 
-    if (cycles.length === 0) {
-      const start = new Date(2026, 7, 25, 0, 0, 0, 0);
-      const end = new Date(2026, 8, 24, 23, 59, 59, 999);
-      cycles.push({
-        id: `cycle_${start.getTime()}`,
-        title: 'Aug – Sep 2026 Cycle',
-        label: 'Aug – Sep 2026 Cycle (25 Aug – 24 Sep 2026)',
-        start,
-        end
-      });
-    }
+    // 2. October transition interim OT period (26 Oct – 31 Oct 2026)
+    const tStart = new Date(2026, 9, 26, 0, 0, 0, 0);
+    const tEnd = new Date(2026, 9, 31, 23, 59, 59, 999);
+    cycles.push({
+      id: `cycle_${tStart.getTime()}`,
+      title: 'Interim OT Cycle (26–31 Oct 2026)',
+      label: 'Interim OT Cycle (26 Oct – 31 Oct 2026)',
+      start: tStart,
+      end: tEnd
+    });
+
+    // 3. Historical October 2026 cycle (25 Sep – 25 Oct 2026)
+    const octStart = new Date(2026, 8, 25, 0, 0, 0, 0);
+    const octEnd = new Date(2026, 9, 25, 23, 59, 59, 999);
+    cycles.push({
+      id: `cycle_${octStart.getTime()}`,
+      title: 'Sep – Oct 2026 Cycle',
+      label: 'Sep – Oct 2026 Cycle (25 Sep – 25 Oct 2026)',
+      start: octStart,
+      end: octEnd
+    });
+
+    // 4. Historical September 2026 cycle (25 Aug – 24 Sep 2026)
+    const sepStart = new Date(2026, 7, 25, 0, 0, 0, 0);
+    const sepEnd = new Date(2026, 8, 24, 23, 59, 59, 999);
+    cycles.push({
+      id: `cycle_${sepStart.getTime()}`,
+      title: 'Aug – Sep 2026 Cycle',
+      label: 'Aug – Sep 2026 Cycle (25 Aug – 24 Sep 2026)',
+      start: sepStart,
+      end: sepEnd
+    });
+
+    return cycles;
+  }
 
     return cycles;
   }

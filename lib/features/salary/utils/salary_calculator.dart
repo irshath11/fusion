@@ -405,6 +405,43 @@ class SalaryCalculator {
     return false;
   }
 
+  /// Resolves the EmployeeSalaryConfig for a given employee from the configurations map,
+  /// falling back to matching by employeeCode, id, name, or a default 1200/600 config.
+  static EmployeeSalaryConfig resolveConfig({
+    required EmployeeEntity employee,
+    required Map<String, EmployeeSalaryConfig> salaryConfigs,
+  }) {
+    EmployeeSalaryConfig? config = salaryConfigs[employee.employeeCode] ??
+        salaryConfigs[employee.id] ??
+        salaryConfigs[employee.name.toLowerCase().trim()];
+
+    if (config == null) {
+      for (final entry in salaryConfigs.entries) {
+        if (EmployeeDirectoryHelper.matchesEmployeeIdentity(
+          recordEmployeeId: entry.key,
+          recordEmployeeName: entry.value.employeeName,
+          employeeId: employee.id,
+          employeeCode: employee.employeeCode,
+          employeeName: employee.name,
+          employeeEmail: employee.email,
+        )) {
+          config = entry.value;
+          break;
+        }
+      }
+    }
+
+    return config ??
+        EmployeeSalaryConfig(
+          employeeCode: employee.employeeCode,
+          employeeId: employee.id,
+          employeeName: employee.name,
+          department: employee.department.isNotEmpty ? employee.department : 'General',
+          fixedSalary: 1200.0,
+          variableSalary: 600.0,
+        );
+  }
+
   /// Calculates salary summaries for all employees in a list
   static WorkforceSalarySummary calculateWorkforcePayroll({
     required List<EmployeeEntity> employees,
@@ -420,36 +457,7 @@ class SalaryCalculator {
       if (isExcludedOwner(name: emp.name, code: emp.employeeCode, email: emp.email, id: emp.id)) {
         continue;
       }
-      // Find matching salary config by employeeCode or id or name
-      EmployeeSalaryConfig? config = salaryConfigs[emp.employeeCode] ??
-          salaryConfigs[emp.id] ??
-          salaryConfigs[emp.name.toLowerCase().trim()];
-
-      if (config == null) {
-        for (final entry in salaryConfigs.entries) {
-          if (EmployeeDirectoryHelper.matchesEmployeeIdentity(
-            recordEmployeeId: entry.key,
-            recordEmployeeName: entry.value.employeeName,
-            employeeId: emp.id,
-            employeeCode: emp.employeeCode,
-            employeeName: emp.name,
-            employeeEmail: emp.email,
-          )) {
-            config = entry.value;
-            break;
-          }
-        }
-      }
-
-      // Default fallback if no custom configuration exists
-      config ??= EmployeeSalaryConfig(
-        employeeCode: emp.employeeCode,
-        employeeId: emp.id,
-        employeeName: emp.name,
-        department: emp.department.isNotEmpty ? emp.department : 'General',
-        fixedSalary: 1200.0,
-        variableSalary: 600.0,
-      );
+      final config = resolveConfig(employee: emp, salaryConfigs: salaryConfigs);
 
       final summary = calculateEmployeeSalary(
         config: config,
