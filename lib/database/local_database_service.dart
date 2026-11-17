@@ -171,6 +171,20 @@ class LocalDatabaseService {
     _offices.removeWhere((o) => o.id == 'office-musaffah-m12-001' || o.id == 'office-main-001');
     _attendanceRecords.removeWhere((r) => r.id.startsWith('rec-001-') || r.id.startsWith('rec-002-'));
 
+    // Purge relieved personnel (e.g. Asik Saheel) completely from local database
+    _employees.removeWhere((e) => EmployeeDirectoryHelper.isRelievedEmployee(
+      id: e.id, name: e.name, email: e.email, code: e.employeeCode,
+    ));
+    _users.removeWhere((u) => EmployeeDirectoryHelper.isRelievedEmployee(
+      id: u.id, name: u.fullName, email: u.email, code: u.employeeCode,
+    ));
+    _employeeSalaries.removeWhere((s) => EmployeeDirectoryHelper.isRelievedEmployee(
+      name: s.employeeName, code: s.employeeCode,
+    ));
+    _attendanceRecords.removeWhere((r) => EmployeeDirectoryHelper.isRelievedEmployee(
+      id: r.employeeId, name: r.employeeName,
+    ));
+
     // Automatically resolve any dangling check-ins older than 24 hours
     autoResolveExpiredCheckIns();
 
@@ -179,6 +193,7 @@ class LocalDatabaseService {
 
     _persistOffices();
     _persistEmployees();
+    _persistUsers();
     _persistWorkSites();
     _persistAttendanceRecords();
     _persistEmployeeSalaries();
@@ -450,11 +465,20 @@ class LocalDatabaseService {
       return u;
     }).toList();
 
-    result.sort((a, b) => a.fullName.trim().toLowerCase().compareTo(b.fullName.trim().toLowerCase()));
-    return List.unmodifiable(result);
+    final filtered = result.where((u) => !EmployeeDirectoryHelper.isRelievedEmployee(
+      id: u.id, name: u.fullName, email: u.email, code: u.employeeCode,
+    )).toList();
+    filtered.sort((a, b) => a.fullName.trim().toLowerCase().compareTo(b.fullName.trim().toLowerCase()));
+    return List.unmodifiable(filtered);
   }
 
   void saveUser(UserEntity user) {
+    if (EmployeeDirectoryHelper.isRelievedEmployee(
+      id: user.id, name: user.fullName, email: user.email, code: user.employeeCode,
+    )) {
+      deleteUser(user.id);
+      return;
+    }
     int index = _users.indexWhere((u) =>
         u.id == user.id ||
         (u.email.isNotEmpty &&
@@ -487,6 +511,11 @@ class LocalDatabaseService {
   void setUsers(List<UserEntity> users) {
     _users.clear();
     for (final u in users) {
+      if (EmployeeDirectoryHelper.isRelievedEmployee(
+        id: u.id, name: u.fullName, email: u.email, code: u.employeeCode,
+      )) {
+        continue;
+      }
       final override = getGeofenceOverride(
         userId: u.id,
         email: u.email,
@@ -673,8 +702,11 @@ class LocalDatabaseService {
       }
       return e;
     }).toList();
-    list.sort((a, b) => a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
-    return List.unmodifiable(list);
+    final filtered = list.where((e) => !EmployeeDirectoryHelper.isRelievedEmployee(
+      id: e.id, name: e.name, email: e.email, code: e.employeeCode,
+    )).toList();
+    filtered.sort((a, b) => a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
+    return List.unmodifiable(filtered);
   }
 
   /// No-op: prevents injecting synthetic directory employees into local database
@@ -683,6 +715,11 @@ class LocalDatabaseService {
   void setEmployees(List<EmployeeEntity> employees) {
     _employees.clear();
     for (final e in employees) {
+      if (EmployeeDirectoryHelper.isRelievedEmployee(
+        id: e.id, name: e.name, email: e.email, code: e.employeeCode,
+      )) {
+        continue;
+      }
       final override = getGeofenceOverride(
         userId: e.id,
         email: e.email,
@@ -700,6 +737,12 @@ class LocalDatabaseService {
   }
 
   void saveEmployee(EmployeeEntity employee) {
+    if (EmployeeDirectoryHelper.isRelievedEmployee(
+      id: employee.id, name: employee.name, email: employee.email, code: employee.employeeCode,
+    )) {
+      deleteEmployee(employee.id);
+      return;
+    }
     int index = _employees.indexWhere((e) =>
         e.id == employee.id ||
         (e.email.isNotEmpty &&
@@ -782,6 +825,7 @@ class LocalDatabaseService {
   }
 
   bool _isExcludedSalaryOwner(String name, String code) {
+    if (EmployeeDirectoryHelper.isRelievedEmployee(name: name, code: code)) return true;
     final n = name.trim().toLowerCase();
     final c = code.trim().toLowerCase();
     if (c == '1058' || c == 'emp-1058') return true;
@@ -795,9 +839,6 @@ class LocalDatabaseService {
       return true;
     }
     if (n.contains('siraj') || n.contains('sirajudeen') || n.contains('sirajuddin')) {
-      return true;
-    }
-    if (n.contains('asik') || n.contains('saheel') || n.contains('ashik') || n.contains('sahil')) {
       return true;
     }
     return false;
@@ -1160,10 +1201,20 @@ class LocalDatabaseService {
 
   // Attendance Records & Offline Sync
   List<AttendanceRecord> getAttendanceRecords() {
-    return List.unmodifiable(_attendanceRecords);
+    final filtered = _attendanceRecords.where((r) => !EmployeeDirectoryHelper.isRelievedEmployee(
+      id: r.employeeId,
+      name: r.employeeName,
+    )).toList();
+    return List.unmodifiable(filtered);
   }
 
   void addAttendanceRecord(AttendanceRecord record) {
+    if (EmployeeDirectoryHelper.isRelievedEmployee(
+      id: record.employeeId,
+      name: record.employeeName,
+    )) {
+      return;
+    }
     _attendanceRecords.add(record);
     _persistAttendanceRecords();
   }
@@ -1174,6 +1225,14 @@ class LocalDatabaseService {
   }
 
   void saveAttendanceRecord(AttendanceRecord record, {bool persist = true}) {
+    if (EmployeeDirectoryHelper.isRelievedEmployee(
+      id: record.employeeId,
+      name: record.employeeName,
+    )) {
+      _attendanceRecords.removeWhere((r) => r.id == record.id ||
+        (r.employeeId == record.employeeId && record.employeeId.isNotEmpty));
+      return;
+    }
     int index = _attendanceRecords.indexWhere((r) => r.id == record.id);
 
     // Fallback matching by employeeId/name + workflowStep + eventTimestamp if IDs differ

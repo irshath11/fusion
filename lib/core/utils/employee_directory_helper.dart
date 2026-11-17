@@ -294,6 +294,41 @@ class EmployeeDirectoryHelper {
     ),
   ];
 
+  /// Identifies former/relieved personnel who have left the organization
+  /// and must be completely excluded from all employee listings, directories, and attendance.
+  static bool isRelievedEmployee({
+    String? id,
+    String? name,
+    String? email,
+    String? code,
+  }) {
+    final n = (name ?? '').trim().toLowerCase();
+    final em = (email ?? '').trim().toLowerCase();
+    final c = (code ?? '').trim().toLowerCase();
+    final i = (id ?? '').trim().toLowerCase();
+
+    // Asik Saheel (relieved from job)
+    if (n.contains('asik') ||
+        n.contains('saheel') ||
+        n.contains('ashik') ||
+        n.contains('sahil')) {
+      return true;
+    }
+    if (em.contains('asik') ||
+        em.contains('saheel') ||
+        em.contains('ashik') ||
+        em.contains('sahil')) {
+      return true;
+    }
+    if (c.contains('asik') ||
+        c.contains('saheel') ||
+        i.contains('asik') ||
+        i.contains('saheel')) {
+      return true;
+    }
+    return false;
+  }
+
   /// Find matching official record by employeeId, email, or full/short name
   static OfficialEmployeeRecord? resolveOfficialRecord({
     String? code,
@@ -301,6 +336,10 @@ class EmployeeDirectoryHelper {
     String? email,
     String? id,
   }) {
+    if (isRelievedEmployee(code: code, name: name, email: email, id: id)) {
+      return null;
+    }
+
     final cleanCode = (code ?? '').trim().toUpperCase();
     final cleanEmail = (email ?? '').trim().toLowerCase();
     final cleanName = (name ?? '').trim().toLowerCase();
@@ -374,6 +413,12 @@ class EmployeeDirectoryHelper {
     String? employeeName,
     String? employeeEmail,
   }) {
+    // Relieved employees (e.g. Asik Saheel) never match any records or targets
+    if (isRelievedEmployee(id: recordEmployeeId, name: recordEmployeeName) ||
+        isRelievedEmployee(id: employeeId, code: employeeCode, name: employeeName, email: employeeEmail)) {
+      return false;
+    }
+
     final rId = recordEmployeeId.trim().toLowerCase();
     final rName = recordEmployeeName.trim().toLowerCase();
     final tId = (employeeId ?? '').trim().toLowerCase();

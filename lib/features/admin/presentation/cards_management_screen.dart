@@ -171,12 +171,28 @@ class _CardsManagementScreenState extends State<CardsManagementScreen>
       }
     }
 
-    _employees = empMap.values.toSet().toList();
+    _employees = empMap.values.toSet().where((e) => !EmployeeDirectoryHelper.isRelievedEmployee(
+      id: e.id,
+      name: e.name,
+      email: e.email,
+      code: e.employeeCode,
+    )).toList();
 
     // 2. Load Local Saved Cards First (ensures offline and restart persistence)
     final savedCardsJson = await _db.loadSavedEmployeeCardsAsync();
     if (savedCardsJson.isNotEmpty) {
-      _cards = savedCardsJson.map((json) => EmployeeCard.fromJson(json)).toList();
+      _cards = savedCardsJson
+          .map((json) => EmployeeCard.fromJson(json))
+          .where((c) {
+            final emp = empMap[c.employeeId];
+            return !EmployeeDirectoryHelper.isRelievedEmployee(
+              id: c.employeeId,
+              name: emp?.name,
+              email: emp?.email,
+              code: emp?.employeeCode,
+            );
+          })
+          .toList();
     }
 
     // 3. Fetch Cards & Employees from Supabase
@@ -210,7 +226,17 @@ class _CardsManagementScreenState extends State<CardsManagementScreen>
             mergedMap[c.id] = c;
           }
         }
-        _cards = mergedMap.values.toList();
+        _cards = mergedMap.values
+            .where((c) {
+              final emp = empMap[c.employeeId];
+              return !EmployeeDirectoryHelper.isRelievedEmployee(
+                id: c.employeeId,
+                name: emp?.name,
+                email: emp?.email,
+                code: emp?.employeeCode,
+              );
+            })
+            .toList();
         _cards.sort((a, b) => a.expiryDate.compareTo(b.expiryDate));
         await _persistCardsLocally();
       }
@@ -344,7 +370,12 @@ class _CardsManagementScreenState extends State<CardsManagementScreen>
         debugPrint('Supabase employee fetch note: $eSync');
       }
 
-      _employees = empMap.values.toSet().toList();
+      _employees = empMap.values.toSet().where((e) => !EmployeeDirectoryHelper.isRelievedEmployee(
+      id: e.id,
+      name: e.name,
+      email: e.email,
+      code: e.employeeCode,
+    )).toList();
     } catch (e) {
       debugPrint('Cloud cards query failed, relying on local cards: $e');
     }

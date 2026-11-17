@@ -845,7 +845,7 @@
         if (chunk.length < pageSize) break;
         page++;
       }
-      attendanceData = allAttendance;
+      attendanceData = allAttendance.filter(r => !isRelievedEmployee(r.employee_name, '', r.employee_id, r.employee_id));
 
       // 5. Fetch Employee Cards & Passes (safely merged with local storage)
       loadLocalOrInitialCards();
@@ -867,7 +867,7 @@
               merged[c.id] = c;
             }
           });
-          cardsData = Object.values(merged);
+          cardsData = Object.values(merged).filter(c => !isRelievedEmployee(c.employee_name || c.employeeName, '', c.employee_id || c.employeeId, c.employee_id || c.employeeId));
           saveCardsData();
         }
       } catch (errCards) {
@@ -893,8 +893,24 @@
     }
   }
 
+  function isRelievedEmployee(name, email, code, id) {
+    const n = (name || '').trim().toLowerCase();
+    const em = (email || '').trim().toLowerCase();
+    const c = (code || '').trim().toLowerCase();
+    const i = (id || '').trim().toLowerCase();
+
+    // Asik Saheel (relieved from job)
+    if (n.includes('asik') || n.includes('saheel') || n.includes('ashik') || n.includes('sahil')) return true;
+    if (em.includes('asik') || em.includes('saheel') || em.includes('ashik') || em.includes('sahil')) return true;
+    if (c.includes('asik') || c.includes('saheel') || i.includes('asik') || i.includes('saheel')) return true;
+    return false;
+  }
+
   function combineUserEmployeeRecords(users, employees) {
-    const list = users.map(u => {
+    const filteredUsers = (users || []).filter(u => !isRelievedEmployee(u.full_name, u.email, u.employee_code, u.id));
+    const filteredEmployees = (employees || []).filter(e => !isRelievedEmployee(e.full_name || e.name, e.email, e.employee_code, e.id));
+
+    const list = filteredUsers.map(u => {
       // Cross-reference against master directory to resolve official full name
       const official = MASTER_EMPLOYEES_DIRECTORY.find(m =>
         (u.email && m.email.toLowerCase() === u.email.toLowerCase()) ||
@@ -902,7 +918,7 @@
         (m.aliases && u.full_name && m.aliases.some(a => u.full_name.toLowerCase().includes(a.toLowerCase())))
       );
 
-      const emp = employees.find(e =>
+      const emp = filteredEmployees.find(e =>
         (isUuid(e.user_id) && isUuid(u.id) && e.user_id === u.id) ||
         (e.user_id && u.firebase_uid && e.user_id === u.firebase_uid) ||
         (e.email && u.email && e.email.toLowerCase() === u.email.toLowerCase()) ||
@@ -944,7 +960,7 @@
     });
 
     // Also include any standalone records from `employees` table that were not linked to a user account
-    employees.forEach(emp => {
+    filteredEmployees.forEach(emp => {
       const already = list.some(item => (emp.id && item.employeeTableId === emp.id) || (emp.user_id && item.userId === emp.user_id));
       if (!already) {
         const official = MASTER_EMPLOYEES_DIRECTORY.find(m =>
@@ -1027,7 +1043,7 @@
       }
     });
 
-    return list;
+    return list.filter(item => !isRelievedEmployee(item.name, item.email, item.employeeCode, item.id));
   }
 
   // Enterprise employee photo resolver
@@ -1076,6 +1092,10 @@
   function findEmployee(empId, card = null) {
     const cleanId = (empId || '').trim();
     const cleanIdLower = cleanId.toLowerCase();
+
+    if (isRelievedEmployee(cleanId, cleanId, cleanId, cleanId)) {
+      return null;
+    }
 
     // Enrichment helper guaranteeing full official legal name and photoUrl
     const enrich = (base) => {

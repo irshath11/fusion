@@ -94,6 +94,14 @@ class UserManagementCubit extends Cubit<UserManagementState> {
     final Map<String, UserEntity> userMap = {};
 
     for (final u in sourceUsers) {
+      if (EmployeeDirectoryHelper.isRelievedEmployee(
+        id: u.id,
+        name: u.fullName,
+        email: u.email,
+        code: u.employeeCode,
+      )) {
+        continue;
+      }
       final key = u.email.trim().isNotEmpty
           ? u.email.trim().toLowerCase()
           : (u.fullName.trim().isNotEmpty
@@ -129,6 +137,14 @@ class UserManagementCubit extends Cubit<UserManagementState> {
 
     // Always merge local employees into userMap so locally active/registered employees are never omitted
     for (final e in sourceEmployees) {
+      if (EmployeeDirectoryHelper.isRelievedEmployee(
+        id: e.id,
+        name: e.name,
+        email: e.email,
+        code: e.employeeCode,
+      )) {
+        continue;
+      }
       final official = EmployeeDirectoryHelper.resolveOfficialRecord(
         code: e.employeeCode,
         name: e.name,
@@ -264,7 +280,12 @@ class UserManagementCubit extends Cubit<UserManagementState> {
       }
     }
 
-    final usersList = userMap.values.toList();
+    final usersList = userMap.values.where((u) => !EmployeeDirectoryHelper.isRelievedEmployee(
+      id: u.id,
+      name: u.fullName,
+      email: u.email,
+      code: u.employeeCode,
+    )).toList();
     usersList.sort((a, b) =>
         a.fullName.trim().toLowerCase().compareTo(b.fullName.trim().toLowerCase()));
     return usersList;
