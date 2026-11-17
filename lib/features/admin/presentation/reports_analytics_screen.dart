@@ -398,7 +398,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   }
 
   EmployeeEntity _resolveEmployee(String? employeeId) {
-    if (employeeId == null || employeeId.isEmpty) {
+    if (employeeId == null || employeeId.trim().isEmpty) {
       return EmployeeEntity(
         id: '',
         employeeCode: 'EMP',
@@ -411,8 +411,43 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
     final all = _getSynthesizedEmployees();
     final cleanId = employeeId.trim().toLowerCase();
+    final cleanIdNorm = cleanId.replaceFirst('emp-', '');
 
-    // Match by EmployeeDirectoryHelper
+    // 1. Direct exact matches by ID, code, email, or full name FIRST
+    for (final e in all) {
+      final eId = e.id.trim().toLowerCase();
+      final eIdNorm = eId.replaceFirst('emp-', '');
+      final eCode = e.employeeCode.trim().toLowerCase();
+      final eCodeNorm = eCode.replaceFirst('emp-', '');
+      final eEmail = e.email.trim().toLowerCase();
+      final eName = e.name.trim().toLowerCase();
+
+      if (eId.isNotEmpty && (eId == cleanId || eIdNorm == cleanIdNorm)) return e;
+      if (eCode.isNotEmpty && (eCode == cleanId || eCodeNorm == cleanIdNorm)) return e;
+      if (eEmail.isNotEmpty && eEmail == cleanId) return e;
+      if (eName.isNotEmpty && eName == cleanId) return e;
+    }
+
+    // 2. Resolve via Official Master Directory
+    final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+      code: employeeId,
+      name: employeeId,
+      id: employeeId,
+    );
+    if (official != null) {
+      final oCode = official.employeeId.toUpperCase();
+      final oName = official.fullName.trim().toLowerCase();
+      final oEmail = official.email.trim().toLowerCase();
+      for (final e in all) {
+        if (e.employeeCode.toUpperCase() == oCode ||
+            e.name.trim().toLowerCase() == oName ||
+            (oEmail.isNotEmpty && e.email.trim().toLowerCase() == oEmail)) {
+          return e;
+        }
+      }
+    }
+
+    // 3. Fallback matching via EmployeeDirectoryHelper
     for (final e in all) {
       if (EmployeeDirectoryHelper.matchesEmployeeIdentity(
         recordEmployeeId: employeeId,
@@ -425,14 +460,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         return e;
       }
     }
-
-    // Exact matches by ID, code, name, or email
-    final exactMatch = all.where((e) =>
-        (e.id.isNotEmpty && e.id.toLowerCase() == cleanId) ||
-        (e.employeeCode.isNotEmpty && e.employeeCode.toLowerCase() == cleanId) ||
-        (e.name.isNotEmpty && e.name.toLowerCase().trim() == cleanId) ||
-        (e.email.isNotEmpty && e.email.toLowerCase().trim() == cleanId));
-    if (exactMatch.isNotEmpty) return exactMatch.first;
 
     return EmployeeEntity(
       id: employeeId,

@@ -56,7 +56,7 @@ class EmployeeDirectoryHelper {
       email: 'sr.irshath@gmail.com',
       designation: 'Managing Director',
       department: 'Neo',
-      aliases: ['irshath', 'irshath ahamed'],
+      aliases: ['irshath', 'irshath ahamed', 'admin-001', 'n-1006', 'emp-n-1006'],
     ),
     OfficialEmployeeRecord(
       employeeId: 'N-1007',
@@ -209,7 +209,7 @@ class EmployeeDirectoryHelper {
       email: 'shaik@gmail.com',
       designation: 'Technician',
       department: 'Fusion',
-      aliases: ['shaik', 'mohamed ali shaik'],
+      aliases: ['shaik', 'mohamed ali shaik', 'mohamed ali', '1038', 'emp-1038'],
     ),
     OfficialEmployeeRecord(
       employeeId: '1047',
@@ -306,6 +306,9 @@ class EmployeeDirectoryHelper {
     final cleanName = (name ?? '').trim().toLowerCase();
     final cleanId = (id ?? '').trim().toLowerCase();
 
+    final idNorm = cleanId.replaceFirst('emp-', '');
+    final codeNorm = cleanCode.replaceFirst('EMP-', '');
+
     // 1. Direct exact Email match (100% unique across all company staff)
     if (cleanEmail.isNotEmpty) {
       for (final rec in masterDirectory) {
@@ -317,7 +320,6 @@ class EmployeeDirectoryHelper {
 
     // 2. Direct exact Employee Code / ID match
     if (cleanCode.isNotEmpty && cleanCode != 'EMP-000') {
-      final codeNorm = cleanCode.replaceFirst('EMP-', '');
       for (final rec in masterDirectory) {
         if (rec.employeeId.toUpperCase() == cleanCode ||
             rec.employeeId.toUpperCase() == codeNorm) {
@@ -339,15 +341,18 @@ class EmployeeDirectoryHelper {
     for (final rec in masterDirectory) {
       for (final alias in rec.aliases) {
         final a = alias.trim().toLowerCase();
-        if (cleanName == a || cleanCode == a.toUpperCase() || cleanId == a) {
+        if (cleanName == a ||
+            cleanCode == a.toUpperCase() ||
+            codeNorm == a.toUpperCase() ||
+            cleanId == a ||
+            idNorm == a) {
           return rec;
         }
       }
     }
 
-    // Direct id match like 'emp-1057' or 'emp-n-1004'
+    // 5. Direct id match like 'emp-1057' or 'emp-n-1004'
     if (cleanId.isNotEmpty) {
-      final idNorm = cleanId.replaceFirst('emp-', '');
       for (final rec in masterDirectory) {
         if (rec.employeeId.toLowerCase() == cleanId ||
             rec.employeeId.toLowerCase() == idNorm) {
@@ -360,7 +365,7 @@ class EmployeeDirectoryHelper {
   }
 
   /// Checks if an attendance record matches a target employee identity.
-  /// Consolidates previous short names into official full names.
+  /// Strictly ensures employees never get other persons' logs.
   static bool matchesEmployeeIdentity({
     required String recordEmployeeId,
     required String recordEmployeeName,
@@ -376,11 +381,19 @@ class EmployeeDirectoryHelper {
     final tName = (employeeName ?? '').trim().toLowerCase();
     final tEmail = (employeeEmail ?? '').trim().toLowerCase();
 
+    final rIdNorm = rId.replaceFirst('emp-', '');
+    final tIdNorm = tId.replaceFirst('emp-', '');
+    final tCodeNorm = tCode.replaceFirst('emp-', '');
+
     // 1. Direct exact ID match
-    if (tId.isNotEmpty && rId.isNotEmpty && rId == tId) return true;
+    if (tId.isNotEmpty && rId.isNotEmpty) {
+      if (rId == tId || (rIdNorm.isNotEmpty && rIdNorm == tIdNorm)) return true;
+    }
 
     // 2. Direct exact Employee Code match
-    if (tCode.isNotEmpty && rId.isNotEmpty && (rId == tCode || rId == 'emp-$tCode')) return true;
+    if (tCode.isNotEmpty && rId.isNotEmpty) {
+      if (rId == tCode || (rIdNorm.isNotEmpty && rIdNorm == tCodeNorm)) return true;
+    }
 
     // 3. Direct exact Name match
     if (tName.isNotEmpty && rName.isNotEmpty && rName == tName) return true;
@@ -393,40 +406,58 @@ class EmployeeDirectoryHelper {
       id: tId,
     );
 
-    if (targetOfficial != null) {
-      final oName = targetOfficial.fullName.toLowerCase();
-      final oCode = targetOfficial.employeeId.toLowerCase();
-
-      if (rName == oName) return true;
-      if (rId == oCode || rId == 'emp-$oCode') return true;
-
-      for (final alias in targetOfficial.aliases) {
-        final a = alias.toLowerCase();
-        if (rName == a || rId == a || rId == 'emp-$a') return true;
-      }
-    }
-
-    // Also check if record itself resolves to an official record that matches target
     final recordOfficial = resolveOfficialRecord(
       code: rId,
       name: rName,
       id: rId,
     );
+
+    // Case 4A: Both resolve to official directory entries.
+    // Strictly compare their unique official employee IDs.
     if (recordOfficial != null && targetOfficial != null) {
-      if (recordOfficial.employeeId == targetOfficial.employeeId) return true;
+      return recordOfficial.employeeId.toUpperCase() == targetOfficial.employeeId.toUpperCase();
     }
 
-    // 5. Fallback substring/token matching between record and target names
+    // Case 4B: Record belongs to an official employee, but target does not resolve to directory.
+    // Only match if target's explicit identifiers match recordOfficial.
+    if (recordOfficial != null && targetOfficial == null) {
+      final oCode = recordOfficial.employeeId.toLowerCase();
+      final oName = recordOfficial.fullName.toLowerCase();
+      final oEmail = recordOfficial.email.toLowerCase();
+
+      if (tIdNorm.isNotEmpty && tIdNorm == oCode) return true;
+      if (tCodeNorm.isNotEmpty && tCodeNorm == oCode) return true;
+      if (tEmail.isNotEmpty && tEmail == oEmail) return true;
+      if (tName.isNotEmpty && tName == oName) return true;
+      if (tName.isNotEmpty && recordOfficial.aliases.any((a) => a.toLowerCase() == tName)) return true;
+      return false;
+    }
+
+    // Case 4C: Target is an official employee, but record does not resolve to directory.
+    // Only match if record's explicit identifiers match targetOfficial.
+    if (targetOfficial != null && recordOfficial == null) {
+      final oCode = targetOfficial.employeeId.toLowerCase();
+      final oName = targetOfficial.fullName.toLowerCase();
+
+      if (rIdNorm.isNotEmpty && rIdNorm == oCode) return true;
+      if (rName.isNotEmpty && rName == oName) return true;
+      if (rName.isNotEmpty && targetOfficial.aliases.any((a) => a.toLowerCase() == rName)) return true;
+      if (rIdNorm.isNotEmpty && targetOfficial.aliases.any((a) => a.toLowerCase() == rIdNorm)) return true;
+      return false;
+    }
+
+    // Case 4D: Neither resolves to an official record (unlisted custom employees).
+    // If both have explicit, non-empty IDs/codes that differ, they are definitely different employees.
+    if (rIdNorm.isNotEmpty && (tIdNorm.isNotEmpty || tCodeNorm.isNotEmpty)) {
+      if (tIdNorm.isNotEmpty && rIdNorm != tIdNorm) return false;
+      if (tCodeNorm.isNotEmpty && rIdNorm != tCodeNorm) return false;
+    }
+
+    // Exact normalized name match
     if (tName.isNotEmpty && rName.isNotEmpty) {
-      if (tName.contains(rName) || rName.contains(tName)) return true;
-      final tTokens = tName.split(RegExp(r'\s+')).where((s) => s.length > 2).toSet();
-      final rTokens = rName.split(RegExp(r'\s+')).where((s) => s.length > 2).toSet();
-      if (tTokens.isNotEmpty && rTokens.isNotEmpty) {
-        final intersection = tTokens.intersection(rTokens);
-        if (intersection.length >= 2 || (tTokens.length == 1 && intersection.isNotEmpty)) {
-          return true;
-        }
-      }
+      final cleanTName = tName.replaceAll(RegExp(r'\s+'), ' ');
+      final cleanRName = rName.replaceAll(RegExp(r'\s+'), ' ');
+      if (cleanTName == cleanRName) return true;
     }
 
     return false;
