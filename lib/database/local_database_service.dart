@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -1303,7 +1304,19 @@ class LocalDatabaseService {
     }
     _persistAttendanceRecords();
 
-    // 3. Sync deletions to Supabase Cloud DB
+    // 3. Fast non-blocking cloud sync in background so UI completes instantly without delay
+    unawaited(_syncOfficeAttendanceBatchToCloud(
+      newRecords: List.unmodifiable(newRecords),
+      deletedRecordIds: List.unmodifiable(deletedRecordIds),
+    ));
+
+    return true;
+  }
+
+  Future<void> _syncOfficeAttendanceBatchToCloud({
+    required List<AttendanceRecord> newRecords,
+    required List<String> deletedRecordIds,
+  }) async {
     if (deletedRecordIds.isNotEmpty) {
       try {
         await SupabaseService().deleteAttendanceRecords(deletedRecordIds);
@@ -1312,7 +1325,6 @@ class LocalDatabaseService {
       }
     }
 
-    // 4. Sync new records to Supabase Cloud DB
     if (newRecords.isNotEmpty) {
       try {
         await SupabaseService().saveAdminAttendanceOverride(records: newRecords);
@@ -1320,8 +1332,6 @@ class LocalDatabaseService {
         debugPrint('Supabase save office attendance error: $e');
       }
     }
-
-    return true;
   }
 
   void updateAttendanceRecord(AttendanceRecord updatedRecord) {
