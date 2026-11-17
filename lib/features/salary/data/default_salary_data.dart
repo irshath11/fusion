@@ -110,6 +110,13 @@ class DefaultSalaryData {
           otIncludedInVariable: true,
         ),
         EmployeeSalaryConfig(
+          employeeCode: '1058',
+          employeeName: 'Alnaser Samsudeen',
+          department: 'Fusion',
+          fixedSalary: 2000.0,
+          variableSalary: 4800.0,
+        ),
+        EmployeeSalaryConfig(
           employeeCode: '1059',
           employeeName: 'Saleem Allapitchai Allapitchai',
           department: 'Fusion',

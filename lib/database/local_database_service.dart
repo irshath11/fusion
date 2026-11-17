@@ -829,11 +829,9 @@ class LocalDatabaseService {
     if (EmployeeDirectoryHelper.isRelievedEmployee(name: name, code: code)) return true;
     final n = name.trim().toLowerCase();
     final c = code.trim().toLowerCase();
-    if (c == '1058' || c == 'emp-1058') return true;
-    if (n.contains('nasur') ||
-        n.contains('alnaser') ||
-        n.contains('al naser') ||
-        n.contains('al-naser') ||
+    if (c == '1058' || c == 'emp-1058') return false;
+    if (n.contains('alnaser') || n.contains('al naser') || n.contains('al-naser') || n == 'naser') return false;
+    if (n.contains('nasurudeen') ||
         n.contains('nasrudeen') ||
         n.contains('nasruddin') ||
         n.contains('nasirudeen')) {
@@ -851,7 +849,21 @@ class LocalDatabaseService {
       _employeeSalaries.addAll(DefaultSalaryData.defaultConfigs);
       _persistEmployeeSalaries();
     }
+    // Ensure all master default configs (including Alnaser Samsudeen 1058) are present
+    bool addedAny = false;
+    for (final def in DefaultSalaryData.defaultConfigs) {
+      final exists = _employeeSalaries.any((s) =>
+          (s.employeeCode.isNotEmpty && s.employeeCode.toUpperCase() == def.employeeCode.toUpperCase()) ||
+          s.employeeName.trim().toLowerCase() == def.employeeName.trim().toLowerCase());
+      if (!exists && !_isExcludedSalaryOwner(def.employeeName, def.employeeCode)) {
+        _employeeSalaries.add(def);
+        addedAny = true;
+      }
+    }
     _employeeSalaries.removeWhere((s) => _isExcludedSalaryOwner(s.employeeName, s.employeeCode));
+    if (addedAny) {
+      _persistEmployeeSalaries();
+    }
     return List.unmodifiable(_employeeSalaries);
   }
 
