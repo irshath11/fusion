@@ -417,14 +417,14 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.surfaceDark : Colors.white,
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDark ? Colors.white12 : Colors.grey[200]!,
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -446,9 +446,10 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
                   children: [
                     Text(
                       _summary.employeeName,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -457,15 +458,19 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.1),
+                            color: AppColors.primary.withValues(alpha: isDark ? 0.25 : 0.1),
                             borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: AppColors.primary.withValues(alpha: isDark ? 0.4 : 0.2),
+                              width: 0.8,
+                            ),
                           ),
                           child: Text(
                             _summary.employeeCode,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: AppColors.primary,
+                              color: isDark ? const Color(0xFF93C5FD) : AppColors.primary,
                             ),
                           ),
                         ),
@@ -474,7 +479,8 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
                           '${_summary.department} Division',
                           style: TextStyle(
                             fontSize: 12,
-                            color: isDark ? Colors.grey[400] : AppColors.textSecondaryLight,
+                            fontWeight: FontWeight.w500,
+                            color: isDark ? const Color(0xFFCBD5E1) : AppColors.textSecondaryLight,
                           ),
                         ),
                       ],
@@ -485,16 +491,20 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  const Text(
+                  Text(
                     'Monthly Base',
-                    style: TextStyle(fontSize: 10, color: Colors.grey),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: isDark ? const Color(0xFF94A3B8) : Colors.grey[600],
+                    ),
                   ),
                   Text(
                     'AED ${_summary.monthlyBaseTotal.toStringAsFixed(0)}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
+                      color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
                     ),
                   ),
                 ],
@@ -502,7 +512,7 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
             ],
           ),
           const SizedBox(height: 14),
-          const Divider(height: 1),
+          Divider(height: 1, color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
           const SizedBox(height: 12),
 
           // Rates Row
@@ -533,20 +543,20 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
 
           // 1-Tap Toggle Button: OT Included in Variable (Zero OT)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: _summary.config.otIncludedInVariable
-                  ? AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.08)
-                  : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.grey[100]),
+                  ? AppColors.primary.withValues(alpha: isDark ? 0.25 : 0.08)
+                  : (isDark ? const Color(0xFF0F172A) : Colors.grey[100]),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
                 color: _summary.config.otIncludedInVariable
-                    ? AppColors.primary.withValues(alpha: 0.4)
-                    : (isDark ? Colors.white12 : Colors.grey[300]!),
+                    ? AppColors.primary.withValues(alpha: isDark ? 0.5 : 0.4)
+                    : (isDark ? const Color(0xFF334155) : Colors.grey[300]!),
               ),
             ),
             child: Row(
@@ -561,8 +571,8 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
                             : Icons.schedule_rounded,
                         size: 16,
                         color: _summary.config.otIncludedInVariable
-                            ? AppColors.primary
-                            : Colors.grey,
+                            ? (isDark ? const Color(0xFF60A5FA) : AppColors.primary)
+                            : (isDark ? const Color(0xFF94A3B8) : Colors.grey),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -575,8 +585,8 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
                                 color: _summary.config.otIncludedInVariable
-                                    ? AppColors.primary
-                                    : (isDark ? Colors.white70 : AppColors.textPrimaryLight),
+                                    ? (isDark ? const Color(0xFF93C5FD) : AppColors.primary)
+                                    : (isDark ? Colors.white : AppColors.textPrimaryLight),
                               ),
                             ),
                             Text(
@@ -585,7 +595,7 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
                                   : 'Inactive: OT calculated strictly from Basic Salary',
                               style: TextStyle(
                                 fontSize: 10,
-                                color: isDark ? Colors.grey[400] : AppColors.textSecondaryLight,
+                                color: isDark ? const Color(0xFFCBD5E1) : AppColors.textSecondaryLight,
                               ),
                             ),
                           ],
@@ -605,16 +615,16 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
           const SizedBox(height: 8),
 
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               color: _summary.config.otIncludedInVariable
-                  ? AppColors.primary.withValues(alpha: isDark ? 0.12 : 0.08)
-                  : Colors.amber.withValues(alpha: isDark ? 0.12 : 0.08),
+                  ? AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.08)
+                  : Colors.amber.withValues(alpha: isDark ? 0.2 : 0.08),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: _summary.config.otIncludedInVariable
-                    ? AppColors.primary.withValues(alpha: 0.25)
-                    : Colors.amber.withValues(alpha: 0.25),
+                    ? AppColors.primary.withValues(alpha: isDark ? 0.4 : 0.25)
+                    : Colors.amber.withValues(alpha: isDark ? 0.4 : 0.25),
               ),
             ),
             child: Row(
@@ -624,10 +634,10 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
                   _summary.config.otIncludedInVariable
                       ? Icons.check_circle_outline_rounded
                       : Icons.info_outline_rounded,
-                  size: 13,
+                  size: 14,
                   color: _summary.config.otIncludedInVariable
                       ? (isDark ? Colors.lightBlueAccent : AppColors.primary)
-                      : (isDark ? Colors.amber[300] : Colors.amber[900]),
+                      : (isDark ? const Color(0xFFFDE68A) : Colors.amber[900]),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
@@ -641,8 +651,8 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
                       fontSize: 10,
                       fontWeight: FontWeight.w500,
                       color: _summary.config.otIncludedInVariable
-                          ? (isDark ? Colors.lightBlueAccent : AppColors.primary)
-                          : (isDark ? Colors.amber[200] : Colors.amber[900]),
+                          ? (isDark ? const Color(0xFF93C5FD) : AppColors.primary)
+                          : (isDark ? const Color(0xFFFDE68A) : Colors.amber[900]),
                     ),
                   ),
                 ),
@@ -843,12 +853,12 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.surfaceDark : Colors.white,
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: record.status == DailySalaryStatus.paidSundayOff
-              ? AppColors.primary.withValues(alpha: 0.3)
-              : (isDark ? Colors.white10 : Colors.grey[200]!),
+              ? (isDark ? const Color(0xFF3B82F6).withValues(alpha: 0.5) : AppColors.primary.withValues(alpha: 0.3))
+              : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
         ),
       ),
       child: Column(
@@ -860,9 +870,14 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: isSunday
-                      ? Colors.amber.withValues(alpha: 0.12)
-                      : (isDark ? AppColors.surfaceDark : Colors.grey[100]),
+                      ? (isDark ? const Color(0xFF78350F).withValues(alpha: 0.3) : Colors.amber.withValues(alpha: 0.12))
+                      : (isDark ? const Color(0xFF0F172A) : Colors.grey[100]),
                   borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isSunday
+                        ? (isDark ? const Color(0xFFF59E0B).withValues(alpha: 0.4) : Colors.amber.withValues(alpha: 0.3))
+                        : (isDark ? const Color(0xFF334155) : Colors.transparent),
+                  ),
                 ),
                 child: Text(
                   dateStr,
@@ -870,8 +885,8 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                     color: isSunday
-                        ? (isDark ? Colors.amberAccent : Colors.amber[900])
-                        : (isDark ? Colors.white70 : AppColors.textPrimaryLight),
+                        ? (isDark ? const Color(0xFFFDE68A) : Colors.amber[900])
+                        : (isDark ? Colors.white : const Color(0xFF0F172A)),
                   ),
                 ),
               ),
@@ -897,12 +912,12 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
                       statusTitle,
                       style: TextStyle(
                         fontSize: 11,
-                        color: isDark ? Colors.grey[400] : AppColors.textSecondaryLight,
+                        color: isDark ? const Color(0xFFCBD5E1) : AppColors.textSecondaryLight,
                       ),
                     ),
                   ],
@@ -922,7 +937,7 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
                       fontWeight: FontWeight.bold,
                       color: isPayable
                           ? (isDark ? Colors.greenAccent : Colors.green[800])
-                          : Colors.grey,
+                          : (isDark ? const Color(0xFF64748B) : Colors.grey),
                     ),
                   ),
                   if (isPayable)
@@ -930,7 +945,7 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
                       'Cumul: AED ${record.cumulativeSalary.toStringAsFixed(2)} (${record.cumulativePayableDays}d)',
                       style: TextStyle(
                         fontSize: 10,
-                        color: isDark ? Colors.grey[400] : AppColors.textSecondaryLight,
+                        color: isDark ? const Color(0xFF94A3B8) : AppColors.textSecondaryLight,
                       ),
                     ),
                 ],
@@ -942,21 +957,24 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
           if (isPayable) ...[
             const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.grey[50],
+                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
                 borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     'Fixed: +${record.dailyFixedCredit.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+                    style: TextStyle(fontSize: 10, color: isDark ? const Color(0xFF94A3B8) : Colors.grey[600]),
                   ),
                   Text(
                     'Var: +${record.dailyVariableCredit.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+                    style: TextStyle(fontSize: 10, color: isDark ? const Color(0xFF94A3B8) : Colors.grey[600]),
                   ),
                   if (record.dailyOtCredit > 0)
                     Text(
@@ -964,15 +982,15 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.amberAccent : Colors.orange[800],
+                        color: isDark ? const Color(0xFFFDE68A) : Colors.orange[800],
                       ),
                     ),
                   Text(
                     'Day Total: AED ${record.dailyTotalSalary.toStringAsFixed(2)}',
                     style: TextStyle(
                       fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white70 : AppColors.textPrimaryLight,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
                     ),
                   ),
                 ],
@@ -996,22 +1014,25 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
           label,
           style: TextStyle(
             fontSize: 11,
-            color: isDark ? Colors.grey[400] : AppColors.textSecondaryLight,
+            color: isDark ? const Color(0xFF94A3B8) : AppColors.textSecondaryLight,
           ),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 3),
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 13,
+          style: TextStyle(
+            fontSize: 13.5,
             fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : const Color(0xFF0F172A),
           ),
         ),
+        const SizedBox(height: 1),
         Text(
           subtext,
           style: TextStyle(
             fontSize: 10,
-            color: isDark ? Colors.grey[500] : AppColors.textSecondaryLight,
+            fontWeight: FontWeight.w500,
+            color: isDark ? const Color(0xFF64748B) : Colors.grey[600],
           ),
         ),
       ],

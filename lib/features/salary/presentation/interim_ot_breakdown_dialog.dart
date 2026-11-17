@@ -485,20 +485,20 @@ class _InterimOtBreakdownDialogState extends State<InterimOtBreakdownDialog> {
                           headingRowColor: MaterialStateProperty.all(
                             isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
                           ),
-                          columns: const [
-                            DataColumn(label: Text('SL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                            DataColumn(label: Text('Employee', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                            DataColumn(label: Text('Division', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                            DataColumn(numeric: true, label: Text('Basic', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                            DataColumn(numeric: true, label: Text('OT Rate', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                            DataColumn(numeric: true, label: Text('26 Oct\n(Mon)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                            DataColumn(numeric: true, label: Text('27 Oct\n(Tue)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                            DataColumn(numeric: true, label: Text('28 Oct\n(Wed)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                            DataColumn(numeric: true, label: Text('29 Oct\n(Thu)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                            DataColumn(numeric: true, label: Text('30 Oct\n(Fri)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                            DataColumn(numeric: true, label: Text('31 Oct\n(Sat)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                            DataColumn(numeric: true, label: Text('Total OT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFFD97706)))),
-                            DataColumn(numeric: true, label: Text('OT Pay (AED)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF059669)))),
+                          columns: [
+                            DataColumn(label: Text('SL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: isDark ? Colors.white : Colors.black87))),
+                            DataColumn(label: Text('Employee', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: isDark ? Colors.white : Colors.black87))),
+                            DataColumn(label: Text('Division', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: isDark ? Colors.white : Colors.black87))),
+                            DataColumn(numeric: true, label: Text('Basic', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: isDark ? Colors.white : Colors.black87))),
+                            DataColumn(numeric: true, label: Text('OT Rate', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: isDark ? Colors.white : Colors.black87))),
+                            DataColumn(numeric: true, label: Text('26 Oct\n(Mon)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isDark ? Colors.white : Colors.black87))),
+                            DataColumn(numeric: true, label: Text('27 Oct\n(Tue)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isDark ? Colors.white : Colors.black87))),
+                            DataColumn(numeric: true, label: Text('28 Oct\n(Wed)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isDark ? Colors.white : Colors.black87))),
+                            DataColumn(numeric: true, label: Text('29 Oct\n(Thu)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isDark ? Colors.white : Colors.black87))),
+                            DataColumn(numeric: true, label: Text('30 Oct\n(Fri)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isDark ? Colors.white : Colors.black87))),
+                            DataColumn(numeric: true, label: Text('31 Oct\n(Sat)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isDark ? Colors.white : Colors.black87))),
+                            const DataColumn(numeric: true, label: Text('Total OT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFFD97706)))),
+                            const DataColumn(numeric: true, label: Text('OT Pay (AED)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF059669)))),
                           ],
                           rows: List.generate(filtered.length, (idx) {
                             final row = filtered[idx];
@@ -512,7 +512,7 @@ class _InterimOtBreakdownDialogState extends State<InterimOtBreakdownDialog> {
                                 return null;
                               }),
                               cells: [
-                                DataCell(Text('${idx + 1}', style: const TextStyle(fontSize: 11))),
+                                DataCell(Text('${idx + 1}', style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87))),
                                 DataCell(
                                   Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -529,11 +529,19 @@ class _InterimOtBreakdownDialogState extends State<InterimOtBreakdownDialog> {
                                         children: [
                                           Text(
                                             row.employee.name,
-                                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5),
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 12.5,
+                                              color: isDark ? Colors.white : Colors.black87,
+                                            ),
                                           ),
                                           Text(
                                             row.employee.employeeCode,
-                                            style: TextStyle(fontSize: 10.5, color: Colors.grey[500], fontFamily: 'monospace'),
+                                            style: TextStyle(
+                                              fontSize: 10.5,
+                                              color: isDark ? const Color(0xFF94A3B8) : Colors.grey[500],
+                                              fontFamily: 'monospace',
+                                            ),
                                           ),
                                         ],
                                       ),
@@ -559,7 +567,7 @@ class _InterimOtBreakdownDialogState extends State<InterimOtBreakdownDialog> {
                                     ),
                                   ),
                                 ),
-                                DataCell(Text(row.config.basicSalary.toStringAsFixed(0), style: const TextStyle(fontSize: 11.5))),
+                                DataCell(Text(row.config.basicSalary.toStringAsFixed(0), style: TextStyle(fontSize: 11.5, color: isDark ? Colors.white : Colors.black87))),
                                 DataCell(
                                   Text(
                                     row.config.otIncludedInVariable
@@ -567,7 +575,7 @@ class _InterimOtBreakdownDialogState extends State<InterimOtBreakdownDialog> {
                                         : '${row.otHourlyRate.toStringAsFixed(2)}/h',
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: row.config.otIncludedInVariable ? Colors.grey[500] : null,
+                                      color: row.config.otIncludedInVariable ? Colors.grey[500] : (isDark ? Colors.white70 : null),
                                     ),
                                   ),
                                 ),
@@ -616,14 +624,21 @@ class _InterimOtBreakdownDialogState extends State<InterimOtBreakdownDialog> {
                 children: [
                   Text(
                     'Showing ${filtered.length} employees ($filteredEmployeesWithOt with OT)',
-                    style: TextStyle(fontSize: 12.5, color: Colors.grey[600]),
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: isDark ? const Color(0xFFCBD5E1) : Colors.grey[600],
+                    ),
                   ),
                   const Spacer(),
                   Row(
                     children: [
-                      const Text(
+                      Text(
                         'Total Interim OT:',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
                       ),
                       const SizedBox(width: 6),
                       Container(
@@ -642,9 +657,13 @@ class _InterimOtBreakdownDialogState extends State<InterimOtBreakdownDialog> {
                         ),
                       ),
                       const SizedBox(width: 18),
-                      const Text(
+                      Text(
                         'Total Payable:',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
                       ),
                       const SizedBox(width: 6),
                       Container(
