@@ -573,7 +573,6 @@ void main() {
       // 1. isExcludedOwner checks
       expect(SalaryCalculator.isExcludedOwner(name: 'Nasurudeen'), true);
       expect(SalaryCalculator.isExcludedOwner(name: 'Nasrudeen'), true);
-      expect(SalaryCalculator.isExcludedOwner(name: 'Alnaser Samsudeen', code: '1058'), true);
       expect(SalaryCalculator.isExcludedOwner(email: 'nasuru@fusionmaint.com'), true);
       expect(SalaryCalculator.isExcludedOwner(name: 'Sirajudeen'), true);
       expect(SalaryCalculator.isExcludedOwner(name: 'Siraj'), true);
@@ -583,7 +582,8 @@ void main() {
       expect(SalaryCalculator.isExcludedOwner(name: 'Saheel'), true);
       expect(SalaryCalculator.isExcludedOwner(email: 'asik@gmail.com'), true);
 
-      // Regular staff are NOT excluded
+      // Regular staff are NOT excluded (including Alnaser Samsudeen 1058)
+      expect(SalaryCalculator.isExcludedOwner(name: 'Alnaser Samsudeen', code: '1058'), false);
       expect(SalaryCalculator.isExcludedOwner(name: 'Raja Mohammed Mohammed Ali', code: '1012'), false);
       expect(SalaryCalculator.isExcludedOwner(name: 'Shabi Bismillah Bismillah', code: 'N-1004'), false);
       expect(SalaryCalculator.isExcludedOwner(name: 'Kajamohideen Samsudeen Samsudeen', code: 'N-1008'), false);
@@ -601,9 +601,9 @@ void main() {
           department: 'Maintenance',
         ),
         EmployeeEntity(
-          id: 'emp-1058',
-          employeeCode: '1058',
-          name: 'Alnaser Samsudeen',
+          id: 'emp-nasur',
+          employeeCode: 'DIR-01',
+          name: 'Nasurudeen',
           mobileNumber: '0502222222',
           email: 'nasuru@fusionmaint.com',
           designation: 'Managing Director',
@@ -628,6 +628,15 @@ void main() {
           department: 'General',
         ),
         EmployeeEntity(
+          id: 'emp-1058',
+          employeeCode: '1058',
+          name: 'Alnaser Samsudeen',
+          mobileNumber: '0506666666',
+          email: 'naser@gmail.com',
+          designation: 'Technician',
+          department: 'Fusion',
+        ),
+        EmployeeEntity(
           id: 'emp-n-1004',
           employeeCode: 'N-1004',
           name: 'Shabi Bismillah Bismillah',
@@ -648,10 +657,11 @@ void main() {
       final resultNames = workforce.employeeSummaries.map((s) => s.employeeName).toList();
       expect(resultNames, contains('Raja Mohammed Mohammed Ali'));
       expect(resultNames, contains('Shabi Bismillah Bismillah'));
-      expect(resultNames, isNot(contains('Alnaser Samsudeen')));
+      expect(resultNames, contains('Alnaser Samsudeen'));
+      expect(resultNames, isNot(contains('Nasurudeen')));
       expect(resultNames, isNot(contains('Sirajudeen')));
       expect(resultNames, isNot(contains('Asik Saheel')));
-      expect(workforce.employeeSummaries.length, 2);
+      expect(workforce.employeeSummaries.length, 3);
     });
 
     test('Calendar month salary cycle starting November 2026 & October transition', () {

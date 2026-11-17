@@ -375,18 +375,19 @@ class SalaryCalculator {
     final em = (email ?? '').trim().toLowerCase();
     final i = (id ?? '').trim().toLowerCase();
 
-    // Nasurudeen / Alnaser Samsudeen (code 1058)
-    if (c == '1058' || c == 'emp-1058' || i == '1058' || i == 'emp-1058') return true;
-    if (n.contains('nasur') ||
-        n.contains('alnaser') ||
-        n.contains('al naser') ||
-        n.contains('al-naser') ||
+    // Employee Alnaser Samsudeen (code 1058, naser@gmail.com) is an active technician entitled to salary
+    if (c == '1058' || c == 'emp-1058' || i == '1058' || i == 'emp-1058') return false;
+    if (n.contains('alnaser') || n.contains('al naser') || n.contains('al-naser') || n == 'naser') return false;
+    if (em == 'naser@gmail.com' || em.startsWith('naser@')) return false;
+
+    // Company Partner / Director: Nasurudeen (nasuru@fusionmaint.com)
+    if (n.contains('nasurudeen') ||
         n.contains('nasrudeen') ||
         n.contains('nasruddin') ||
         n.contains('nasirudeen')) {
       return true;
     }
-    if (em.contains('nasuru') || em.contains('nasur') || em.contains('naser@')) {
+    if (em.contains('nasuru@') || em.contains('nasur@fusionmaint')) {
       return true;
     }
 
