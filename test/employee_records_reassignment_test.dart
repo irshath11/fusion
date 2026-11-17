@@ -383,5 +383,28 @@ void main() {
       );
       expect(irfanMatchesRiyas, isFalse);
     });
+
+    test('Relieved employee exclusion: Asik Saheel is completely excluded from identity resolution and directories', () {
+      expect(EmployeeDirectoryHelper.isRelievedEmployee(name: 'Asik Saheel'), isTrue);
+      expect(EmployeeDirectoryHelper.isRelievedEmployee(name: 'asik'), isTrue);
+      expect(EmployeeDirectoryHelper.isRelievedEmployee(name: 'Saheel'), isTrue);
+      expect(EmployeeDirectoryHelper.isRelievedEmployee(name: 'Ashik Sahil'), isTrue);
+      expect(EmployeeDirectoryHelper.isRelievedEmployee(email: 'asik@gmail.com'), isTrue);
+      expect(EmployeeDirectoryHelper.isRelievedEmployee(id: 'emp-asik'), isTrue);
+
+      // Never matches identity or official record
+      expect(EmployeeDirectoryHelper.resolveOfficialRecord(name: 'Asik Saheel'), isNull);
+      expect(EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: 'emp-asik',
+        recordEmployeeName: 'Asik Saheel',
+        employeeId: 'emp-asik',
+        employeeName: 'Asik Saheel',
+      ), isFalse);
+
+      // Legitimate staff are NOT relieved
+      expect(EmployeeDirectoryHelper.isRelievedEmployee(name: 'Raja Mohammed Mohammed Ali', code: '1012'), isFalse);
+      expect(EmployeeDirectoryHelper.isRelievedEmployee(name: 'Shabi Bismillah Bismillah', code: 'N-1004'), isFalse);
+      expect(EmployeeDirectoryHelper.isRelievedEmployee(name: 'Irshath Ahamed Shaik Allavudin', code: 'N-1006'), isFalse);
+    });
   });
 }

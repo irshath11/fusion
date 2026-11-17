@@ -496,7 +496,15 @@ class SupabaseService {
           }
         }
 
-        result.add(UserEntity.fromJson(map));
+        final user = UserEntity.fromJson(map);
+        if (!EmployeeDirectoryHelper.isRelievedEmployee(
+          id: user.id,
+          name: user.fullName,
+          email: user.email,
+          code: user.employeeCode,
+        )) {
+          result.add(user);
+        }
       }
 
       return result;
@@ -671,10 +679,20 @@ class SupabaseService {
             (empCode.isNotEmpty &&
                 r.employeeCode.toLowerCase() == empCode.toLowerCase()));
 
+        final resolvedId = e['user_id']?.toString() ??
+            (empId.isNotEmpty ? empId : empCode);
+        if (EmployeeDirectoryHelper.isRelievedEmployee(
+          id: resolvedId,
+          name: empName,
+          email: empEmail,
+          code: empCode,
+        )) {
+          continue;
+        }
+
         if (!alreadyAdded) {
           result.add(EmployeeEntity(
-            id: e['user_id']?.toString() ??
-                (empId.isNotEmpty ? empId : empCode),
+            id: resolvedId,
             employeeCode: empCode.isNotEmpty ? empCode : 'EMP-000',
             name: empName,
             mobileNumber: empPhone,
@@ -1974,7 +1992,12 @@ class SupabaseService {
           try {
             final map = Map<String, dynamic>.from(json);
             final rec = AttendanceRecord.fromJson(map);
-            records.add(rec.copyWith(syncStatus: SyncStatus.synced));
+            if (!EmployeeDirectoryHelper.isRelievedEmployee(
+              id: rec.employeeId,
+              name: rec.employeeName,
+            )) {
+              records.add(rec.copyWith(syncStatus: SyncStatus.synced));
+            }
           } catch (e) {
             debugPrint('Supabase parse attendance record error: $e');
           }

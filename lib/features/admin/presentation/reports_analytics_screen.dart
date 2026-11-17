@@ -309,6 +309,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
     // 3. Check any attendance records that might have been logged by employee
     for (final r in allRecords) {
+      if (EmployeeDirectoryHelper.isRelievedEmployee(id: r.employeeId, name: r.employeeName)) {
+        continue;
+      }
       final nameKey = r.employeeName.trim().toLowerCase();
       final idKey = r.employeeId;
 
@@ -354,6 +357,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
 
     final list = employeeMap.values.where((e) {
+      if (EmployeeDirectoryHelper.isRelievedEmployee(
+        id: e.id,
+        name: e.name,
+        email: e.email,
+        code: e.employeeCode,
+      )) {
+        return false;
+      }
       final eName = e.name.trim().toLowerCase();
 
       // Check if e resolves to an official record
@@ -398,7 +409,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   }
 
   EmployeeEntity _resolveEmployee(String? employeeId) {
-    if (employeeId == null || employeeId.trim().isEmpty) {
+    if (employeeId == null || employeeId.trim().isEmpty || EmployeeDirectoryHelper.isRelievedEmployee(id: employeeId, name: employeeId, code: employeeId)) {
       return EmployeeEntity(
         id: '',
         employeeCode: 'EMP',

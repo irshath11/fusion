@@ -366,6 +366,9 @@ class SalaryCalculator {
     String? email,
     String? id,
   }) {
+    if (EmployeeDirectoryHelper.isRelievedEmployee(name: name, code: code, email: email, id: id)) {
+      return true;
+    }
     final n = (name ?? '').trim().toLowerCase();
     final c = (code ?? '').trim().toLowerCase();
     final em = (email ?? '').trim().toLowerCase();
