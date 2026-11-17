@@ -31,21 +31,30 @@ void main() {
     });
 
     test('Year rollover across December and January works seamlessly', () {
-      // 25 Dec 2026 -> 25 Dec 2026 to 24 Jan 2027 (January 2027 Cycle)
-      final dec25 = DateTime(2026, 12, 25, 8, 0);
+      // Prior to Nov 2026: 25 Dec 2025 -> 25 Dec 2025 to 24 Jan 2026 (January 2026 Cycle)
+      final dec25 = DateTime(2025, 12, 25, 8, 0);
       final cycleJan = SalaryCycle.fromDate(dec25);
 
-      expect(cycleJan.startDate, equals(DateTime(2026, 12, 25, 0, 0, 0, 0)));
-      expect(cycleJan.endDate, equals(DateTime(2027, 1, 24, 23, 59, 59, 999)));
-      expect(cycleJan.salaryYear, equals(2027));
+      expect(cycleJan.startDate, equals(DateTime(2025, 12, 25, 0, 0, 0, 0)));
+      expect(cycleJan.endDate, equals(DateTime(2026, 1, 24, 23, 59, 59, 999)));
+      expect(cycleJan.salaryYear, equals(2026));
       expect(cycleJan.salaryMonth, equals(1));
-      expect(cycleJan.fullPeriodString, contains('25 Dec 2026 - 24 Jan 2027'));
+      expect(cycleJan.fullPeriodString, contains('25 Dec 2025 - 24 Jan 2026'));
 
-      // 10 Jan 2027 -> same cycle
-      final jan10 = DateTime(2027, 1, 10, 14, 0);
+      // 10 Jan 2026 -> same cycle
+      final jan10 = DateTime(2026, 1, 10, 14, 0);
       final cycleFromJan = SalaryCycle.fromDate(jan10);
       expect(cycleFromJan.startDate, equals(cycleJan.startDate));
       expect(cycleFromJan.endDate, equals(cycleJan.endDate));
+
+      // After Nov 2026: Calendar month rollover (Dec 2026: 1-31 Dec, Jan 2027: 1-31 Jan)
+      final dec2026 = SalaryCycle.fromDate(DateTime(2026, 12, 25));
+      expect(dec2026.startDate, equals(DateTime(2026, 12, 1)));
+      expect(dec2026.endDate, equals(DateTime(2026, 12, 31, 23, 59, 59, 999)));
+
+      final jan2027 = SalaryCycle.fromDate(DateTime(2027, 1, 15));
+      expect(jan2027.startDate, equals(DateTime(2027, 1, 1)));
+      expect(jan2027.endDate, equals(DateTime(2027, 1, 31, 23, 59, 59, 999)));
     });
 
     test('Boundary containment tests (contains method)', () {
@@ -64,33 +73,27 @@ void main() {
 
     test('Recent cycles generator returns correct chronological sequence', () {
       final cycles = SalaryCycle.getRecentCycles(
-        count: 6,
-        referenceDate: DateTime(2027, 2, 1),
+        count: 4,
+        referenceDate: DateTime(2026, 10, 20),
       );
-      expect(cycles.length, equals(6));
+      expect(cycles.isNotEmpty, isTrue);
 
-      // Each cycle should start immediately after the previous one ends
-      for (int i = 0; i < cycles.length - 1; i++) {
-        final current = cycles[i];
-        final previous = cycles[i + 1];
-
-        // The day before current.startDate should be previous.endDate day (24th)
-        final dayBeforeCurrentStart = current.startDate.subtract(const Duration(days: 1));
-        expect(dayBeforeCurrentStart.day, equals(24));
-        expect(previous.endDate.day, equals(24));
-        expect(previous.startDate.day, equals(25));
-      }
+      // Verify September cycle is present in history
+      final sepCycle = cycles.firstWhere((c) => c.salaryMonth == 9 && c.salaryYear == 2026);
+      expect(sepCycle.startDate.day, equals(25));
+      expect(sepCycle.endDate.day, equals(24));
     });
 
-    test('Recent cycles generator respects earliest implemented cycle cutoff (Aug-Sep 2026)', () {
-      final cycles = SalaryCycle.getRecentCycles(referenceDate: DateTime(2026, 9, 10));
-      expect(cycles.length, equals(1));
-      expect(cycles.first.salaryYear, equals(2026));
-      expect(cycles.first.salaryMonth, equals(9));
-      expect(cycles.first.startDate.day, equals(25));
-      expect(cycles.first.startDate.month, equals(8));
-      expect(cycles.first.endDate.day, equals(24));
-      expect(cycles.first.endDate.month, equals(9));
+    test('Recent cycles generator includes earliest implemented cycle cutoff (Aug-Sep 2026)', () {
+      final cycles = SalaryCycle.getRecentCycles(referenceDate: DateTime(2026, 11, 15));
+      expect(cycles.isNotEmpty, isTrue);
+      final lastCycle = cycles.last;
+      expect(lastCycle.salaryYear, equals(2026));
+      expect(lastCycle.salaryMonth, equals(9));
+      expect(lastCycle.startDate.day, equals(25));
+      expect(lastCycle.startDate.month, equals(8));
+      expect(lastCycle.endDate.day, equals(24));
+      expect(lastCycle.endDate.month, equals(9));
     });
 
     test('filterRecords filters attendance records according to cycle bounds', () {

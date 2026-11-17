@@ -32,6 +32,7 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
   String _searchQuery = '';
   String _selectedDepartmentFilter = 'ALL'; // 'ALL', 'Fusion', 'Neo'
   String _selectedStatusFilter = 'ALL'; // 'ALL', 'ACTIVE', 'ZERO_DAYS'
+  bool _showKpiBanner = false;
 
   @override
   void initState() {
@@ -451,9 +452,9 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
       ),
       body: Column(
         children: [
-          // 1. Controls Bar: Salary Cycle Filter & Department Filter
+          // 1. Sleek Controls Bar (Cycle, Search, Export, Filters - Height ~85px on desktop)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
               color: isDark ? AppColors.surfaceDark : Colors.white,
               border: Border(
@@ -462,326 +463,570 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
                 ),
               ),
             ),
-            child: Column(
-              children: [
-                // Salary Cycle Executive Selector
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                    ),
-                  ),
-                  child: Row(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth >= 900;
+                if (isWide) {
+                  return Column(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(7),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: isDark ? 0.25 : 0.12),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.calendar_month_rounded, size: 18, color: AppColors.primary),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<SalaryCycle>(
-                            value: _selectedCycle,
-                            isExpanded: true,
-                            dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-                            icon: Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              color: isDark ? Colors.white70 : Colors.black87,
-                            ),
-                            items: _availableCycles.map((c) {
-                              final isCur = c == SalaryCycle.current();
-                              return DropdownMenuItem<SalaryCycle>(
-                                value: c,
-                                child: Row(
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        '${c.salaryMonthName} (${c.shortPeriodLabel})',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          color: isDark ? Colors.white : const Color(0xFF0F172A),
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    if (isCur) ...[
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                        decoration: BoxDecoration(
-                                          color: Colors.green.withValues(alpha: isDark ? 0.25 : 0.15),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          'Current',
-                                          style: TextStyle(
-                                            fontSize: 9.5,
-                                            fontWeight: FontWeight.bold,
-                                            color: isDark ? Colors.greenAccent : Colors.green[800],
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              );
-                            }).toList(),
-                            onChanged: (newCycle) {
-                              if (newCycle != null) {
-                                setState(() => _selectedCycle = newCycle);
-                              }
-                            },
+                      // Row 1: Cycle selector + Search field + Interim OT + Export Reports + Analytics Toggle
+                      Row(
+                        children: [
+                          _buildCycleSelector(isDark),
+                          const SizedBox(width: 10),
+                          Expanded(child: _buildSearchField(isDark)),
+                          const SizedBox(width: 8),
+                          _buildInterimOtButton(
+                            context: context,
+                            employees: allEmployees,
+                            records: allRecords,
+                            salaryConfigs: salaryMap,
+                            isDark: isDark,
                           ),
-                        ),
+                          const SizedBox(width: 8),
+                          _buildExportReportsMenu(
+                            allEmployees: allEmployees,
+                            allRecords: allRecords,
+                            isDark: isDark,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildAnalyticsToggle(isDark),
+                        ],
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.chevron_left_rounded, size: 22),
-                        tooltip: 'Previous Month Cycle',
-                        visualDensity: VisualDensity.compact,
-                        color: isDark ? Colors.white70 : Colors.black87,
-                        onPressed: _goToPreviousCycle,
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.chevron_right_rounded, size: 22),
-                        tooltip: 'Next Month Cycle',
-                        visualDensity: VisualDensity.compact,
-                        color: isDark ? Colors.white70 : Colors.black87,
-                        onPressed: _goToNextCycle,
+                      const SizedBox(height: 8),
+                      // Row 2: Status chips + Divider + Department chips
+                      Row(
+                        children: [
+                          _buildStatusFilterChipsRow(
+                            regularCount: regularStaffEmployees.length,
+                            clockedCount: clockedEmployees.length,
+                            manualCount: manualEmployees.length,
+                            zeroDaysCount: zeroDaysEmployees.length,
+                            isDark: isDark,
+                          ),
+                          const SizedBox(width: 12),
+                          Container(
+                            height: 20,
+                            width: 1,
+                            color: isDark ? Colors.white24 : Colors.grey[300],
+                          ),
+                          const SizedBox(width: 12),
+                          _buildDeptFilterChipsRow(allEmployees.length, isDark),
+                        ],
                       ),
                     ],
-                  ),
-                ),
-                const SizedBox(height: 10),
+                  );
+                }
 
-                // Department filter chips & Search input
-                Row(
+                // Compact layout for narrower screens (< 900px)
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _buildDeptFilterChip('ALL', 'All (${allEmployees.length})', isDark),
-                    const SizedBox(width: 6),
-                    _buildDeptFilterChip('Fusion', '⚡ Electric', isDark),
-                    const SizedBox(width: 6),
-                    _buildDeptFilterChip('Neo', '🏢 Neo', isDark),
-                    const Spacer(),
-                    Expanded(
-                      flex: 2,
-                      child: SizedBox(
-                        height: 38,
-                        child: TextField(
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: isDark ? Colors.white : const Color(0xFF0F172A),
-                          ),
-                          decoration: InputDecoration(
-                            hintText: 'Search employee...',
-                            hintStyle: TextStyle(
-                              fontSize: 12,
-                              color: isDark ? const Color(0xFF94A3B8) : Colors.grey[500],
-                            ),
-                            prefixIcon: Icon(
-                              Icons.search_rounded,
-                              size: 17,
-                              color: isDark ? Colors.white70 : Colors.grey[600],
-                            ),
-                            suffixIcon: _searchQuery.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(Icons.clear_rounded, size: 16),
-                                    onPressed: () => setState(() => _searchQuery = ''),
-                                  )
-                                : null,
-                            contentPadding: EdgeInsets.zero,
-                            filled: true,
-                            fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(
-                                color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(
-                                color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-                            ),
-                          ),
-                          onChanged: (val) => setState(() => _searchQuery = val.trim()),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-
-                // Dedicated WPS & Master Excel Export Action Buttons
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildActionButton(
-                        label: 'Neo WPS',
-                        icon: Icons.table_view_rounded,
-                        color: const Color(0xFF10B981),
-                        isDark: isDark,
-                        onPressed: () => _exportWpsExcel(division: 'Neo'),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: _buildActionButton(
-                        label: 'Electric WPS',
-                        icon: Icons.table_view_rounded,
-                        color: const Color(0xFF2563EB),
-                        isDark: isDark,
-                        onPressed: () => _exportWpsExcel(division: 'Fusion'),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: _buildActionButton(
-                        label: 'Total Payroll',
-                        icon: Icons.analytics_rounded,
-                        color: const Color(0xFF6366F1),
-                        isDark: isDark,
-                        onPressed: _exportMasterPayrollExcel,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: _buildActionButton(
-                        label: 'Interim OT',
-                        icon: Icons.bolt_rounded,
-                        color: const Color(0xFFF59E0B),
-                        isDark: isDark,
-                        onPressed: () => _openInterimOtDialog(
+                    // Row 1: Cycle selector
+                    _buildCycleSelector(isDark),
+                    const SizedBox(height: 8),
+                    // Row 2: Search + Interim OT + Export + Analytics
+                    Row(
+                      children: [
+                        Expanded(child: _buildSearchField(isDark)),
+                        const SizedBox(width: 6),
+                        _buildInterimOtButton(
+                          context: context,
                           employees: allEmployees,
                           records: allRecords,
                           salaryConfigs: salaryMap,
+                          isDark: isDark,
                         ),
+                        const SizedBox(width: 6),
+                        _buildExportReportsMenu(
+                          allEmployees: allEmployees,
+                          allRecords: allRecords,
+                          isDark: isDark,
+                        ),
+                        const SizedBox(width: 6),
+                        _buildAnalyticsToggle(isDark),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // Row 3: Horizontal scrollable filters
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildStatusFilterChipsRow(
+                            regularCount: regularStaffEmployees.length,
+                            clockedCount: clockedEmployees.length,
+                            manualCount: manualEmployees.length,
+                            zeroDaysCount: zeroDaysEmployees.length,
+                            isDark: isDark,
+                          ),
+                          const SizedBox(width: 10),
+                          Container(
+                            height: 20,
+                            width: 1,
+                            color: isDark ? Colors.white24 : Colors.grey[300],
+                          ),
+                          const SizedBox(width: 10),
+                          _buildDeptFilterChipsRow(allEmployees.length, isDark),
+                        ],
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 10),
-
-                // Attendance Status Separation Filter (All Staffs, Clocked, Manual Attendance, 0 Days Logged)
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildStatusFilterChip(
-                        'ALL',
-                        'All Staffs (${regularStaffEmployees.length})',
-                        null,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(width: 8),
-                      _buildStatusFilterChip(
-                        'CLOCKED',
-                        'Clocked (${clockedEmployees.length})',
-                        Icons.check_circle_outline_rounded,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(width: 8),
-                      _buildStatusFilterChip(
-                        'MANUAL',
-                        'Manual Attendance (${manualEmployees.length})',
-                        Icons.edit_calendar_rounded,
-                        isHighlight: manualEmployees.isNotEmpty,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(width: 8),
-                      _buildStatusFilterChip(
-                        'ZERO_DAYS',
-                        '0 Days Logged (${zeroDaysEmployees.length})',
-                        Icons.pending_actions_rounded,
-                        isWarning: zeroDaysEmployees.isNotEmpty,
-                        isDark: isDark,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                );
+              },
             ),
           ),
 
-          // Transition Period Notice Banner (when viewing Nov 2026 or when Transition cycle is active)
-          if (_selectedCycle.isTransition || (_selectedCycle.salaryMonth == 11 && _selectedCycle.salaryYear == 2026))
-            _buildTransitionNoticeBanner(
-              context: context,
-              employees: allEmployees,
-              records: allRecords,
-              salaryConfigs: salaryMap,
-              isDark: isDark,
-            ),
-
-          // 2. Executive Payroll Summary Banner (Combined + Fusion Electric + Fusion Neo)
-          _buildWorkforceMetricBanner(
-            workforceSummary: workforceSummary,
-            fusionSummary: fusionSummary,
-            neoSummary: neoSummary,
-            isDark: isDark,
-          ),
-
-          // 3. Employee Salary List (Separated with status sections and attendance action)
+          // 2. Full-Viewport Employee List with prepended banners inside the scrollview
           Expanded(
-            child: _buildSalaryList(filteredSummaries, isDark),
+            child: _buildSalaryList(
+              summaries: filteredSummaries,
+              isDark: isDark,
+              transitionBanner: (_selectedCycle.isTransition ||
+                      (_selectedCycle.salaryMonth == 11 &&
+                          _selectedCycle.salaryYear == 2026))
+                  ? _buildTransitionNoticeBanner(
+                      context: context,
+                      employees: allEmployees,
+                      records: allRecords,
+                      salaryConfigs: salaryMap,
+                      isDark: isDark,
+                    )
+                  : null,
+              metricBanner: _buildWorkforceMetricBanner(
+                workforceSummary: workforceSummary,
+                fusionSummary: fusionSummary,
+                neoSummary: neoSummary,
+                isDark: isDark,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildActionButton({
-    required String label,
-    required IconData icon,
-    required Color color,
+  Widget _buildCycleSelector(bool isDark) {
+    return Container(
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left_rounded, size: 20),
+            tooltip: 'Previous Month Cycle',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+            color: isDark ? Colors.white70 : Colors.black87,
+            onPressed: _goToPreviousCycle,
+          ),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<SalaryCycle>(
+              value: _selectedCycle,
+              dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+              icon: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 18,
+                color: isDark ? Colors.white70 : Colors.black87,
+              ),
+              items: _availableCycles.map((c) {
+                final isCur = c == SalaryCycle.current();
+                return DropdownMenuItem<SalaryCycle>(
+                  value: c,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${c.salaryMonthName} (${c.shortPeriodLabel})',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
+                      ),
+                      if (isCur) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: isDark ? 0.25 : 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Current',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.greenAccent : Colors.green[800],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: (newCycle) {
+                if (newCycle != null) {
+                  setState(() => _selectedCycle = newCycle);
+                }
+              },
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right_rounded, size: 20),
+            tooltip: 'Next Month Cycle',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+            color: isDark ? Colors.white70 : Colors.black87,
+            onPressed: _goToNextCycle,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchField(bool isDark) {
+    return SizedBox(
+      height: 38,
+      child: TextField(
+        style: TextStyle(
+          fontSize: 12.5,
+          color: isDark ? Colors.white : const Color(0xFF0F172A),
+        ),
+        decoration: InputDecoration(
+          hintText: 'Search employee name, code, dept...',
+          hintStyle: TextStyle(
+            fontSize: 12,
+            color: isDark ? const Color(0xFF94A3B8) : Colors.grey[500],
+          ),
+          prefixIcon: Icon(
+            Icons.search_rounded,
+            size: 17,
+            color: isDark ? Colors.white70 : Colors.grey[600],
+          ),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear_rounded, size: 16),
+                  onPressed: () => setState(() => _searchQuery = ''),
+                )
+              : null,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+          filled: true,
+          fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(
+              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+            ),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(
+              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          ),
+        ),
+        onChanged: (val) => setState(() => _searchQuery = val.trim()),
+      ),
+    );
+  }
+
+  Widget _buildInterimOtButton({
+    required BuildContext context,
+    required List<EmployeeEntity> employees,
+    required List<AttendanceRecord> records,
+    required Map<String, EmployeeSalaryConfig> salaryConfigs,
     required bool isDark,
-    required VoidCallback onPressed,
   }) {
     return InkWell(
-      onTap: onPressed,
+      onTap: () => _openInterimOtDialog(
+        employees: employees,
+        records: records,
+        salaryConfigs: salaryConfigs,
+      ),
       borderRadius: BorderRadius.circular(10),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: isDark ? 0.16 : 0.08),
+          color: const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.2 : 0.1),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: color.withValues(alpha: isDark ? 0.35 : 0.25),
-            width: 1,
+            color: const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.45 : 0.35),
           ),
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 14, color: color),
+            const Icon(Icons.bolt_rounded, size: 16, color: Color(0xFFF59E0B)),
             const SizedBox(width: 4),
-            Flexible(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : color,
-                ),
-                overflow: TextOverflow.ellipsis,
+            Text(
+              'Interim OT',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: isDark ? const Color(0xFFFDE68A) : const Color(0xFFB45309),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildExportReportsMenu({
+    required List<EmployeeEntity> allEmployees,
+    required List<AttendanceRecord> allRecords,
+    required bool isDark,
+  }) {
+    return PopupMenuButton<String>(
+      tooltip: 'Export Payroll Excel & PDF Reports',
+      onSelected: (val) {
+        if (val == 'MASTER') {
+          _exportMasterPayrollExcel();
+        } else if (val == 'NEO') {
+          _exportWpsExcel(division: 'Neo');
+        } else if (val == 'ELECTRO') {
+          _exportWpsExcel(division: 'Fusion');
+        } else if (val == 'INTERIM_OT') {
+          _exportInterimOtExcel();
+        } else if (val == 'PDF') {
+          _exportPdf(allEmployees: allEmployees, allRecords: allRecords);
+        }
+      },
+      itemBuilder: (ctx) => [
+        const PopupMenuItem(
+          value: 'MASTER',
+          child: Row(
+            children: [
+              Icon(Icons.analytics_rounded, color: Color(0xFF4F46E5), size: 18),
+              SizedBox(width: 10),
+              Text(
+                'Total Estimated Payroll (.xlsx)',
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: 'NEO',
+          child: Row(
+            children: [
+              Icon(Icons.table_view_rounded, color: Color(0xFF0F9D58), size: 18),
+              SizedBox(width: 10),
+              Text('Fusion Neo WPS (.xlsx)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'ELECTRO',
+          child: Row(
+            children: [
+              Icon(Icons.table_view_rounded, color: Color(0xFF1A73E8), size: 18),
+              SizedBox(width: 10),
+              Text('Fusion Electric WPS (.xlsx)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'INTERIM_OT',
+          child: Row(
+            children: [
+              Icon(Icons.bolt_rounded, color: Color(0xFFF59E0B), size: 18),
+              SizedBox(width: 10),
+              Text('Interim OT Report (26-31 Oct) (.xlsx)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: 'PDF',
+          child: Row(
+            children: [
+              Icon(Icons.picture_as_pdf_rounded, color: Colors.redAccent, size: 18),
+              SizedBox(width: 10),
+              Text('Workforce Salary Summary (.pdf)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ],
+      child: Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.2 : 0.1),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.45 : 0.35),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.file_download_outlined,
+              size: 16,
+              color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              'Export',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5),
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 18,
+              color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnalyticsToggle(bool isDark) {
+    return InkWell(
+      onTap: () => setState(() => _showKpiBanner = !_showKpiBanner),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: _showKpiBanner
+              ? AppColors.primary
+              : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: _showKpiBanner
+                ? AppColors.primary
+                : (isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.insights_rounded,
+              size: 16,
+              color: _showKpiBanner ? Colors.white : (isDark ? Colors.white70 : const Color(0xFF475569)),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              'Analytics',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: _showKpiBanner ? Colors.white : (isDark ? Colors.white70 : const Color(0xFF475569)),
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(
+              _showKpiBanner ? Icons.arrow_drop_up_rounded : Icons.arrow_drop_down_rounded,
+              size: 18,
+              color: _showKpiBanner ? Colors.white : (isDark ? Colors.white70 : const Color(0xFF475569)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusFilterChipsRow({
+    required int regularCount,
+    required int clockedCount,
+    required int manualCount,
+    required int zeroDaysCount,
+    required bool isDark,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildStatusFilterChip(
+          'ALL',
+          'All Staffs ($regularCount)',
+          null,
+          isDark: isDark,
+        ),
+        const SizedBox(width: 6),
+        _buildStatusFilterChip(
+          'CLOCKED',
+          'Clocked ($clockedCount)',
+          Icons.check_circle_outline_rounded,
+          isDark: isDark,
+        ),
+        const SizedBox(width: 6),
+        _buildStatusFilterChip(
+          'MANUAL',
+          'Manual ($manualCount)',
+          Icons.edit_calendar_rounded,
+          isHighlight: manualCount > 0,
+          isDark: isDark,
+        ),
+        const SizedBox(width: 6),
+        _buildStatusFilterChip(
+          'ZERO_DAYS',
+          '0 Days ($zeroDaysCount)',
+          Icons.pending_actions_rounded,
+          isWarning: zeroDaysCount > 0,
+          isDark: isDark,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDeptFilterChipsRow(int totalCount, bool isDark) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildDeptFilterChip('ALL', 'All ($totalCount)', isDark),
+        const SizedBox(width: 6),
+        _buildDeptFilterChip('Fusion', '⚡ Electric', isDark),
+        const SizedBox(width: 6),
+        _buildDeptFilterChip('Neo', '🏢 Neo', isDark),
+      ],
+    );
+  }
+
+  Future<void> _exportPdf({
+    required List<EmployeeEntity> allEmployees,
+    required List<AttendanceRecord> allRecords,
+  }) async {
+    try {
+      await PdfExportService.exportWorkforceSalaryPdf(
+        organizationName: _db.organization?.name ?? 'Fusion 360',
+        employees: allEmployees,
+        records: allRecords,
+        cycle: _selectedCycle,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error generating PDF: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildTransitionNoticeBanner({
@@ -794,7 +1039,7 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
     final isTransitionActive = _selectedCycle.isTransition;
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: isTransitionActive
@@ -977,10 +1222,24 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
     );
   }
 
-  Widget _buildSalaryList(
-    List<EmployeeSalarySummary> summaries,
-    bool isDark,
-  ) {
+  Widget _buildSalaryList({
+    required List<EmployeeSalarySummary> summaries,
+    required bool isDark,
+    required Widget? transitionBanner,
+    required Widget metricBanner,
+  }) {
+    final List<Widget> scrollChildren = [];
+
+    // 1. Transition notice banner if applicable
+    if (transitionBanner != null) {
+      scrollChildren.add(transitionBanner);
+    }
+
+    // 2. Workforce metric banner (compact summary or expanded division breakdown)
+    scrollChildren.add(metricBanner);
+    scrollChildren.add(const SizedBox(height: 6));
+
+    // 3. Employee cards or empty state
     if (summaries.isEmpty) {
       String emptyMsg = 'No employee salary records found';
       if (_selectedStatusFilter == 'MANUAL') {
@@ -991,98 +1250,128 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
         emptyMsg = 'No employees with 0 days logged.';
       }
 
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              _selectedStatusFilter == 'MANUAL'
-                  ? Icons.edit_calendar_outlined
-                  : Icons.search_off_rounded,
-              size: 48,
-              color: Colors.grey[400],
+      scrollChildren.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 40),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  _selectedStatusFilter == 'MANUAL'
+                      ? Icons.edit_calendar_outlined
+                      : Icons.search_off_rounded,
+                  size: 48,
+                  color: isDark ? Colors.white38 : Colors.grey[400],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  emptyMsg,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? const Color(0xFF94A3B8) : Colors.grey[600],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              emptyMsg,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
-          ],
+          ),
         ),
       );
-    }
+    } else if (_selectedStatusFilter == 'MANUAL') {
+      scrollChildren.add(_buildManualAttendanceBanner(summaries.length, isDark));
+      scrollChildren.add(const SizedBox(height: 12));
+      scrollChildren.add(_buildResponsiveCardsLayout(summaries, isDark));
+    } else if (_selectedStatusFilter == 'ZERO_DAYS') {
+      scrollChildren.add(_buildZeroDaysInfoBanner(summaries.length, isDark));
+      scrollChildren.add(const SizedBox(height: 12));
+      scrollChildren.add(_buildResponsiveCardsLayout(summaries, isDark));
+    } else if (_selectedStatusFilter == 'CLOCKED') {
+      scrollChildren.add(_buildResponsiveCardsLayout(summaries, isDark));
+    } else {
+      // Default: All Staffs (active and zero days)
+      final activeRegular = summaries.where((s) => s.daysWorked > 0).toList();
+      final zeroRegular = summaries.where((s) => s.daysWorked == 0).toList();
 
-    // 1. When viewing Manual Attendance tab specifically
-    if (_selectedStatusFilter == 'MANUAL') {
-      return ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _buildManualAttendanceBanner(summaries.length, isDark),
-          const SizedBox(height: 12),
-          ...summaries.map((s) => _buildEmployeeSalaryCard(s, isDark)),
-        ],
-      );
-    }
-
-    // 2. When viewing 0 Days tab specifically
-    if (_selectedStatusFilter == 'ZERO_DAYS') {
-      return ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _buildZeroDaysInfoBanner(summaries.length, isDark),
-          const SizedBox(height: 12),
-          ...summaries.map((s) => _buildEmployeeSalaryCard(s, isDark)),
-        ],
-      );
-    }
-
-    // 3. When viewing Clocked In tab specifically
-    if (_selectedStatusFilter == 'CLOCKED') {
-      return ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: summaries.length,
-        itemBuilder: (ctx, index) => _buildEmployeeSalaryCard(summaries[index], isDark),
-      );
-    }
-
-    // 4. When viewing All Staffs (regular workforce, excluding manual attendance employees)
-    final activeRegular = summaries.where((s) => s.daysWorked > 0).toList();
-    final zeroRegular = summaries.where((s) => s.daysWorked == 0).toList();
-
-    if (activeRegular.isNotEmpty && zeroRegular.isNotEmpty) {
-      return ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+      if (activeRegular.isNotEmpty && zeroRegular.isNotEmpty) {
+        scrollChildren.add(
           _buildSectionHeader(
             title: 'Clocked In Staff (${activeRegular.length})',
-            subtitle: 'Employees with mobile app attendance logs for this cycle',
+            subtitle: 'Employees with attendance logs for this cycle',
             badgeColor: Colors.green,
             isDark: isDark,
           ),
-          const SizedBox(height: 8),
-          ...activeRegular.map((s) => _buildEmployeeSalaryCard(s, isDark)),
-          const SizedBox(height: 16),
+        );
+        scrollChildren.add(const SizedBox(height: 8));
+        scrollChildren.add(_buildResponsiveCardsLayout(activeRegular, isDark));
+        scrollChildren.add(const SizedBox(height: 16));
+        scrollChildren.add(
           _buildSectionHeader(
             title: 'Not Clocked In (${zeroRegular.length})',
             subtitle: 'Employees with 0 days logged for this cycle',
             badgeColor: Colors.amber[700]!,
             isDark: isDark,
           ),
-          const SizedBox(height: 8),
-          ...zeroRegular.map((s) => _buildEmployeeSalaryCard(s, isDark)),
-        ],
-      );
+        );
+        scrollChildren.add(const SizedBox(height: 8));
+        scrollChildren.add(_buildResponsiveCardsLayout(zeroRegular, isDark));
+      } else {
+        scrollChildren.add(_buildResponsiveCardsLayout(summaries, isDark));
+      }
     }
 
-    // Standard list
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: summaries.length,
-      itemBuilder: (ctx, index) => _buildEmployeeSalaryCard(summaries[index], isDark),
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      children: scrollChildren,
+    );
+  }
+
+  Widget _buildResponsiveCardsLayout(
+    List<EmployeeSalarySummary> list,
+    bool isDark,
+  ) {
+    if (list.isEmpty) return const SizedBox.shrink();
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMultiColumn = constraints.maxWidth >= 900;
+        if (!isMultiColumn) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: list.map((s) => _buildEmployeeSalaryCard(s, isDark)).toList(),
+          );
+        }
+
+        // Two-column balanced layout on wide screens
+        final col1 = <EmployeeSalarySummary>[];
+        final col2 = <EmployeeSalarySummary>[];
+        for (int i = 0; i < list.length; i++) {
+          if (i % 2 == 0) {
+            col1.add(list[i]);
+          } else {
+            col2.add(list[i]);
+          }
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: col1.map((s) => _buildEmployeeSalaryCard(s, isDark)).toList(),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: col2.map((s) => _buildEmployeeSalaryCard(s, isDark)).toList(),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1239,8 +1528,107 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
     required WorkforceSalarySummary neoSummary,
     required bool isDark,
   }) {
+    if (!_showKpiBanner) {
+      // Compact Executive Summary Strip (~44px)
+      return Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isDark
+                ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
+                : [const Color(0xFF1E3A8A), const Color(0xFF2563EB)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDark ? const Color(0xFF334155) : Colors.white.withValues(alpha: 0.15),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isDark ? Colors.black.withValues(alpha: 0.25) : const Color(0xFF1E3A8A).withValues(alpha: 0.15),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(Icons.analytics_rounded, size: 15, color: Colors.white),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    const Text(
+                      'Est. Payroll: ',
+                      style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                    Text(
+                      'AED ${workforceSummary.totalPayroll.toStringAsFixed(2)}',
+                      style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      '•  ${workforceSummary.employeeSummaries.length} Staff',
+                      style: const TextStyle(color: Colors.white70, fontSize: 11.5),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '•  ${workforceSummary.totalWorkforcePayableDays} Payable Days',
+                      style: const TextStyle(color: Colors.white70, fontSize: 11.5),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '•  OT: AED ${workforceSummary.totalOtEarned.toStringAsFixed(0)} (${workforceSummary.totalOtHours.toStringAsFixed(1)}h)',
+                      style: const TextStyle(color: Color(0xFFFDE68A), fontSize: 11.5, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: () => setState(() => _showKpiBanner = true),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Division Breakdown',
+                      style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(width: 2),
+                    Icon(Icons.keyboard_arrow_down_rounded, size: 15, color: Colors.white),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Expanded Full Division & Metric Cards
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -1265,7 +1653,7 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
       ),
       child: Column(
         children: [
-          // 1. Overall Combined Workforce Estimated Payroll
+          // 1. Overall Combined Workforce Estimated Payroll + Collapse Button
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1293,33 +1681,61 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
                   ),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${workforceSummary.totalWorkforcePayableDays} Payable Days',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '${workforceSummary.totalWorkforcePayableDays} Payable Days',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          '${workforceSummary.totalWorkforceDaysWorked}d worked + ${workforceSummary.totalWorkforcePaidSundays}d Sun off',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () => setState(() => _showKpiBanner = false),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Collapse',
+                            style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                          SizedBox(width: 2),
+                          Icon(Icons.keyboard_arrow_up_rounded, size: 15, color: Colors.white),
+                        ],
                       ),
                     ),
-                    Text(
-                      '${workforceSummary.totalWorkforceDaysWorked}d worked + ${workforceSummary.totalWorkforcePaidSundays}d Sun off',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ],
           ),
