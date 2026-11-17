@@ -587,22 +587,33 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
                         avatar: const Icon(Icons.check_circle_outline_rounded, size: 15, color: Colors.green),
                         label: Text('Mon - Sat ($nonSundayCount Days)'),
                         onPressed: _selectWorkingDaysMonToSat,
-                        backgroundColor: isDark ? Colors.white10 : Colors.grey[100],
-                        labelStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.grey[100],
+                        side: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                        labelStyle: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
                       ),
                       ActionChip(
                         avatar: const Icon(Icons.done_all_rounded, size: 15, color: AppColors.primary),
                         label: Text('Select All (${_cycleDates.length} Days)'),
                         onPressed: _selectAllDays,
-                        backgroundColor: isDark ? Colors.white10 : Colors.grey[100],
-                        labelStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.grey[100],
+                        side: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                        labelStyle: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
                       ),
                       if (_selectedDateKeys.isNotEmpty)
                         ActionChip(
                           avatar: const Icon(Icons.close_rounded, size: 14, color: AppColors.error),
                           label: const Text('Clear'),
                           onPressed: _clearSelection,
-                          backgroundColor: AppColors.error.withValues(alpha: 0.1),
+                          backgroundColor: AppColors.error.withValues(alpha: isDark ? 0.2 : 0.1),
+                          side: BorderSide(color: AppColors.error.withValues(alpha: isDark ? 0.4 : 0.2)),
                           labelStyle: const TextStyle(fontSize: 11, color: AppColors.error, fontWeight: FontWeight.bold),
                         ),
                     ],
@@ -875,19 +886,17 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
     Border? border;
 
     if (isSelected) {
-      bgColor = isDark
-          ? AppColors.primary.withValues(alpha: 0.35)
-          : AppColors.primary.withValues(alpha: 0.15);
-      border = Border.all(color: AppColors.primary, width: 1.5);
+      bgColor = isDark ? AppColors.primary : AppColors.primary;
+      border = Border.all(color: isDark ? const Color(0xFF93C5FD) : AppColors.primary, width: 1.5);
     } else if (isPaidSunday) {
-      bgColor = Colors.blue.withValues(alpha: isDark ? 0.18 : 0.08);
-      border = Border.all(color: Colors.blue.withValues(alpha: 0.4));
+      bgColor = isDark ? const Color(0xFF1E3A8A).withValues(alpha: 0.35) : Colors.blue.withValues(alpha: 0.08);
+      border = Border.all(color: isDark ? const Color(0xFF3B82F6).withValues(alpha: 0.5) : Colors.blue.withValues(alpha: 0.4));
     } else if (isSunday) {
-      bgColor = isDark ? Colors.white.withValues(alpha: 0.03) : Colors.grey[50]!;
-      border = Border.all(color: isDark ? Colors.white10 : Colors.grey[200]!);
+      bgColor = isDark ? const Color(0xFF0F172A) : Colors.grey[50]!;
+      border = Border.all(color: isDark ? const Color(0xFF334155) : Colors.grey[200]!);
     } else {
-      bgColor = isDark ? Colors.transparent : Colors.white;
-      border = Border.all(color: isDark ? Colors.white10 : Colors.grey[200]!);
+      bgColor = isDark ? const Color(0xFF1E293B) : Colors.white;
+      border = Border.all(color: isDark ? const Color(0xFF334155) : Colors.grey[200]!);
     }
 
     final String dayNum = date.day.toString();
@@ -915,7 +924,9 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
                   style: TextStyle(
                     fontSize: 8,
                     fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.grey[400] : Colors.grey[600],
+                    color: isSelected
+                        ? Colors.white70
+                        : (isDark ? const Color(0xFF94A3B8) : Colors.grey[600]),
                   ),
                 ),
               Text(
@@ -924,8 +935,10 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
                   fontSize: 13,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
                   color: isSelected
-                      ? (isDark ? Colors.white : AppColors.primary)
-                      : (isSunday ? Colors.blue[600] : (isDark ? Colors.grey[300] : Colors.black87)),
+                      ? Colors.white
+                      : (isSunday
+                          ? (isDark ? const Color(0xFF60A5FA) : Colors.blue[700])
+                          : (isDark ? Colors.white : const Color(0xFF0F172A))),
                 ),
               ),
               const SizedBox(height: 2),
@@ -933,7 +946,7 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                   decoration: BoxDecoration(
-                    color: AppColors.primary,
+                    color: Colors.white.withValues(alpha: 0.25),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Text(
@@ -945,12 +958,18 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withValues(alpha: 0.15),
+                    color: isDark
+                        ? const Color(0xFF2563EB).withValues(alpha: 0.3)
+                        : Colors.blue.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: const Text(
+                  child: Text(
                     'Sun Off',
-                    style: TextStyle(fontSize: 7.5, color: Colors.blue, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: 7.5,
+                      color: isDark ? const Color(0xFF93C5FD) : Colors.blue[800],
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 )
               else
@@ -958,7 +977,8 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
                   isSunday ? 'Off' : 'Absent',
                   style: TextStyle(
                     fontSize: 8,
-                    color: isDark ? Colors.grey[500] : Colors.grey[400],
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? const Color(0xFF64748B) : Colors.grey[400],
                   ),
                 ),
             ],
@@ -980,14 +1000,14 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.surfaceDark : Colors.white,
+        color: isDark ? const Color(0xFF0F172A) : Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: AppColors.primary.withValues(alpha: 0.3),
+          color: isDark ? const Color(0xFF334155) : AppColors.primary.withValues(alpha: 0.3),
         ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.05),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -1002,22 +1022,22 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'PROJECTED EARNED SALARY',
                     style: TextStyle(
                       fontSize: 9.5,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.8,
-                      color: AppColors.primary,
+                      color: isDark ? const Color(0xFF93C5FD) : AppColors.primary,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     'AED ${summary.grossTotalSalary.toStringAsFixed(2)}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
+                      color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
                     ),
                   ),
                 ],
@@ -1025,7 +1045,7 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
+                  color: AppColors.primary.withValues(alpha: isDark ? 0.25 : 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Column(
@@ -1033,17 +1053,17 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
                   children: [
                     Text(
                       '${summary.totalPayableDays} Payable Days',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
+                        color: isDark ? const Color(0xFF93C5FD) : AppColors.primary,
                       ),
                     ),
                     Text(
                       '${summary.daysWorked}d worked + ${summary.paidSundays}d Sun off',
                       style: TextStyle(
                         fontSize: 9.5,
-                        color: isDark ? Colors.grey[400] : AppColors.textSecondaryLight,
+                        color: isDark ? const Color(0xFFCBD5E1) : AppColors.textSecondaryLight,
                       ),
                     ),
                   ],
@@ -1051,7 +1071,7 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
               ),
             ],
           ),
-          const Divider(height: 18),
+          Divider(height: 18, color: isDark ? const Color(0xFF334155) : Colors.grey[200]),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1089,15 +1109,17 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
           label,
           style: TextStyle(
             fontSize: 9.5,
-            color: isDark ? Colors.grey[400] : AppColors.textSecondaryLight,
+            fontWeight: FontWeight.w500,
+            color: isDark ? const Color(0xFF94A3B8) : AppColors.textSecondaryLight,
           ),
         ),
-        const SizedBox(height: 1),
+        const SizedBox(height: 2),
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 11.5,
+          style: TextStyle(
+            fontSize: 12,
             fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : const Color(0xFF0F172A),
           ),
         ),
       ],
