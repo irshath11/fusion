@@ -277,5 +277,111 @@ void main() {
       );
       expect(asikOfficial, isNull);
     });
+
+    test('Strict log isolation: Irshath Ahamed (0 logs) never receives Mohamed Ali (Shaik) or other logs', () {
+      // 1. Irshath Ahamed target identity
+      const irshathId = 'N-1006';
+      const irshathCode = 'N-1006';
+      const irshathName = 'Irshath Ahamed Shaik Allavudin Shaik Allavudin';
+      const irshathEmail = 'sr.irshath@gmail.com';
+
+      // 2. Mohamed Ali records in various formats (ID 1038, full name, short alias Shaik, alias Mohamed Ali)
+      final mohamedAliRecords = [
+        {'id': '1038', 'name': 'Mohamed Ali Shaik Mohamed Mohamed Ali'},
+        {'id': 'emp-1038', 'name': 'Mohamed Ali'},
+        {'id': '1038', 'name': 'Shaik'},
+        {'id': 'emp-shaik', 'name': 'Shaik'},
+        {'id': '1038', 'name': 'Mohamed Ali Shaik'},
+      ];
+
+      for (final rec in mohamedAliRecords) {
+        final matchesIrshath = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+          recordEmployeeId: rec['id']!,
+          recordEmployeeName: rec['name']!,
+          employeeId: irshathId,
+          employeeCode: irshathCode,
+          employeeName: irshathName,
+          employeeEmail: irshathEmail,
+        );
+        expect(matchesIrshath, isFalse,
+            reason: 'Record ${rec["id"]} / ${rec["name"]} must NOT match Irshath Ahamed');
+
+        // Verify Mohamed Ali's records strictly match Mohamed Ali himself
+        final matchesMohamedAli = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+          recordEmployeeId: rec['id']!,
+          recordEmployeeName: rec['name']!,
+          employeeId: '1038',
+          employeeCode: '1038',
+          employeeName: 'Mohamed Ali Shaik Mohamed Mohamed Ali',
+          employeeEmail: 'shaik@gmail.com',
+        );
+        expect(matchesMohamedAli, isTrue,
+            reason: 'Record ${rec["id"]} / ${rec["name"]} MUST match Mohamed Ali');
+      }
+
+      // 3. Mohamed Ali logs must NEVER leak to other employees sharing "Mohamed" or "Ali"
+      // e.g. Raja Mohammed Mohammed Ali (1012)
+      final matchesRaja = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: '1038',
+        recordEmployeeName: 'Mohamed Ali',
+        employeeId: '1012',
+        employeeCode: '1012',
+        employeeName: 'Raja Mohammed Mohammed Ali',
+        employeeEmail: 'raja@gmail.com',
+      );
+      expect(matchesRaja, isFalse);
+
+      // e.g. Mohamed Azarudheen Anvar Ali (1021)
+      final matchesAzar = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: '1038',
+        recordEmployeeName: 'Mohamed Ali',
+        employeeId: '1021',
+        employeeCode: '1021',
+        employeeName: 'Mohamed Azarudheen Anvar Ali',
+        employeeEmail: 'azar@gmail.com',
+      );
+      expect(matchesAzar, isFalse);
+
+      // 4. Other name-sharing employees do NOT cross-contaminate:
+      // Mohammed Iburahim Baseer Ahamed (1004) vs Irshath Ahamed (N-1006)
+      final ibrahimMatchesIrshath = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: '1004',
+        recordEmployeeName: 'Mohammed Iburahim Baseer Ahamed',
+        employeeId: irshathId,
+        employeeCode: irshathCode,
+        employeeName: irshathName,
+      );
+      expect(ibrahimMatchesIrshath, isFalse);
+
+      // Ahamed Meeran Sheik Abdul Kadar (N-1014) vs Irshath Ahamed (N-1006)
+      final meeranMatchesIrshath = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: 'N-1014',
+        recordEmployeeName: 'Ahamed Meeran',
+        employeeId: irshathId,
+        employeeCode: irshathCode,
+        employeeName: irshathName,
+      );
+      expect(meeranMatchesIrshath, isFalse);
+
+      // Sanjay Kumar (1049) vs Saji Kumar (N-1007)
+      final sanjayMatchesSaji = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: '1049',
+        recordEmployeeName: 'Sanjay Kumar',
+        employeeId: 'N-1007',
+        employeeCode: 'N-1007',
+        employeeName: 'Saji Kumar Thankamani Thankamani',
+      );
+      expect(sanjayMatchesSaji, isFalse);
+
+      // Muhammad Irfan (1048) vs Muhammed Riyas (N-1003)
+      final irfanMatchesRiyas = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: '1048',
+        recordEmployeeName: 'Muhammad Irfan',
+        employeeId: 'N-1003',
+        employeeCode: 'N-1003',
+        employeeName: 'Muhammed Riyas Hussain Hussain Kasim',
+      );
+      expect(irfanMatchesRiyas, isFalse);
+    });
   });
 }
