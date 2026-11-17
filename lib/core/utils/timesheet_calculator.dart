@@ -115,11 +115,18 @@ class TimesheetCalculator {
     DateTime? startDate,
     DateTime? endDate,
   }) {
+    final bool hasTarget = (targetEmployeeId != null && targetEmployeeId.isNotEmpty) ||
+        (targetFirebaseUid != null && targetFirebaseUid.isNotEmpty) ||
+        (targetEmployeeName != null && targetEmployeeName.isNotEmpty);
+
     final filteredRecords = records.where((r) {
       if (startDate != null && r.eventTimestamp.isBefore(startDate)) return false;
       if (endDate != null && r.eventTimestamp.isAfter(endDate)) return false;
-      if (targetEmployeeId == null || targetEmployeeId.isEmpty) return true;
-      final idMatch = r.employeeId == targetEmployeeId ||
+      if (!hasTarget) return true;
+
+      final idMatch = (targetEmployeeId != null &&
+              targetEmployeeId.isNotEmpty &&
+              r.employeeId == targetEmployeeId) ||
           (targetFirebaseUid != null &&
               targetFirebaseUid.isNotEmpty &&
               r.employeeId == targetFirebaseUid);
@@ -136,8 +143,7 @@ class TimesheetCalculator {
       return idMatch || nameMatch || identityMatch;
     }).toList();
 
-    final bool isSingleEmployee = (targetEmployeeId != null && targetEmployeeId.isNotEmpty) ||
-        (targetEmployeeName != null && targetEmployeeName.isNotEmpty);
+    final bool isSingleEmployee = hasTarget;
 
     // Map key: "yyyy-MM-dd" for single employee, or "empKey__yyyy-MM-dd" for workforce
     final Map<String, List<AttendanceRecord>> groupedMap = {};
@@ -146,11 +152,18 @@ class TimesheetCalculator {
       final localEv = record.eventTimestamp.toLocal();
       final dateStr =
           "${localEv.year}-${localEv.month.toString().padLeft(2, '0')}-${localEv.day.toString().padLeft(2, '0')}";
-      final empKey = record.employeeId.isNotEmpty
-          ? record.employeeId
-          : (record.employeeName.trim().isNotEmpty
-              ? record.employeeName.trim().toLowerCase()
-              : 'unknown');
+      final canonicalEmpId = EmployeeDirectoryHelper.getEmployeeId(
+        currentCode: record.employeeId,
+        name: record.employeeName,
+        id: record.employeeId,
+      );
+      final empKey = canonicalEmpId.isNotEmpty
+          ? canonicalEmpId
+          : (record.employeeId.isNotEmpty
+              ? record.employeeId
+              : (record.employeeName.trim().isNotEmpty
+                  ? record.employeeName.trim().toLowerCase()
+                  : 'unknown'));
       final groupKey = isSingleEmployee ? dateStr : "${empKey}__$dateStr";
       groupedMap.putIfAbsent(groupKey, () => []).add(record);
     }

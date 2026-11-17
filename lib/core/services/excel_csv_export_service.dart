@@ -449,7 +449,38 @@ class ExcelCsvExportService {
     required Map<String, EmployeeSalaryConfig> salaryConfigs,
   }) {
     // Master WPS records for this division
-    final wpsList = WpsMasterRegistry.getByDivision(division);
+    final List<WpsEmployeeRecord> wpsList = List.from(WpsMasterRegistry.getByDivision(division));
+
+    // Also include any active employees in summaryMap for this division who might not be in the hardcoded registry
+    final Set<String> registeredCodes = wpsList.map((w) => w.employeeCode.toUpperCase()).toSet();
+    final Set<String> registeredNames = wpsList.map((w) => w.fullName.trim().toLowerCase()).toSet();
+
+    for (final s in summaryMap.values) {
+      if (SalaryCalculator.isExcludedOwner(name: s.employeeName, code: s.employeeCode)) continue;
+      final bool matchesDiv = division.toLowerCase() == 'neo'
+          ? s.department.toLowerCase().contains('neo')
+          : !s.department.toLowerCase().contains('neo');
+      if (!matchesDiv) continue;
+
+      final cUpper = s.employeeCode.toUpperCase();
+      final nLower = s.employeeName.trim().toLowerCase();
+      if (!registeredCodes.contains(cUpper) && !registeredNames.contains(nLower)) {
+        wpsList.add(
+          WpsEmployeeRecord(
+            employeeCode: s.employeeCode,
+            fullName: s.employeeName,
+            workPermitNo: '',
+            personalNo: '',
+            bankName: 'NBAD',
+            bankAccountNo: '',
+            division: division,
+            defaultBasicSalary: s.config.basicSalary,
+          ),
+        );
+        registeredCodes.add(cUpper);
+        registeredNames.add(nLower);
+      }
+    }
 
     // Format Month String e.g. "MONTH : Nov- 2026"
     final String monthAbbr = cycle.salaryMonthAbbr;
@@ -606,21 +637,27 @@ class ExcelCsvExportService {
         }
       }
 
-      // 1. Fixed Portion: Basic Salary of the employee
+      // 1. Fixed Portion: Basic Salary of the employee (prorated earned fixed based on actual payable days)
       final int fixedPortion = summary != null
-          ? summary.config.basicSalary.round()
-          : wps.defaultBasicSalary.round();
+          ? (summary.totalPayableDays > 0 ? summary.earnedFixedSalary.round() : 0)
+          : 0;
 
-      // 2. Variable Portion: Sum of Variable Salary and OT Salary
+      // 2. Variable Portion: Sum of earned Variable Salary and earned OT Salary
       final int variablePortion = summary != null
-          ? (summary.earnedVariableSalary + summary.earnedOtSalary).round()
-          : (salaryConfigs[wps.employeeCode]?.variableSalary.round() ?? 0);
+          ? (summary.totalPayableDays > 0
+              ? (summary.earnedVariableSalary + summary.earnedOtSalary).round()
+              : 0)
+          : 0;
 
       // 3. Total Payment: Sum of Fixed Portion and Variable Portion
       final int totalPayment = fixedPortion + variablePortion;
 
-      // 4. No of days absent
-      final int daysAbsent = summary?.absentDays ?? 0;
+      // 4. No of days absent: Total days in cycle minus payable days worked
+      final int daysAbsent = summary != null
+          ? (summary.totalPayableDays == 0
+              ? cycle.totalDays
+              : (cycle.totalDays - summary.totalPayableDays).clamp(0, cycle.totalDays))
+          : cycle.totalDays;
 
       // Write row cells
       // Col 0: Sl.No

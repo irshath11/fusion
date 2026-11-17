@@ -166,8 +166,16 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
   EmployeeSalarySummary _computeProjectedSummary() {
     final cycle = widget.summary.cycle;
     final config = widget.summary.config;
-    final empId = widget.summary.employeeId ?? config.employeeId ?? config.employeeCode;
     final empName = widget.summary.employeeName;
+    final empFromDb = LocalDatabaseService().getEmployees().where((e) =>
+        EmployeeDirectoryHelper.matchesEmployeeIdentity(
+          recordEmployeeId: e.id,
+          recordEmployeeName: e.name,
+          employeeId: widget.summary.employeeId,
+          employeeCode: widget.summary.employeeCode,
+          employeeName: empName,
+        )).firstOrNull;
+    final empId = empFromDb?.id ?? widget.summary.employeeId ?? config.employeeId ?? config.employeeCode;
 
     final List<AttendanceRecord> mockRecords = [];
     final double otPerDay = _selectedDateKeys.isNotEmpty && _totalOtHours > 0
@@ -218,6 +226,7 @@ class _PutOfficeAttendanceDialogState extends State<PutOfficeAttendanceDialog> {
 
     return SalaryCalculator.calculateEmployeeSalary(
       config: config,
+      employee: empFromDb,
       records: mockRecords,
       cycle: cycle,
       referenceDate: DateTime(cycle.endDate.year, cycle.endDate.month, cycle.endDate.day, 23, 59),

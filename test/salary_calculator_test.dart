@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:attendance_app/core/constants/app_enums.dart';
+import 'package:attendance_app/core/constants/wps_registry.dart';
 import 'package:attendance_app/core/utils/salary_cycle_helper.dart';
+import 'package:attendance_app/core/utils/timesheet_calculator.dart';
 import 'package:attendance_app/features/admin/domain/employee_entity.dart';
 import 'package:attendance_app/features/attendance/domain/attendance_record.dart';
 import 'package:attendance_app/features/salary/domain/employee_salary_config.dart';
@@ -737,6 +739,127 @@ void main() {
       expect(summary.hourlyOtRate, closeTo(6.048, 0.001));
       // Earned OT = 6.0 * 6.048387 = ~36.29
       expect(summary.earnedOtSalary, closeTo(36.29, 0.05));
+    });
+
+    test('TimesheetCalculator: Target employee filter strictly prevents cross-employee log merging', () {
+      final aliIn = _createRecord(
+        id: 'ali-1',
+        employeeId: '1038',
+        employeeName: 'Mohamed Ali',
+        workflowStep: WorkflowStep.officeCheckIn,
+        eventTimestamp: DateTime(2026, 11, 2, 8, 0),
+      );
+      final aliOut = _createRecord(
+        id: 'ali-2',
+        employeeId: '1038',
+        employeeName: 'Mohamed Ali',
+        workflowStep: WorkflowStep.officeCheckOut,
+        eventTimestamp: DateTime(2026, 11, 2, 17, 0),
+      );
+
+      // Irshath Ahamed has 0 records on this day
+      // When calculating timesheets for Irshath with targetEmployeeName or targetEmployeeId:
+      final irshathTimesheets = TimesheetCalculator.calculateDailyTimesheets(
+        [aliIn, aliOut],
+        targetEmployeeId: '',
+        targetEmployeeName: 'Irshath Ahamed',
+      );
+
+      // Must be empty (0 logs), NOT containing Mohamed Ali's logs!
+      expect(irshathTimesheets.isEmpty, true);
+
+      // When calculating for Mohamed Ali, he gets his 1 entry
+      final aliTimesheets = TimesheetCalculator.calculateDailyTimesheets(
+        [aliIn, aliOut],
+        targetEmployeeId: '1038',
+        targetEmployeeName: 'Mohamed Ali',
+      );
+      expect(aliTimesheets.length, 1);
+      expect(aliTimesheets.first.employeeName, 'Mohamed Ali');
+    });
+
+    test('WPS Registry: Al Naser Samsudeen 1058 is registered in Fusion division', () {
+      final record = WpsMasterRegistry.findRecord(code: '1058');
+      expect(record, isNotNull);
+      expect(record!.employeeCode, '1058');
+      expect(record.fullName, 'Al Naser Samsudeen');
+      expect(record.workPermitNo, '127445488');
+      expect(record.personalNo, '10007068473900');
+      expect(record.bankName, 'DIB');
+      expect(record.bankAccountNo, 'AE130240003580188455101');
+      expect(record.defaultBasicSalary, 2000.0);
+      expect(record.division, 'Fusion');
+    });
+
+    test('Salary Calculation: 0 days worked yields 0 earned salary (not full basic salary)', () {
+      final cycle = SalaryCycle.forMonth(2026, 11);
+      final config = EmployeeSalaryConfig(
+        employeeCode: 'N-1004',
+        employeeName: 'Shabi',
+        fixedSalary: 1200.0,
+        variableSalary: 1100.0,
+      );
+
+      final summary = SalaryCalculator.calculateEmployeeSalary(
+        config: config,
+        records: [],
+        cycle: cycle,
+      );
+
+      expect(summary.daysWorked, 0);
+      expect(summary.totalPayableDays, 0);
+      expect(summary.earnedFixedSalary, 0.0);
+      expect(summary.earnedVariableSalary, 0.0);
+      expect(summary.earnedOtSalary, 0.0);
+      expect(summary.grossTotalSalary, 0.0);
+    });
+
+    test('Salary Calculation: Partial days worked prorates fixed and variable accurately', () {
+      final cycle = SalaryCycle.forMonth(2026, 11); // 30 days
+      final config = EmployeeSalaryConfig(
+        employeeCode: 'N-1004',
+        employeeName: 'Shabi',
+        fixedSalary: 1200.0,
+        variableSalary: 1100.0,
+      );
+
+      // Employee worked 10 days
+      final records = <AttendanceRecord>[];
+      for (int day = 2; day <= 11; day++) { // Monday 2 Nov to Wednesday 11 Nov
+        records.add(_createRecord(
+          id: 'shabi-in-$day',
+          employeeId: 'N-1004',
+          employeeName: 'Shabi',
+          workflowStep: WorkflowStep.officeCheckIn,
+          eventTimestamp: DateTime(2026, 11, day, 8, 0),
+        ));
+        records.add(_createRecord(
+          id: 'shabi-out-$day',
+          employeeId: 'N-1004',
+          employeeName: 'Shabi',
+          workflowStep: WorkflowStep.officeCheckOut,
+          eventTimestamp: DateTime(2026, 11, day, 17, 0),
+        ));
+      }
+
+      final summary = SalaryCalculator.calculateEmployeeSalary(
+        config: config,
+        records: records,
+        cycle: cycle,
+      );
+
+      expect(summary.daysWorked, 10);
+      expect(summary.paidSundays, 1);
+      expect(summary.totalPayableDays, 11);
+
+      // Earned fixed = 11 * (1200 / 30) = 440.0
+      expect(summary.earnedFixedSalary, closeTo(440.0, 0.01));
+      // Earned variable = 11 * (1100 / 30) = ~403.33
+      expect(summary.earnedVariableSalary, closeTo(403.33, 0.01));
+      // Earned OT = 40.0 (8 hours @ 5.0 AED/hr)
+      expect(summary.earnedOtSalary, closeTo(40.0, 0.01));
+      // Gross Total = 440 + 403.33 + 40 = ~883.33
+      expect(summary.grossTotalSalary, closeTo(883.33, 0.05));
     });
   });
 }

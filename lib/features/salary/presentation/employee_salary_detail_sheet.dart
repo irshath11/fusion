@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/employee_directory_helper.dart';
 import '../../../core/utils/salary_cycle_helper.dart';
 import '../../../core/widgets/employee_avatar.dart';
 import '../../../core/services/pdf_export_service.dart';
@@ -51,8 +52,18 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
 
   void _reloadAttendanceAndRecalculate() {
     final allRecords = LocalDatabaseService().getAttendanceRecords();
+    final matchingEmp = LocalDatabaseService().getEmployees().where((e) =>
+        EmployeeDirectoryHelper.matchesEmployeeIdentity(
+          recordEmployeeId: e.id,
+          recordEmployeeName: e.name,
+          employeeId: _summary.employeeId,
+          employeeCode: _summary.employeeCode,
+          employeeName: _summary.employeeName,
+        )).firstOrNull;
+
     final newSummary = SalaryCalculator.calculateEmployeeSalary(
       config: _summary.config,
+      employee: matchingEmp,
       records: allRecords,
       cycle: _summary.cycle,
     );
@@ -70,8 +81,18 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
 
     // Recalculate summary with all current attendance records for this employee
     final allRecords = LocalDatabaseService().getAttendanceRecords();
+    final matchingEmp = LocalDatabaseService().getEmployees().where((e) =>
+        EmployeeDirectoryHelper.matchesEmployeeIdentity(
+          recordEmployeeId: e.id,
+          recordEmployeeName: e.name,
+          employeeId: _summary.employeeId,
+          employeeCode: _summary.employeeCode,
+          employeeName: _summary.employeeName,
+        )).firstOrNull;
+
     final newSummary = SalaryCalculator.calculateEmployeeSalary(
       config: updatedConfig,
+      employee: matchingEmp,
       records: allRecords,
       cycle: _summary.cycle,
     );
@@ -1045,9 +1066,18 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
     }
     final allRecords = LocalDatabaseService().getAttendanceRecords();
     final interimCycle = SalaryCycle.octoberTransition();
+    final matchingEmp = LocalDatabaseService().getEmployees().where((e) =>
+        EmployeeDirectoryHelper.matchesEmployeeIdentity(
+          recordEmployeeId: e.id,
+          recordEmployeeName: e.name,
+          employeeId: _summary.employeeId,
+          employeeCode: _summary.employeeCode,
+          employeeName: _summary.employeeName,
+        )).firstOrNull;
+
     final interimSummary = SalaryCalculator.calculateEmployeeSalary(
       config: _summary.config,
-      employee: null,
+      employee: matchingEmp,
       records: allRecords,
       cycle: interimCycle,
       referenceDate: DateTime(2026, 11, 1),
