@@ -653,6 +653,81 @@ void main() {
       expect(resultNames, isNot(contains('Asik Saheel')));
       expect(workforce.employeeSummaries.length, 2);
     });
+
+    test('Calendar month salary cycle starting November 2026 & October transition', () {
+      // 1. November 2026 is calendar month: 1 Nov to 30 Nov 2026 (30 days)
+      final novCycle = SalaryCycle.forMonth(2026, 11);
+      expect(novCycle.startDate, DateTime(2026, 11, 1, 0, 0, 0));
+      expect(novCycle.endDate, DateTime(2026, 11, 30, 23, 59, 59, 999));
+      expect(novCycle.totalDays, 30);
+      expect(novCycle.isTransition, false);
+
+      // 2. December 2026 is calendar month: 1 Dec to 31 Dec 2026 (31 days)
+      final decCycle = SalaryCycle.forMonth(2026, 12);
+      expect(decCycle.startDate, DateTime(2026, 12, 1, 0, 0, 0));
+      expect(decCycle.endDate, DateTime(2026, 12, 31, 23, 59, 59, 999));
+      expect(decCycle.totalDays, 31);
+      expect(decCycle.isTransition, false);
+
+      // 3. October 2026 Transition cycle: 26 Oct to 31 Oct 2026 (6 days)
+      final transitionCycle = SalaryCycle.octoberTransition();
+      expect(transitionCycle.startDate, DateTime(2026, 10, 26, 0, 0, 0));
+      expect(transitionCycle.endDate, DateTime(2026, 10, 31, 23, 59, 59, 999));
+      expect(transitionCycle.isTransition, true);
+      expect(transitionCycle.totalDays, 6);
+
+      // 4. Legacy cycle preservation: September (25 Aug - 24 Sep) and October (25 Sep - 25 Oct)
+      final sepCycle = SalaryCycle.forMonth(2026, 9);
+      expect(sepCycle.startDate, DateTime(2026, 8, 25, 0, 0, 0));
+      expect(sepCycle.endDate, DateTime(2026, 9, 24, 23, 59, 59, 999));
+
+      final octCycle = SalaryCycle.forMonth(2026, 10);
+      expect(octCycle.startDate, DateTime(2026, 9, 25, 0, 0, 0));
+      expect(octCycle.endDate, DateTime(2026, 10, 25, 23, 59, 59, 999));
+
+      // 5. Rate calculations for October transition (31-day month base)
+      final emp = _createEmployee(id: 'emp-1', employeeCode: '1001', name: 'Test Worker');
+      final config = EmployeeSalaryConfig(
+        employeeCode: '1001',
+        employeeName: 'Test Worker',
+        department: 'Fusion',
+        fixedSalary: 1500.0,
+        variableSalary: 500.0,
+        dailyDivisor: 31.0,
+        standardDailyHours: 8.0,
+      );
+
+      final rec26 = _createRecord(
+        id: 'rec-26',
+        employeeId: 'emp-1',
+        employeeName: 'Test Worker',
+        workflowStep: WorkflowStep.officeCheckIn,
+        eventTimestamp: DateTime(2026, 10, 26, 8, 0),
+        manualOvertimeHours: 2.5,
+      );
+      final rec27 = _createRecord(
+        id: 'rec-27',
+        employeeId: 'emp-1',
+        employeeName: 'Test Worker',
+        workflowStep: WorkflowStep.officeCheckIn,
+        eventTimestamp: DateTime(2026, 10, 27, 8, 0),
+        manualOvertimeHours: 3.5,
+      );
+
+      final summary = SalaryCalculator.calculateEmployeeSalary(
+        employee: emp,
+        config: config,
+        records: [rec26, rec27],
+        cycle: transitionCycle,
+      );
+
+      // Total OT hours = 2.5 + 3.5 = 6.0 hours
+      expect(summary.totalOvertimeHours, 6.0);
+      // Hourly OT rate = (1500 / 31) / 8 = ~6.048387
+      expect(summary.hourlyOtRate, closeTo(6.048, 0.001));
+      // Earned OT = 6.0 * 6.048387 = ~36.29
+      expect(summary.earnedOtSalary, closeTo(36.29, 0.05));
+    });
   });
 }
 

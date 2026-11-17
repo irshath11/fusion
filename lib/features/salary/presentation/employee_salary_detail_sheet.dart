@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/salary_cycle_helper.dart';
 import '../../../core/widgets/employee_avatar.dart';
 import '../../../core/services/pdf_export_service.dart';
 import '../../../database/local_database_service.dart';
@@ -372,6 +373,9 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
                     ),
                   ),
                 ],
+
+                // 2.5 Interim Overtime Pill (When viewing Nov 2026)
+                _buildInterimOtPill(isDark),
 
                 // 3. Day-Wise Ledger Header
                 Row(
@@ -1011,6 +1015,73 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildInterimOtPill(bool isDark) {
+    if (_summary.cycle.salaryMonth != 11 || _summary.cycle.salaryYear != 2026) {
+      return const SizedBox.shrink();
+    }
+    final allRecords = LocalDatabaseService().getAttendanceRecords();
+    final interimCycle = SalaryCycle.octoberTransition();
+    final interimSummary = SalaryCalculator.calculateEmployeeSalary(
+      config: _summary.config,
+      employee: null,
+      records: allRecords,
+      cycle: interimCycle,
+      referenceDate: DateTime(2026, 11, 1),
+    );
+
+    if (interimSummary.totalOvertimeHours <= 0) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.bolt_rounded, color: Color(0xFFD97706), size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'October Transition Overtime (26 Oct – 31 Oct)',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFB45309),
+                  ),
+                ),
+                Text(
+                  '${_summary.employeeName} earned ${interimSummary.totalOvertimeHours.toStringAsFixed(1)} hrs OT (AED ${interimSummary.earnedOtSalary.toStringAsFixed(2)}) during the 6-day interim period.',
+                  style: TextStyle(fontSize: 11, color: isDark ? Colors.grey[300] : Colors.grey[700]),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFD97706),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              '+${interimSummary.totalOvertimeHours.toStringAsFixed(1)}h OT',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
