@@ -494,10 +494,388 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
   }
 
+  void _goToPreviousMainCycle() {
+    if (_selectedSalaryCycle == null) {
+      if (_availableSalaryCycles.isNotEmpty) {
+        setState(() => _selectedSalaryCycle = _availableSalaryCycles.first);
+      }
+      return;
+    }
+    final idx = _availableSalaryCycles
+        .indexWhere((c) => c.id == _selectedSalaryCycle!.id);
+    if (idx != -1 && idx < _availableSalaryCycles.length - 1) {
+      setState(() => _selectedSalaryCycle = _availableSalaryCycles[idx + 1]);
+    }
+  }
+
+  void _goToNextMainCycle() {
+    if (_selectedSalaryCycle == null) {
+      if (_availableSalaryCycles.isNotEmpty) {
+        setState(() => _selectedSalaryCycle = _availableSalaryCycles.first);
+      }
+      return;
+    }
+    final idx = _availableSalaryCycles
+        .indexWhere((c) => c.id == _selectedSalaryCycle!.id);
+    if (idx > 0) {
+      setState(() => _selectedSalaryCycle = _availableSalaryCycles[idx - 1]);
+    }
+  }
+
+  Widget _buildMainSalaryCycleFilterCard(
+    bool isDark,
+    dynamic palette,
+    Color activePrimary,
+  ) {
+    final currentCycleId = SalaryCycle.current().id;
+    final isCur =
+        _selectedSalaryCycle != null && _selectedSalaryCycle!.id == currentCycleId;
+    final isTransition = _selectedSalaryCycle?.isTransition == true;
+    final isAllHistory = _selectedSalaryCycle == null;
+
+    final curIdx = _selectedSalaryCycle == null
+        ? -1
+        : _availableSalaryCycles
+            .indexWhere((c) => c.id == _selectedSalaryCycle!.id);
+    final bool canGoPrev = _selectedSalaryCycle == null
+        ? _availableSalaryCycles.isNotEmpty
+        : (curIdx != -1 && curIdx < _availableSalaryCycles.length - 1);
+    final bool canGoNext =
+        _selectedSalaryCycle == null ? false : (curIdx > 0);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? palette.surfaceDark : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? palette.cardBorderDark : const Color(0xFFE2E8F0),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top row: Icon + Title + Badge + Reset Button
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color:
+                          activePrimary.withValues(alpha: isDark ? 0.25 : 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.calendar_month_rounded,
+                      color: activePrimary,
+                      size: 17,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Salary Cycle Filter',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: isDark
+                          ? palette.textPrimaryDark
+                          : palette.textPrimaryLight,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isAllHistory
+                          ? (isDark
+                              ? Colors.grey.shade800
+                              : Colors.grey.shade200)
+                          : (isTransition
+                              ? Colors.amber
+                                  .withValues(alpha: isDark ? 0.25 : 0.15)
+                              : (isCur
+                                  ? Colors.green
+                                      .withValues(alpha: isDark ? 0.25 : 0.15)
+                                  : (_selectedSalaryCycle!.startDate.day == 1
+                                      ? Colors.blue.withValues(
+                                          alpha: isDark ? 0.25 : 0.15)
+                                      : Colors.purple.withValues(
+                                          alpha: isDark ? 0.25 : 0.15)))),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      isAllHistory
+                          ? 'Full History'
+                          : (isTransition
+                              ? 'Interim OT (26-31 Oct)'
+                              : (isCur
+                                  ? 'Current Cycle'
+                                  : (_selectedSalaryCycle!.startDate.day == 1
+                                      ? 'Calendar Month'
+                                      : '25th - 24th Cutoff'))),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: isAllHistory
+                            ? (isDark
+                                ? Colors.grey.shade300
+                                : Colors.grey.shade700)
+                            : (isTransition
+                                ? (isDark
+                                    ? const Color(0xFFFDE68A)
+                                    : Colors.amber.shade900)
+                                : (isCur
+                                    ? (isDark
+                                        ? Colors.greenAccent
+                                        : Colors.green.shade800)
+                                    : (_selectedSalaryCycle!.startDate.day == 1
+                                        ? (isDark
+                                            ? Colors.lightBlueAccent
+                                            : Colors.blue.shade800)
+                                        : (isDark
+                                            ? Colors.purpleAccent
+                                            : Colors.purple.shade800)))),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (!isCur)
+                InkWell(
+                  onTap: () {
+                    setState(
+                        () => _selectedSalaryCycle = SalaryCycle.current());
+                  },
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.restore_rounded,
+                            size: 13, color: activePrimary),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Current Cycle',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: activePrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Selector Row: Previous Button, Dropdown Selector, Next Button
+          Container(
+            height: 40,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color:
+                    isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+              ),
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left_rounded, size: 20),
+                  tooltip: 'Previous Salary Cycle',
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  color: canGoPrev
+                      ? (isDark ? Colors.white : Colors.black87)
+                      : (isDark ? Colors.white24 : Colors.grey.shade400),
+                  onPressed: canGoPrev ? _goToPreviousMainCycle : null,
+                ),
+                Expanded(
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedSalaryCycle?.id ?? 'all',
+                      isDense: true,
+                      isExpanded: true,
+                      dropdownColor:
+                          isDark ? const Color(0xFF1E293B) : Colors.white,
+                      icon: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 20,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                      ),
+                      items: [
+                        ..._availableSalaryCycles.map((c) {
+                          final isItemCurrent = c.id == currentCycleId;
+                          final isItemTransition = c.isTransition;
+                          return DropdownMenuItem<String>(
+                            value: c.id,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${c.salaryMonthName} (${c.shortPeriodLabel})',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: isItemCurrent
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                      color: isDark
+                                          ? Colors.white
+                                          : const Color(0xFF0F172A),
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (isItemCurrent) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 5, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.withValues(
+                                          alpha: isDark ? 0.25 : 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      'Current',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark
+                                            ? Colors.greenAccent
+                                            : Colors.green[800],
+                                      ),
+                                    ),
+                                  ),
+                                ] else if (isItemTransition) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 5, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.withValues(
+                                          alpha: isDark ? 0.25 : 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      'Interim OT',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark
+                                            ? const Color(0xFFFDE68A)
+                                            : Colors.amber[900],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        }),
+                        DropdownMenuItem<String>(
+                          value: 'all',
+                          child: Text(
+                            'All Recorded Logs (Full History)',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark
+                                  ? Colors.white
+                                  : const Color(0xFF0F172A),
+                            ),
+                          ),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        setState(() {
+                          if (val == null || val == 'all') {
+                            _selectedSalaryCycle = null;
+                          } else {
+                            _selectedSalaryCycle =
+                                _availableSalaryCycles.firstWhere(
+                              (c) => c.id == val,
+                              orElse: () => SalaryCycle.current(),
+                            );
+                          }
+                        });
+                      },
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right_rounded, size: 20),
+                  tooltip: 'Next Salary Cycle',
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  color: canGoNext
+                      ? (isDark ? Colors.white : Colors.black87)
+                      : (isDark ? Colors.white24 : Colors.grey.shade400),
+                  onPressed: canGoNext ? _goToNextMainCycle : null,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Helper info row showing the exact dates included
+          Row(
+            children: [
+              Icon(
+                Icons.info_outline_rounded,
+                size: 13,
+                color:
+                    isDark ? palette.textSecondaryDark : Colors.grey.shade600,
+              ),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  _selectedSalaryCycle != null
+                      ? 'Attendance Period: ${DateFormat("dd MMM yyyy").format(_selectedSalaryCycle!.startDate)} – ${DateFormat("dd MMM yyyy").format(_selectedSalaryCycle!.endDate)} (${_selectedSalaryCycle!.totalDays} Days)'
+                      : 'Showing attendance logs across all dates (no cycle filter applied)',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark
+                        ? palette.textSecondaryDark
+                        : Colors.grey.shade600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   // ==========================================
   // LEVEL 1: EMPLOYEE LIST VIEW
   // ==========================================
   Widget _buildLevel1EmployeeListView() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = AppTheme.currentColors;
+    final activePrimary =
+        palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
+
     final allRecords = _db.getAttendanceRecords();
     final allEmployees = _getSynthesizedEmployees();
 
@@ -510,7 +888,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }).toList();
 
     // Segregate filtered employees into With Records vs No Records scoped to salary cycle
-    final activeCycle = _selectedSalaryCycle ?? SalaryCycle.current();
     final employeesWithRecords = <MapEntry<EmployeeEntity, int>>[];
     final employeesWithoutRecords = <EmployeeEntity>[];
 
@@ -518,9 +895,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       final empRecords = allRecords
           .where((r) => _recordMatchesEmployee(r, emp))
           .toList();
-      final cycleRecords = empRecords
-          .where((r) => activeCycle.contains(r.eventTimestamp))
-          .toList();
+      final cycleRecords = _selectedSalaryCycle != null
+          ? empRecords
+              .where((r) => _selectedSalaryCycle!.contains(r.eventTimestamp))
+              .toList()
+          : empRecords;
       final datesCount = cycleRecords
           .map((r) =>
               DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()))
@@ -674,6 +1053,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           const SizedBox(height: 16),
 
           if (_activeTab == 0) ...[
+            // Main Salary Cycle Filter Card
+            _buildMainSalaryCycleFilterCard(isDark, palette, activePrimary),
+            const SizedBox(height: 14),
+
             // 2 Segregation Tabs: With Records vs No Records
             AppAnimatedTabSwitcher(
               selectedIndex: _employeeRecordFilterTab,
@@ -740,7 +1123,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               Text(
                                 _searchQuery.isNotEmpty
                                     ? 'No matching employees with records found for "$_searchQuery".'
-                                    : 'None of the registered employees have attendance records logged yet.',
+                                    : (_selectedSalaryCycle != null
+                                        ? 'None of the registered employees have attendance records in ${_selectedSalaryCycle!.salaryMonthName} (${_selectedSalaryCycle!.shortPeriodLabel}).'
+                                        : 'None of the registered employees have attendance records logged yet.'),
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: isDark
@@ -861,7 +1246,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      '$datesCount / ${activeCycle.totalDays} Days in Cycle Logged',
+                                      _selectedSalaryCycle != null
+                                          ? '$datesCount / ${_selectedSalaryCycle!.totalDays} Days in Cycle Logged'
+                                          : '$datesCount Total Days Logged (Full History)',
                                       style: const TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600,
@@ -932,7 +1319,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               Text(
                                 _searchQuery.isNotEmpty
                                     ? 'No pending employees found for "$_searchQuery".'
-                                    : 'Every registered employee currently has attendance logs recorded.',
+                                    : (_selectedSalaryCycle != null
+                                        ? 'Every registered employee currently has attendance logs recorded in ${_selectedSalaryCycle!.salaryMonthName}.'
+                                        : 'Every registered employee currently has attendance logs recorded.'),
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: isDark
@@ -1044,18 +1433,20 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                       alpha: isDark ? 0.22 : 0.12),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
-                                child: const Row(
+                                child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(
+                                    const Icon(
                                       Icons.history_toggle_off_rounded,
                                       size: 13,
                                       color: Colors.orange,
                                     ),
-                                    SizedBox(width: 4),
+                                    const SizedBox(width: 4),
                                     Text(
-                                      'No Attendance Recorded',
-                                      style: TextStyle(
+                                      _selectedSalaryCycle != null
+                                          ? 'No Attendance in ${_selectedSalaryCycle!.salaryMonthName}'
+                                          : 'No Attendance Recorded',
+                                      style: const TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600,
                                         color: Colors.orange,
@@ -4197,7 +4588,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               ),
               Switch.adaptive(
                 value: salaryConfig.otIncludedInVariable,
-                activeColor: activePrimary,
+                activeTrackColor: activePrimary,
                 onChanged: (val) {
                   final updated = salaryConfig.copyWith(otIncludedInVariable: val);
                   _db.saveEmployeeSalary(updated, persist: true);
