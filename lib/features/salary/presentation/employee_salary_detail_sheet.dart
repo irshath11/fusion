@@ -627,7 +627,7 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
                 ),
                 Switch.adaptive(
                   value: _summary.config.otIncludedInVariable,
-                  activeColor: AppColors.primary,
+                  activeTrackColor: AppColors.primary,
                   onChanged: _toggleOtIncludedInVariable,
                 ),
               ],
@@ -775,6 +775,9 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
                   label: 'Variable Earned',
                   value: 'AED ${_summary.earnedVariableSalary.toStringAsFixed(0)}',
                   color: Colors.white,
+                  subtext: _summary.interimOtSalary > 0
+                      ? '(+AED ${_summary.interimOtSalary.toStringAsFixed(0)} Oct OT)'
+                      : null,
                 ),
                 _buildSummaryPill(
                   label: _summary.config.customMonthlyOtAmount != null
@@ -795,6 +798,7 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
     required String label,
     required String value,
     required Color color,
+    String? subtext,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -815,6 +819,17 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
             color: color,
           ),
         ),
+        if (subtext != null) ...[
+          const SizedBox(height: 1),
+          Text(
+            subtext,
+            style: const TextStyle(
+              fontSize: 9,
+              color: Color(0xFFFDE68A),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1064,26 +1079,37 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
     if (_summary.cycle.salaryMonth != 11 || _summary.cycle.salaryYear != 2026) {
       return const SizedBox.shrink();
     }
-    final allRecords = LocalDatabaseService().getAttendanceRecords();
-    final interimCycle = SalaryCycle.octoberTransition();
-    final matchingEmp = LocalDatabaseService().getEmployees().where((e) =>
-        EmployeeDirectoryHelper.matchesEmployeeIdentity(
-          recordEmployeeId: e.id,
-          recordEmployeeName: e.name,
-          employeeId: _summary.employeeId,
-          employeeCode: _summary.employeeCode,
-          employeeName: _summary.employeeName,
-        )).firstOrNull;
 
-    final interimSummary = SalaryCalculator.calculateEmployeeSalary(
-      config: _summary.config,
-      employee: matchingEmp,
-      records: allRecords,
-      cycle: interimCycle,
-      referenceDate: DateTime(2026, 11, 1),
-    );
+    final double interimHours;
+    final double interimSalary;
 
-    if (interimSummary.totalOvertimeHours <= 0) return const SizedBox.shrink();
+    if (_summary.interimOtHours > 0 || _summary.interimOtSalary > 0) {
+      interimHours = _summary.interimOtHours;
+      interimSalary = _summary.interimOtSalary;
+    } else {
+      final allRecords = LocalDatabaseService().getAttendanceRecords();
+      final interimCycle = SalaryCycle.octoberTransition();
+      final matchingEmp = LocalDatabaseService().getEmployees().where((e) =>
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: e.id,
+            recordEmployeeName: e.name,
+            employeeId: _summary.employeeId,
+            employeeCode: _summary.employeeCode,
+            employeeName: _summary.employeeName,
+          )).firstOrNull;
+
+      final interimSummary = SalaryCalculator.calculateEmployeeSalary(
+        config: _summary.config,
+        employee: matchingEmp,
+        records: allRecords,
+        cycle: interimCycle,
+        referenceDate: DateTime(2026, 11, 1),
+      );
+      interimHours = interimSummary.totalOvertimeHours;
+      interimSalary = interimSummary.earnedOtSalary;
+    }
+
+    if (interimHours <= 0) return const SizedBox.shrink();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -1102,7 +1128,7 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'October Transition Overtime (26 Oct – 31 Oct)',
+                  'October Transition Overtime (26 Oct – 31 Oct 2026)',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -1110,7 +1136,8 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
                   ),
                 ),
                 Text(
-                  '${_summary.employeeName} earned ${interimSummary.totalOvertimeHours.toStringAsFixed(1)} hrs OT (AED ${interimSummary.earnedOtSalary.toStringAsFixed(2)}) during the 6-day interim period.',
+                  '${_summary.employeeName} earned ${interimHours.toStringAsFixed(1)} hrs OT (AED ${interimSalary.toStringAsFixed(2)}) during the 6-day interim period. '
+                  'This is credited directly into the November Variable Portion.',
                   style: TextStyle(fontSize: 11, color: isDark ? Colors.grey[300] : Colors.grey[700]),
                 ),
               ],
@@ -1123,7 +1150,7 @@ class _EmployeeSalaryDetailSheetState extends State<EmployeeSalaryDetailSheet> {
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
-              '+${interimSummary.totalOvertimeHours.toStringAsFixed(1)}h OT',
+              '+${interimHours.toStringAsFixed(1)}h OT in Var',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 11,

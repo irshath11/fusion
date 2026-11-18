@@ -421,8 +421,12 @@ class ExcelCsvExportService {
       ..cellStyle = totalStyle;
 
     // Row 10: Informational note
+    final String noteText = (cycle.salaryMonth == 11 && cycle.salaryYear == 2026 && !cycle.isTransition)
+        ? 'Note: For November 2026, Variable Portion includes Interim Overtime (26–31 Oct 2026 transition period) earned by employees. Detailed employee WPS registers are available in the "Fusion Electric WPS" and "Fusion Neo WPS" tabs.'
+        : 'Note: Detailed employee WPS registers are available in the "Fusion Electric WPS" and "Fusion Neo WPS" tabs.';
+
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 10))
-      ..value = TextCellValue('Note: Detailed employee WPS registers are available in the "Fusion Electric WPS" and "Fusion Neo WPS" tabs.')
+      ..value = TextCellValue(noteText)
       ..cellStyle = CellStyle(italic: true, fontSize: 9, fontColorHex: ExcelColor.fromHexString('#64748B'));
 
     // Set Column Widths
@@ -484,7 +488,9 @@ class ExcelCsvExportService {
 
     // Format Month String e.g. "MONTH : Nov- 2026"
     final String monthAbbr = cycle.salaryMonthAbbr;
-    final String monthHeader = 'MONTH : $monthAbbr- ${cycle.salaryYear}';
+    final String monthHeader = (cycle.salaryMonth == 11 && cycle.salaryYear == 2026 && !cycle.isTransition)
+        ? 'MONTH : $monthAbbr- ${cycle.salaryYear} (Includes 26-31 Oct Interim OT in Variable Portion)'
+        : 'MONTH : $monthAbbr- ${cycle.salaryYear}';
 
     // Cell Styles
     final headerTitleStyle = CellStyle(
@@ -644,7 +650,7 @@ class ExcelCsvExportService {
 
       // 2. Variable Portion: Sum of earned Variable Salary and earned OT Salary
       final int variablePortion = summary != null
-          ? (summary.totalPayableDays > 0
+          ? ((summary.totalPayableDays > 0 || summary.earnedVariableSalary > 0)
               ? (summary.earnedVariableSalary + summary.earnedOtSalary).round()
               : 0)
           : 0;
