@@ -1725,12 +1725,17 @@ class LocalDatabaseService {
       );
 
       if (official != null) {
-        // NOTE: We do not overwrite attendance records' employeeName with official.fullName.
-        // Employees in the field run older APK versions whose local profile stores
-        // short names (e.g. 'Saleem', 'Shabi'). Overwriting employeeName in the cloud/local DB
-        // breaks their datewise timeline and timesheet calculation on existing APKs.
-        // Consolidation for administrative views and PDF reports is handled dynamically
-        // via EmployeeDirectoryHelper without mutating raw record names.
+        // Re-align employeeId to canonical targetId if record was misattributed to another employee
+        final target = officialTargetMap[official.employeeId];
+        if (target != null && target.targetId.isNotEmpty && r.employeeId != target.targetId) {
+          final updated = r.copyWith(
+            employeeId: target.targetId,
+            syncStatus: SyncStatus.synced,
+          );
+          _attendanceRecords[i] = updated;
+          updatedRecords.add(updated);
+          migratedCount++;
+        }
       } else {
         // Revert any records of OTHER employees that were mistakenly tagged with synthetic 'emp-' IDs
         if (r.employeeId.startsWith('emp-')) {

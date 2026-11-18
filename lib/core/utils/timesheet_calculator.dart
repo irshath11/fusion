@@ -124,23 +124,14 @@ class TimesheetCalculator {
       if (endDate != null && r.eventTimestamp.isAfter(endDate)) return false;
       if (!hasTarget) return true;
 
-      final idMatch = (targetEmployeeId != null &&
-              targetEmployeeId.isNotEmpty &&
-              r.employeeId == targetEmployeeId) ||
-          (targetFirebaseUid != null &&
-              targetFirebaseUid.isNotEmpty &&
-              r.employeeId == targetFirebaseUid);
-      final nameMatch = targetEmployeeName != null &&
-          targetEmployeeName.isNotEmpty &&
-          r.employeeName.trim().toLowerCase() ==
-              targetEmployeeName.trim().toLowerCase();
-      final identityMatch = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+      return EmployeeDirectoryHelper.matchesEmployeeIdentity(
         recordEmployeeId: r.employeeId,
         recordEmployeeName: r.employeeName,
-        employeeId: targetEmployeeId,
+        employeeId: (targetEmployeeId != null && targetEmployeeId.isNotEmpty)
+            ? targetEmployeeId
+            : targetFirebaseUid,
         employeeName: targetEmployeeName,
       );
-      return idMatch || nameMatch || identityMatch;
     }).toList();
 
     final bool isSingleEmployee = hasTarget;

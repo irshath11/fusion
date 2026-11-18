@@ -406,5 +406,61 @@ void main() {
       expect(EmployeeDirectoryHelper.isRelievedEmployee(name: 'Shabi Bismillah Bismillah', code: 'N-1004'), isFalse);
       expect(EmployeeDirectoryHelper.isRelievedEmployee(name: 'Irshath Ahamed Shaik Allavudin', code: 'N-1006'), isFalse);
     });
+
+    test('Misattributed UUIDs never leak across official employees', () {
+      const riyasUuid = '3cfd6206-e723-4225-a885-10b6e2a3f564';
+      const kajaUuid = '5a956da2-0c58-4899-abaf-c5ec61790e25';
+
+      // A record that had Kajamohideen name but was erroneously stored with Riyas UUID
+      final corruptedRecord = AttendanceRecord(
+        id: 'rec-corrupted-kaja',
+        employeeId: riyasUuid,
+        employeeName: 'Kajamohideen Samsudeen Samsudeen',
+        workflowStep: WorkflowStep.officeCheckIn,
+        eventTimestamp: DateTime(2026, 11, 10, 8, 30),
+        latitude: 25.0,
+        longitude: 55.0,
+        gpsAccuracy: 5.0,
+        address: 'Site A',
+        deviceId: 'device-kaja',
+        photoBase64: '',
+        isGeofenceValid: true,
+      );
+
+      // Must NOT match Muhammed Riyas even though r.employeeId == riyasUuid
+      final matchesRiyas = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: corruptedRecord.employeeId,
+        recordEmployeeName: corruptedRecord.employeeName,
+        employeeId: riyasUuid,
+        employeeCode: 'N-1003',
+        employeeName: 'Muhammed Riyas Hussain Hussain Kasim',
+      );
+      expect(matchesRiyas, isFalse);
+
+      // Must match Kajamohideen Samsudeen
+      final matchesKaja = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: corruptedRecord.employeeId,
+        recordEmployeeName: corruptedRecord.employeeName,
+        employeeId: kajaUuid,
+        employeeCode: 'N-1008',
+        employeeName: 'Kajamohideen Samsudeen Samsudeen',
+      );
+      expect(matchesKaja, isTrue);
+
+      // Timesheet isolation
+      final riyasTimesheets = TimesheetCalculator.calculateDailyTimesheets(
+        [corruptedRecord],
+        targetEmployeeId: riyasUuid,
+        targetEmployeeName: 'Muhammed Riyas Hussain Hussain Kasim',
+      );
+      expect(riyasTimesheets.isEmpty, isTrue, reason: 'Riyas timesheet must not pull in Kajamohideen record');
+
+      final kajaTimesheets = TimesheetCalculator.calculateDailyTimesheets(
+        [corruptedRecord],
+        targetEmployeeId: kajaUuid,
+        targetEmployeeName: 'Kajamohideen Samsudeen Samsudeen',
+      );
+      expect(kajaTimesheets.length, 1, reason: 'Kajamohideen timesheet must correctly include his record');
+    });
   });
 }

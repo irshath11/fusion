@@ -441,20 +441,10 @@ class EmployeeDirectoryHelper {
     final tIdNorm = tId.replaceFirst('emp-', '');
     final tCodeNorm = tCode.replaceFirst('emp-', '');
 
-    // 1. Direct exact ID match
-    if (tId.isNotEmpty && rId.isNotEmpty) {
-      if (rId == tId || (rIdNorm.isNotEmpty && rIdNorm == tIdNorm)) return true;
-    }
-
-    // 2. Direct exact Employee Code match
-    if (tCode.isNotEmpty && rId.isNotEmpty) {
-      if (rId == tCode || (rIdNorm.isNotEmpty && rIdNorm == tCodeNorm)) return true;
-    }
-
-    // 3. Direct exact Name match
+    // 1. Direct exact Name match (names are most trustworthy identifier for field logs)
     if (tName.isNotEmpty && rName.isNotEmpty && rName == tName) return true;
 
-    // 4. Resolve official records for target and record
+    // 2. Resolve official records for target and record FIRST
     final targetOfficial = resolveOfficialRecord(
       code: tCode,
       name: tName,
@@ -468,13 +458,15 @@ class EmployeeDirectoryHelper {
       id: rId,
     );
 
-    // Case 4A: Both resolve to official directory entries.
+    // Case 2A: Both resolve to official directory entries.
     // Strictly compare their unique official employee IDs.
+    // If they resolve to different official staff members, they MUST NEVER match,
+    // even if a corrupted database record shared a raw UUID.
     if (recordOfficial != null && targetOfficial != null) {
       return recordOfficial.employeeId.toUpperCase() == targetOfficial.employeeId.toUpperCase();
     }
 
-    // Case 4B: Record belongs to an official employee, but target does not resolve to directory.
+    // Case 2B: Record belongs to an official employee, but target does not resolve to directory.
     // Only match if target's explicit identifiers match recordOfficial.
     if (recordOfficial != null && targetOfficial == null) {
       final oCode = recordOfficial.employeeId.toLowerCase();
@@ -486,11 +478,12 @@ class EmployeeDirectoryHelper {
       if (tEmail.isNotEmpty && tEmail == oEmail) return true;
       if (tName.isNotEmpty && tName == oName) return true;
       if (tName.isNotEmpty && recordOfficial.aliases.any((a) => a.toLowerCase() == tName)) return true;
-      if (tIdNorm.isNotEmpty && rIdNorm == tIdNorm) return true;
+      // Do not allow raw UUID match if human names conflict
+      if (tName.isEmpty && tIdNorm.isNotEmpty && rIdNorm == tIdNorm) return true;
       return false;
     }
 
-    // Case 4C: Target is an official employee, but record does not resolve to directory.
+    // Case 2C: Target is an official employee, but record does not resolve to directory.
     // Only match if record's explicit identifiers match targetOfficial.
     if (targetOfficial != null && recordOfficial == null) {
       final oCode = targetOfficial.employeeId.toLowerCase();
@@ -500,25 +493,29 @@ class EmployeeDirectoryHelper {
       if (rName.isNotEmpty && rName == oName) return true;
       if (rName.isNotEmpty && targetOfficial.aliases.any((a) => a.toLowerCase() == rName)) return true;
       if (rIdNorm.isNotEmpty && targetOfficial.aliases.any((a) => a.toLowerCase() == rIdNorm)) return true;
-      if (tIdNorm.isNotEmpty && rIdNorm == tIdNorm) return true;
+      // Do not allow raw UUID match if human names conflict
+      if (rName.isEmpty && tIdNorm.isNotEmpty && rIdNorm == tIdNorm) return true;
       return false;
     }
 
-    // Case 4D: Neither resolves to an official record (unlisted custom employees).
-    // If target has explicit ID or Code, check if record ID matches either one:
-    final hasTargetIdOrCode = tIdNorm.isNotEmpty || tCodeNorm.isNotEmpty;
-    if (rIdNorm.isNotEmpty && hasTargetIdOrCode) {
-      final matchesAnyTargetId = (tIdNorm.isNotEmpty && rIdNorm == tIdNorm) ||
-          (tCodeNorm.isNotEmpty && rIdNorm == tCodeNorm);
-      if (matchesAnyTargetId) return true;
-      return false;
-    }
-
-    // Exact normalized name match
+    // Case 2D: Neither resolves to an official record (unlisted custom employees).
+    // If both human names are present and conflict, they are different people!
     if (tName.isNotEmpty && rName.isNotEmpty) {
       final cleanTName = tName.replaceAll(RegExp(r'\s+'), ' ');
       final cleanRName = rName.replaceAll(RegExp(r'\s+'), ' ');
       if (cleanTName == cleanRName) return true;
+      // Conflicting non-empty names must never merge
+      return false;
+    }
+
+    // 3. Direct exact ID match (only when names do not conflict)
+    if (tId.isNotEmpty && rId.isNotEmpty) {
+      if (rId == tId || (rIdNorm.isNotEmpty && rIdNorm == tIdNorm)) return true;
+    }
+
+    // 4. Direct exact Employee Code match
+    if (tCode.isNotEmpty && rId.isNotEmpty) {
+      if (rId == tCode || (rIdNorm.isNotEmpty && rIdNorm == tCodeNorm)) return true;
     }
 
     return false;

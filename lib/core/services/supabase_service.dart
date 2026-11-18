@@ -1662,7 +1662,68 @@ class SupabaseService {
     if (!_isInitialized || client == null) return null;
 
     try {
-      // 1. Check if employeeIdOrUid is a valid UUID in public.employees(id)
+      // 1. Resolve via Master Employee Directory FIRST using employeeName & employeeIdOrUid
+      // This prevents misattributed UUIDs from persisting or creating cross-employee log contamination.
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: employeeIdOrUid,
+        name: employeeName,
+        id: employeeIdOrUid,
+      );
+
+      if (official != null) {
+        // 1a. Search by email in users table
+        try {
+          final userByEmail = await client!
+              .from('users')
+              .select('id')
+              .eq('email', official.email.toLowerCase())
+              .maybeSingle();
+
+          if (userByEmail != null && userByEmail['id'] != null) {
+            final empByUser = await client!
+                .from('employees')
+                .select('id')
+                .eq('user_id', userByEmail['id'].toString())
+                .maybeSingle();
+            if (empByUser != null && empByUser['id'] != null) {
+              return empByUser['id'].toString();
+            }
+          }
+        } catch (_) {}
+
+        // 1b. Search by employee_code in employees table
+        try {
+          final empByCode = await client!
+              .from('employees')
+              .select('id')
+              .or('employee_code.eq.${official.employeeId},employee_code.eq.EMP-${official.employeeId}')
+              .maybeSingle();
+          if (empByCode != null && empByCode['id'] != null) {
+            return empByCode['id'].toString();
+          }
+        } catch (_) {}
+
+        // 1c. Search by employee_code in users table
+        try {
+          final userByCode = await client!
+              .from('users')
+              .select('id')
+              .or('employee_code.eq.${official.employeeId},employee_code.eq.EMP-${official.employeeId}')
+              .maybeSingle();
+          if (userByCode != null && userByCode['id'] != null) {
+            final empByUser = await client!
+                .from('employees')
+                .select('id')
+                .eq('user_id', userByCode['id'].toString())
+                .maybeSingle();
+            if (empByUser != null && empByUser['id'] != null) {
+              return empByUser['id'].toString();
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 2. Check if employeeIdOrUid is a valid UUID in public.employees(id)
       if (_isValidUuid(employeeIdOrUid)) {
         final existingEmp = await client!
             .from('employees')
@@ -1684,66 +1745,6 @@ class SupabaseService {
         if (empByUser != null && empByUser['id'] != null) {
           return empByUser['id'].toString();
         }
-      }
-
-      // 2. Resolve via Master Employee Directory (critical for Anandh Veeramani & Rafi Ullah)
-      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
-        code: employeeIdOrUid,
-        name: employeeName,
-        id: employeeIdOrUid,
-      );
-
-      if (official != null) {
-        // 2a. Search by email in users table
-        try {
-          final userByEmail = await client!
-              .from('users')
-              .select('id')
-              .eq('email', official.email.toLowerCase())
-              .maybeSingle();
-
-          if (userByEmail != null && userByEmail['id'] != null) {
-            final empByUser = await client!
-                .from('employees')
-                .select('id')
-                .eq('user_id', userByEmail['id'].toString())
-                .maybeSingle();
-            if (empByUser != null && empByUser['id'] != null) {
-              return empByUser['id'].toString();
-            }
-          }
-        } catch (_) {}
-
-        // 2b. Search by employee_code in employees table
-        try {
-          final empByCode = await client!
-              .from('employees')
-              .select('id')
-              .or('employee_code.eq.${official.employeeId},employee_code.eq.EMP-${official.employeeId}')
-              .maybeSingle();
-          if (empByCode != null && empByCode['id'] != null) {
-            return empByCode['id'].toString();
-          }
-        } catch (_) {}
-
-        // 2c. Search by employee_code in users table
-        try {
-          final userByCode = await client!
-              .from('users')
-              .select('id')
-              .or('employee_code.eq.${official.employeeId},employee_code.eq.EMP-${official.employeeId}')
-              .maybeSingle();
-          if (userByCode != null && userByCode['id'] != null) {
-            final empByUser = await client!
-                .from('employees')
-                .select('id')
-                .eq('user_id', userByCode['id'].toString())
-                .maybeSingle();
-            if (empByUser != null && empByUser['id'] != null) {
-              return empByUser['id'].toString();
-            }
-          }
-        } catch (_) {}
       }
 
       // 3. Resolve user_id from public.users by firebase_uid or id
