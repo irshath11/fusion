@@ -6,6 +6,7 @@ import 'package:attendance_app/core/utils/timesheet_calculator.dart';
 import 'package:attendance_app/features/admin/domain/employee_entity.dart';
 import 'package:attendance_app/features/attendance/domain/attendance_record.dart';
 import 'package:attendance_app/features/salary/domain/employee_salary_config.dart';
+import 'package:attendance_app/features/salary/domain/employee_salary_summary.dart';
 import 'package:attendance_app/features/salary/domain/daily_salary_record.dart';
 import 'package:attendance_app/features/salary/utils/salary_calculator.dart';
 
@@ -860,6 +861,191 @@ void main() {
       expect(summary.earnedOtSalary, closeTo(40.0, 0.01));
       // Gross Total = 440 + 403.33 + 40 = ~883.33
       expect(summary.grossTotalSalary, closeTo(883.33, 0.05));
+    });
+
+    test('November 2026 Special Rule: Interim OT (26-31 Oct) is added to Variable Portion', () {
+      final novCycle = SalaryCycle.forMonth(2026, 11);
+      final config = EmployeeSalaryConfig(
+        employeeCode: '1012',
+        employeeName: 'Raja Mohammed Mohammed Ali',
+        fixedSalary: 1240.0,
+        variableSalary: 600.0,
+      );
+
+      final List<AttendanceRecord> records = [];
+
+      // 1. Interim period records: 26 Oct, 27 Oct, 28 Oct 2026
+      // Each day: check-in 08:00, check-out 18:00 (10 hrs total = 8h regular + 2h OT)
+      // Total 3 days * 2h = 6.0h OT.
+      // October rate: (1240 / 31) / 8 = 40.0 / 8 = 5.0 AED/hr.
+      // Interim OT salary = 6.0h * 5.0 = 30.0 AED.
+      for (int day = 26; day <= 28; day++) {
+        records.add(_createRecord(
+          id: 'oct-$day-in',
+          employeeId: 'emp-1012',
+          employeeName: 'Raja Mohammed Mohammed Ali',
+          workflowStep: WorkflowStep.officeCheckIn,
+          eventTimestamp: DateTime(2026, 10, day, 8, 0),
+        ));
+        records.add(_createRecord(
+          id: 'oct-$day-out',
+          employeeId: 'emp-1012',
+          employeeName: 'Raja Mohammed Mohammed Ali',
+          workflowStep: WorkflowStep.officeCheckOut,
+          eventTimestamp: DateTime(2026, 10, day, 18, 0),
+          manualOvertimeHours: 2.0,
+        ));
+      }
+
+      // 2. November records: 2 Nov to 6 Nov (Monday to Friday: 5 worked + 1 paid Sunday [1 Nov] = 6 payable days)
+      // Daily fixed = 1240 / 30 = 41.333 AED
+      // Daily variable = 600 / 30 = 20.0 AED
+      // Earned fixed = 6 * 41.333 = 248.0 AED
+      // Base variable = 6 * 20.0 = 120.0 AED
+      // Variable Portion with Interim OT = 120.0 + 30.0 = 150.0 AED
+      for (int day = 2; day <= 6; day++) {
+        records.add(_createRecord(
+          id: 'nov-$day-in',
+          employeeId: 'emp-1012',
+          employeeName: 'Raja Mohammed Mohammed Ali',
+          workflowStep: WorkflowStep.officeCheckIn,
+          eventTimestamp: DateTime(2026, 11, day, 8, 0),
+        ));
+        records.add(_createRecord(
+          id: 'nov-$day-out',
+          employeeId: 'emp-1012',
+          employeeName: 'Raja Mohammed Mohammed Ali',
+          workflowStep: WorkflowStep.officeCheckOut,
+          eventTimestamp: DateTime(2026, 11, day, 16, 0),
+        ));
+      }
+
+      final summary = SalaryCalculator.calculateEmployeeSalary(
+        config: config,
+        records: records,
+        cycle: novCycle,
+      );
+
+      // Verify Interim OT was detected and calculated
+      expect(summary.interimOtHours, 6.0);
+      expect(summary.interimOtSalary, 30.0);
+
+      // Verify Base Variable vs Earned Variable (Variable Portion)
+      expect(summary.daysWorked, 5);
+      expect(summary.paidSundays, 1);
+      expect(summary.totalPayableDays, 6);
+      expect(summary.baseVariableSalary, closeTo(120.0, 0.01));
+      expect(summary.earnedVariableSalary, closeTo(150.0, 0.01));
+
+      // Verify Fixed & Gross Total
+      expect(summary.earnedFixedSalary, closeTo(248.0, 0.01));
+      expect(summary.earnedOtSalary, 0.0); // November itself had 0 OT
+      expect(summary.grossTotalSalary, closeTo(248.0 + 150.0, 0.05));
+
+      // Verify WorkforceSalarySummary aggregation
+      final workforce = WorkforceSalarySummary.fromSummaries(novCycle, [summary]);
+      expect(workforce.totalInterimOtHours, 6.0);
+      expect(workforce.totalInterimOtEarned, 30.0);
+      expect(workforce.totalVariableEarned, closeTo(150.0, 0.01));
+      expect(workforce.totalPayroll, closeTo(398.0, 0.05));
+    });
+
+    test('Non-November months do NOT add Interim OT to Variable Portion', () {
+      final decCycle = SalaryCycle.forMonth(2026, 12);
+      final config = EmployeeSalaryConfig(
+        employeeCode: '1012',
+        employeeName: 'Raja Mohammed Mohammed Ali',
+        fixedSalary: 1240.0,
+        variableSalary: 600.0,
+      );
+
+      final List<AttendanceRecord> records = [];
+      // Transition records present in record pool
+      for (int day = 26; day <= 28; day++) {
+        records.add(_createRecord(
+          id: 'oct-$day-in',
+          employeeId: 'emp-1012',
+          employeeName: 'Raja Mohammed Mohammed Ali',
+          workflowStep: WorkflowStep.officeCheckIn,
+          eventTimestamp: DateTime(2026, 10, day, 8, 0),
+        ));
+        records.add(_createRecord(
+          id: 'oct-$day-out',
+          employeeId: 'emp-1012',
+          employeeName: 'Raja Mohammed Mohammed Ali',
+          workflowStep: WorkflowStep.officeCheckOut,
+          eventTimestamp: DateTime(2026, 10, day, 18, 0),
+          manualOvertimeHours: 2.0,
+        ));
+      }
+
+      // December records: 1 Dec to 5 Dec (5 days worked)
+      for (int day = 1; day <= 5; day++) {
+        records.add(_createRecord(
+          id: 'dec-$day-in',
+          employeeId: 'emp-1012',
+          employeeName: 'Raja Mohammed Mohammed Ali',
+          workflowStep: WorkflowStep.officeCheckIn,
+          eventTimestamp: DateTime(2026, 12, day, 8, 0),
+        ));
+        records.add(_createRecord(
+          id: 'dec-$day-out',
+          employeeId: 'emp-1012',
+          employeeName: 'Raja Mohammed Mohammed Ali',
+          workflowStep: WorkflowStep.officeCheckOut,
+          eventTimestamp: DateTime(2026, 12, day, 16, 0),
+        ));
+      }
+
+      final summary = SalaryCalculator.calculateEmployeeSalary(
+        config: config,
+        records: records,
+        cycle: decCycle,
+      );
+
+      expect(summary.interimOtHours, 0.0);
+      expect(summary.interimOtSalary, 0.0);
+      expect(summary.earnedVariableSalary, summary.baseVariableSalary);
+    });
+
+    test('Fixed OT in Variable (otIncludedInVariable): Interim OT credits 0.0 AED in November', () {
+      final novCycle = SalaryCycle.forMonth(2026, 11);
+      final config = EmployeeSalaryConfig(
+        employeeCode: 'N-1004',
+        employeeName: 'Shabi',
+        fixedSalary: 1200.0,
+        variableSalary: 1100.0,
+        otIncludedInVariable: true, // OT calculation disabled
+      );
+
+      final List<AttendanceRecord> records = [];
+      // Transition records with extra hours
+      for (int day = 26; day <= 28; day++) {
+        records.add(_createRecord(
+          id: 'shabi-oct-$day-in',
+          employeeId: 'N-1004',
+          employeeName: 'Shabi',
+          workflowStep: WorkflowStep.officeCheckIn,
+          eventTimestamp: DateTime(2026, 10, day, 8, 0),
+        ));
+        records.add(_createRecord(
+          id: 'shabi-oct-$day-out',
+          employeeId: 'N-1004',
+          employeeName: 'Shabi',
+          workflowStep: WorkflowStep.officeCheckOut,
+          eventTimestamp: DateTime(2026, 10, day, 18, 0),
+          manualOvertimeHours: 2.0,
+        ));
+      }
+
+      final summary = SalaryCalculator.calculateEmployeeSalary(
+        config: config,
+        records: records,
+        cycle: novCycle,
+      );
+
+      expect(summary.interimOtSalary, 0.0);
+      expect(summary.earnedVariableSalary, summary.baseVariableSalary);
     });
   });
 }

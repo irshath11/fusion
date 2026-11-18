@@ -42,8 +42,17 @@ class EmployeeSalarySummary {
   /// Earned Fixed Salary = totalPayableDays * (fixedSalary / 30)
   final double earnedFixedSalary;
 
-  /// Earned Variable Salary = totalPayableDays * (variableSalary / 30)
+  /// Earned Variable Salary = totalPayableDays * (variableSalary / 30) + interimOtSalary (for Nov 2026)
   final double earnedVariableSalary;
+
+  /// Base earned variable before interim OT addition
+  final double baseVariableSalary;
+
+  /// Interim Overtime hours earned during 26-31 Oct 2026 transition period (credited to Nov)
+  final double interimOtHours;
+
+  /// Interim Overtime salary amount earned during 26-31 Oct 2026 transition period (credited to Nov)
+  final double interimOtSalary;
 
   /// Earned Overtime Salary = totalOvertimeHours * hourlyOtRate
   final double earnedOtSalary;
@@ -79,11 +88,14 @@ class EmployeeSalarySummary {
     required this.hourlyOtRate,
     required this.earnedFixedSalary,
     required this.earnedVariableSalary,
+    double? baseVariableSalary,
+    this.interimOtHours = 0.0,
+    this.interimOtSalary = 0.0,
     required this.earnedOtSalary,
     required this.grossTotalSalary,
     required this.dailyRecords,
     this.isCalendarAttendance = false,
-  });
+  }) : baseVariableSalary = baseVariableSalary ?? earnedVariableSalary;
 
   /// Base base salary configuration (Fixed + Variable)
   double get monthlyBaseTotal => config.monthlyBaseTotal;
@@ -104,6 +116,8 @@ class WorkforceSalarySummary {
   final double totalVariableEarned;
   final double totalOtEarned;
   final double totalOtHours;
+  final double totalInterimOtEarned;
+  final double totalInterimOtHours;
   final int totalWorkforceDaysWorked;
   final int totalWorkforcePaidSundays;
   final int totalWorkforcePayableDays;
@@ -116,6 +130,8 @@ class WorkforceSalarySummary {
     required this.totalVariableEarned,
     required this.totalOtEarned,
     required this.totalOtHours,
+    this.totalInterimOtEarned = 0.0,
+    this.totalInterimOtHours = 0.0,
     required this.totalWorkforceDaysWorked,
     required this.totalWorkforcePaidSundays,
     required this.totalWorkforcePayableDays,
@@ -130,6 +146,8 @@ class WorkforceSalarySummary {
     double variable = 0.0;
     double ot = 0.0;
     double otHours = 0.0;
+    double interimOt = 0.0;
+    double interimOtHours = 0.0;
     int worked = 0;
     int sundays = 0;
     int payable = 0;
@@ -140,6 +158,8 @@ class WorkforceSalarySummary {
       variable += s.earnedVariableSalary;
       ot += s.earnedOtSalary;
       otHours += s.totalOvertimeHours;
+      interimOt += s.interimOtSalary;
+      interimOtHours += s.interimOtHours;
       worked += s.daysWorked;
       sundays += s.paidSundays;
       payable += s.totalPayableDays;
@@ -153,6 +173,8 @@ class WorkforceSalarySummary {
       totalVariableEarned: variable,
       totalOtEarned: ot,
       totalOtHours: otHours,
+      totalInterimOtEarned: interimOt,
+      totalInterimOtHours: interimOtHours,
       totalWorkforceDaysWorked: worked,
       totalWorkforcePaidSundays: sundays,
       totalWorkforcePayableDays: payable,

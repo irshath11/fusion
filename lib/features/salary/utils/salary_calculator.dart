@@ -2,6 +2,7 @@ import 'package:intl/intl.dart';
 import '../../../core/utils/employee_directory_helper.dart';
 import '../../../core/utils/salary_cycle_helper.dart';
 import '../../../core/utils/timesheet_calculator.dart';
+import '../../../database/local_database_service.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../attendance/domain/attendance_record.dart';
 import '../domain/employee_salary_config.dart';
@@ -278,7 +279,42 @@ class SalaryCalculator {
 
     final totalPayableDays = daysWorked + paidSundays;
     final earnedFixed = totalPayableDays * dailyFixedRate;
-    final earnedVariable = totalPayableDays * dailyVariableRate;
+    final baseVariable = totalPayableDays * dailyVariableRate;
+
+    // For November 2026 only: add Interim Overtime earned between 26 Oct and 31 Oct 2026 into the Variable Portion
+    double interimOtHours = 0.0;
+    double interimOtSalary = 0.0;
+
+    if (cycle.salaryMonth == 11 && cycle.salaryYear == 2026 && !cycle.isTransition) {
+      final transitionCycle = SalaryCycle.octoberTransition();
+      List<AttendanceRecord> transitionRecords = records
+          .where((r) => transitionCycle.contains(r.eventTimestamp))
+          .toList();
+
+      if (transitionRecords.isEmpty) {
+        try {
+          final allDbRecords = LocalDatabaseService().getAttendanceRecords();
+          transitionRecords = allDbRecords
+              .where((r) => transitionCycle.contains(r.eventTimestamp))
+              .toList();
+        } catch (_) {}
+      }
+
+      if (transitionRecords.isNotEmpty) {
+        final transitionSummary = calculateEmployeeSalary(
+          config: config,
+          employee: employee,
+          records: transitionRecords,
+          cycle: transitionCycle,
+          referenceDate: DateTime(2026, 11, 1),
+        );
+        interimOtHours = transitionSummary.totalOvertimeHours;
+        interimOtSalary = transitionSummary.earnedOtSalary;
+      }
+    }
+
+    final earnedVariable = baseVariable + interimOtSalary;
+
     final double earnedOt;
     if (config.otIncludedInVariable || totalPayableDays == 0) {
       earnedOt = 0.0;
@@ -353,6 +389,9 @@ class SalaryCalculator {
       hourlyOtRate: otHourlyRate,
       earnedFixedSalary: earnedFixed,
       earnedVariableSalary: earnedVariable,
+      baseVariableSalary: baseVariable,
+      interimOtHours: interimOtHours,
+      interimOtSalary: interimOtSalary,
       earnedOtSalary: earnedOt,
       grossTotalSalary: grossTotal,
       dailyRecords: dailyRecords,

@@ -1750,6 +1750,11 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
               _buildWorkforceMetricCol(
                 'Variable Earned',
                 'AED ${workforceSummary.totalVariableEarned.toStringAsFixed(0)}',
+                (_selectedCycle.salaryMonth == 11 &&
+                        _selectedCycle.salaryYear == 2026 &&
+                        workforceSummary.totalInterimOtEarned > 0)
+                    ? '(incl. Oct OT AED ${workforceSummary.totalInterimOtEarned.toStringAsFixed(0)})'
+                    : null,
               ),
               _buildWorkforceMetricCol(
                 'Overtime (${workforceSummary.totalOtHours.toStringAsFixed(1)}h)',
@@ -1937,7 +1942,7 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
     );
   }
 
-  Widget _buildWorkforceMetricCol(String label, String value) {
+  Widget _buildWorkforceMetricCol(String label, String value, [String? subtext]) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1954,6 +1959,17 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
+        if (subtext != null) ...[
+          const SizedBox(height: 1),
+          Text(
+            subtext,
+            style: const TextStyle(
+              color: Color(0xFFFDE68A),
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -2426,7 +2442,14 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     _buildRowItem('Basic Earned', 'AED ${summary.earnedFixedSalary.toStringAsFixed(2)}', isDark),
-                    _buildRowItem('Var Earned', 'AED ${summary.earnedVariableSalary.toStringAsFixed(2)}', isDark),
+                    _buildRowItem(
+                      'Var Earned',
+                      'AED ${summary.earnedVariableSalary.toStringAsFixed(2)}',
+                      isDark,
+                      summary.interimOtSalary > 0
+                          ? '(+AED ${summary.interimOtSalary.toStringAsFixed(0)} Oct OT)'
+                          : null,
+                    ),
                     _buildRowItem(
                       config.otIncludedInVariable
                           ? 'OT (Fixed)'
@@ -2446,7 +2469,7 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
     );
   }
 
-  Widget _buildRowItem(String label, String value, bool isDark) {
+  Widget _buildRowItem(String label, String value, bool isDark, [String? subtext]) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2467,6 +2490,17 @@ class _SalaryPayrollScreenState extends State<SalaryPayrollScreen> {
             color: isDark ? Colors.white : const Color(0xFF0F172A),
           ),
         ),
+        if (subtext != null) ...[
+          const SizedBox(height: 1),
+          Text(
+            subtext,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              color: isDark ? const Color(0xFFFDE68A) : Colors.amber[900],
+            ),
+          ),
+        ],
       ],
     );
   }
