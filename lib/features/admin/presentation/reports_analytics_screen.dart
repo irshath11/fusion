@@ -987,6 +987,12 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           ),
           const SizedBox(height: 14),
 
+          if (_activeTab == 0) ...[
+            // Main Salary Cycle Filter Card (placed at top of Directory)
+            _buildMainSalaryCycleFilterCard(isDark, palette, activePrimary),
+            const SizedBox(height: 14),
+          ],
+
           // Search Bar
           Builder(
             builder: (context) {
@@ -1053,10 +1059,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           const SizedBox(height: 16),
 
           if (_activeTab == 0) ...[
-            // Main Salary Cycle Filter Card
-            _buildMainSalaryCycleFilterCard(isDark, palette, activePrimary),
-            const SizedBox(height: 14),
-
             // 2 Segregation Tabs: With Records vs No Records
             AppAnimatedTabSwitcher(
               selectedIndex: _employeeRecordFilterTab,
