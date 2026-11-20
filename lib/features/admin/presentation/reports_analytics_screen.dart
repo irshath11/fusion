@@ -1841,98 +1841,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
   }
 
-  Widget _buildMisattributedLogsBanner(EmployeeEntity currentEmp, List<AttendanceRecord> records) {
-    final users = _db.getUsers();
-    final suspiciousRecords = <AttendanceRecord>[];
-    String? detectedOwnerName;
-    String? detectedOwnerId;
-
-    for (final r in records) {
-      if (r.deviceId.startsWith('device-hw-')) {
-        final rawUid = r.deviceId.substring('device-hw-'.length);
-        final match = users.where((u) => u.id == rawUid || (u.firebaseUid.isNotEmpty && u.firebaseUid == rawUid));
-        if (match.isNotEmpty &&
-            match.first.fullName.trim().toLowerCase() != currentEmp.name.trim().toLowerCase()) {
-          suspiciousRecords.add(r);
-          detectedOwnerName ??= match.first.fullName;
-          detectedOwnerId ??= match.first.id;
-        }
-      }
-    }
-
-    if (suspiciousRecords.isEmpty || detectedOwnerName == null || detectedOwnerId == null) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.amber.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.amber.shade700),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 28),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Misattributed Logs Detected',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: Colors.amber.shade900,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${suspiciousRecords.length} log(s) appear to have been captured from $detectedOwnerName\'s account instead of ${currentEmp.name}.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.amber.shade900,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          ElevatedButton.icon(
-            onPressed: () async {
-              final count = await _db.reassignEmployeeAttendanceRecords(
-                fromEmployeeId: currentEmp.id,
-                fromEmployeeName: currentEmp.name,
-                toEmployeeId: detectedOwnerId!,
-                toEmployeeName: detectedOwnerName!,
-              );
-              if (mounted) {
-                setState(() {});
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Successfully transferred $count log(s) to $detectedOwnerName!'),
-                    backgroundColor: AppColors.success,
-                  ),
-                );
-              }
-            },
-            icon: const Icon(Icons.swap_horiz_rounded, size: 16),
-            label: Text('Transfer to $detectedOwnerName'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.amber.shade800,
-              foregroundColor: Colors.white,
-              elevation: 2,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _showReassignRecordsDialog(EmployeeEntity sourceEmp, List<AttendanceRecord> records) async {
     final allEmployees = _getSynthesizedEmployees()
         .where((e) => e.id != sourceEmp.id && e.name.trim().toLowerCase() != sourceEmp.name.trim().toLowerCase())
@@ -2226,9 +2134,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             ],
           ),
           const SizedBox(height: 12),
-
-          // Misattributed logs detection banner
-          _buildMisattributedLogsBanner(emp, empRecords),
 
           // Salary Cycle Filter Selector for Employee Timesheet (25th - 24th)
           Container(

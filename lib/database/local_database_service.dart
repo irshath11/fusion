@@ -1949,8 +1949,6 @@ class LocalDatabaseService {
     if (employeeId != null && employeeId.trim().isNotEmpty) {
       final cleanTarget = employeeId.trim().toLowerCase();
       return _attendanceRecords.where((r) {
-        final matchesId = r.employeeId.trim().toLowerCase() == cleanTarget;
-        final matchesName = r.employeeName.trim().toLowerCase() == cleanTarget;
         final matchesIdentity = EmployeeDirectoryHelper.matchesEmployeeIdentity(
           recordEmployeeId: r.employeeId,
           recordEmployeeName: r.employeeName,
@@ -1959,31 +1957,25 @@ class LocalDatabaseService {
         );
         final localEv = r.eventTimestamp.toLocal();
         final rDate = DateTime(localEv.year, localEv.month, localEv.day);
-        return (matchesId || matchesName || matchesIdentity) && rDate.isAtSameMomentAs(today);
+        return matchesIdentity && rDate.isAtSameMomentAs(today);
       }).toList();
     }
 
-    final targetId = _currentUser?.id ?? _currentUser?.firebaseUid;
-    if (targetId == null || targetId.isEmpty) return [];
+    final curUser = _currentUser;
+    if (curUser == null) return [];
 
     return _attendanceRecords.where((r) {
-      final matchesUser = (r.employeeId == targetId ||
-          (_currentUser != null &&
-              (r.employeeId == _currentUser!.id ||
-               r.employeeId == _currentUser!.firebaseUid ||
-               r.employeeName.trim().toLowerCase() == _currentUser!.fullName.trim().toLowerCase())));
-      final matchesIdentity = _currentUser != null &&
-          EmployeeDirectoryHelper.matchesEmployeeIdentity(
-            recordEmployeeId: r.employeeId,
-            recordEmployeeName: r.employeeName,
-            employeeId: _currentUser!.id,
-            employeeCode: _currentUser!.employeeCode,
-            employeeName: _currentUser!.fullName,
-            employeeEmail: _currentUser!.email,
-          );
+      final matchesIdentity = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: r.employeeId,
+        recordEmployeeName: r.employeeName,
+        employeeId: curUser.id,
+        employeeCode: curUser.employeeCode,
+        employeeName: curUser.fullName,
+        employeeEmail: curUser.email,
+      );
       final localEv = r.eventTimestamp.toLocal();
       final rDate = DateTime(localEv.year, localEv.month, localEv.day);
-      return (matchesUser || matchesIdentity) && rDate.isAtSameMomentAs(today);
+      return matchesIdentity && rDate.isAtSameMomentAs(today);
     }).toList();
   }
 
