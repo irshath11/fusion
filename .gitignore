@@ -44,9 +44,6 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Key signing & secrets
-*.jks
-*.keystore
-*.pem
-/android/key.properties
+# Submodules & External
+wedding_invitation/
 

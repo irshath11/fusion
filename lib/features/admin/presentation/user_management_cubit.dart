@@ -18,7 +18,13 @@ abstract class UserManagementState extends Equatable {
 
 class UserManagementInitial extends UserManagementState {}
 
-class UserManagementLoading extends UserManagementState {}
+class UserManagementLoading extends UserManagementState {
+  final List<UserEntity> previousUsers;
+  UserManagementLoading({this.previousUsers = const []});
+
+  @override
+  List<Object?> get props => [previousUsers];
+}
 
 class UserManagementLoaded extends UserManagementState {
   final List<UserEntity> users;
@@ -57,75 +63,280 @@ class UserManagementCubit extends Cubit<UserManagementState> {
 
   final Uuid _uuid = const Uuid();
 
-  UserManagementCubit() : super(UserManagementInitial());
+  UserManagementCubit() : super(_initialState());
 
-  Future<void> fetchUsers() async {
-    emit(UserManagementLoading());
+  static UserManagementState _initialState() {
+    try {
+      final db = LocalDatabaseService();
+      final cachedUsers = db.getUsers();
+      final cachedEmployees = db.getEmployees();
+      final orgId =
+          db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
+
+      if (cachedUsers.isNotEmpty || cachedEmployees.isNotEmpty) {
+        final list = buildUnifiedUserList(
+          sourceUsers: cachedUsers,
+          sourceEmployees: cachedEmployees,
+          orgId: orgId,
+        );
+        if (list.isNotEmpty) {
+          return UserManagementLoaded(list);
+        }
+      }
+    } catch (_) {}
+    return UserManagementInitial();
+  }
+
+  static List<UserEntity> buildUnifiedUserList({
+    required List<UserEntity> sourceUsers,
+    required List<EmployeeEntity> sourceEmployees,
+    required String orgId,
+  }) {
+    final Map<String, UserEntity> userMap = {};
+
+    for (final u in sourceUsers) {
+      if (EmployeeDirectoryHelper.isRelievedEmployee(
+        id: u.id,
+        name: u.fullName,
+        email: u.email,
+        code: u.employeeCode,
+      )) {
+        continue;
+      }
+      final key = u.email.trim().isNotEmpty
+          ? u.email.trim().toLowerCase()
+          : (u.fullName.trim().isNotEmpty
+              ? u.fullName.trim().toLowerCase()
+              : u.id);
+
+      final completeName = EmployeeDirectoryHelper.getCompleteFullName(
+        currentName: u.fullName,
+        email: u.email,
+        code: u.employeeCode,
+        id: u.id,
+      );
+      final officialId = EmployeeDirectoryHelper.getEmployeeId(
+        currentCode: u.employeeCode,
+        name: u.fullName,
+        email: u.email,
+        id: u.id,
+      );
+      final photo = EmployeeDirectoryHelper.resolvePhoto(
+        customPhotoUrl: u.photoUrl,
+        employeeCode: u.employeeCode,
+        fullName: u.fullName,
+        email: u.email,
+        id: u.id,
+      );
+
+      userMap[key] = u.copyWith(
+        fullName: completeName,
+        employeeCode: officialId,
+        photoUrl: photo,
+      );
+    }
+
+    // Always merge local employees into userMap so locally active/registered employees are never omitted
+    for (final e in sourceEmployees) {
+      if (EmployeeDirectoryHelper.isRelievedEmployee(
+        id: e.id,
+        name: e.name,
+        email: e.email,
+        code: e.employeeCode,
+      )) {
+        continue;
+      }
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: e.employeeCode,
+        name: e.name,
+        email: e.email,
+        id: e.id,
+      );
+
+      // Skip synthetic placeholders if actual user exists
+      if (e.id.startsWith('emp-')) {
+        final hasRealUser = userMap.values.any((u) =>
+            !u.id.startsWith('emp-') &&
+            (u.id == e.id ||
+             (official != null && u.employeeCode?.toUpperCase() == official.employeeId.toUpperCase()) ||
+             (official != null && u.fullName.trim().toLowerCase() == official.fullName.toLowerCase())));
+        if (hasRealUser) continue;
+      }
+
+      final key = official != null
+          ? official.employeeId.toUpperCase()
+          : (e.email.trim().isNotEmpty
+              ? e.email.trim().toLowerCase()
+              : (e.name.trim().isNotEmpty
+                  ? e.name.trim().toLowerCase()
+                  : e.id));
+      final alreadyPresent = userMap.containsKey(key) ||
+          userMap.values.any((u) =>
+              (u.id.isNotEmpty && u.id == e.id) ||
+              (official != null &&
+               (u.employeeCode?.toUpperCase() == official.employeeId.toUpperCase() ||
+                u.fullName.trim().toLowerCase() == official.fullName.toLowerCase() ||
+                u.email.trim().toLowerCase() == official.email.toLowerCase())) ||
+              (e.email.isNotEmpty &&
+                  u.email.trim().toLowerCase() == e.email.trim().toLowerCase()) ||
+              (e.name.isNotEmpty &&
+                  u.fullName.trim().toLowerCase() == e.name.trim().toLowerCase()) ||
+              EmployeeDirectoryHelper.matchesEmployeeIdentity(
+                recordEmployeeId: e.id,
+                recordEmployeeName: e.name,
+                employeeId: u.id,
+                employeeCode: u.employeeCode,
+                employeeName: u.fullName,
+                employeeEmail: u.email,
+              ));
+
+      if (!alreadyPresent) {
+        final completeName = EmployeeDirectoryHelper.getCompleteFullName(
+          currentName: e.name,
+          email: e.email,
+          code: e.employeeCode,
+          id: e.id,
+        );
+        final officialId = EmployeeDirectoryHelper.getEmployeeId(
+          currentCode: e.employeeCode,
+          name: e.name,
+          email: e.email,
+          id: e.id,
+        );
+        final photo = EmployeeDirectoryHelper.resolvePhoto(
+          customPhotoUrl: e.photoUrl,
+          employeeCode: e.employeeCode,
+          fullName: e.name,
+          email: e.email,
+          id: e.id,
+        );
+
+        final localUser = UserEntity(
+          id: e.id,
+          firebaseUid: e.id,
+          email: e.email,
+          fullName: completeName,
+          phoneNumber: e.mobileNumber,
+          employeeCode: officialId,
+          designation: e.designation,
+          department: e.department,
+          role: UserRole.employee,
+          organizationId: orgId,
+          isActive: e.isActive,
+          photoUrl: photo,
+          useDefaultOffice: e.useDefaultOffice,
+          assignedOfficeId: e.assignedOfficeId,
+          assignedOfficeName: e.assignedOfficeName,
+          bypassGeofence: e.bypassGeofence,
+        );
+        userMap[key] = localUser;
+      } else {
+        final existing = userMap[key] ??
+            userMap.values.firstWhere((u) =>
+                (u.id.isNotEmpty && u.id == e.id) ||
+                (e.email.isNotEmpty &&
+                    u.email.trim().toLowerCase() == e.email.trim().toLowerCase()) ||
+                (e.name.isNotEmpty &&
+                    u.fullName.trim().toLowerCase() == e.name.trim().toLowerCase()));
+
+        final existingKey =
+            userMap.keys.firstWhere((k) => userMap[k] == existing, orElse: () => key);
+
+        final completeName = EmployeeDirectoryHelper.getCompleteFullName(
+          currentName: existing.fullName,
+          email: existing.email,
+          code: existing.employeeCode ?? e.employeeCode,
+          id: existing.id,
+        );
+        final officialId = EmployeeDirectoryHelper.getEmployeeId(
+          currentCode: existing.employeeCode ?? e.employeeCode,
+          name: existing.fullName,
+          email: existing.email,
+          id: existing.id,
+        );
+        final photo = (existing.photoUrl != null &&
+                existing.photoUrl!.trim().isNotEmpty)
+            ? existing.photoUrl
+            : EmployeeDirectoryHelper.resolvePhoto(
+                customPhotoUrl: e.photoUrl,
+                employeeCode: existing.employeeCode ?? e.employeeCode,
+                fullName: existing.fullName,
+                email: existing.email,
+                id: existing.id,
+              );
+
+        userMap[existingKey] = existing.copyWith(
+          fullName: completeName,
+          employeeCode: officialId,
+          photoUrl: photo,
+          useDefaultOffice: e.useDefaultOffice,
+          clearAssignedOffice:
+              e.useDefaultOffice || e.assignedOfficeId == null,
+          assignedOfficeId: e.assignedOfficeId,
+          assignedOfficeName: e.assignedOfficeName,
+          designation: e.designation.isNotEmpty ? e.designation : existing.designation,
+          department: e.department.isNotEmpty ? e.department : existing.department,
+          bypassGeofence: e.bypassGeofence,
+        );
+      }
+    }
+
+    final usersList = userMap.values.where((u) => !EmployeeDirectoryHelper.isRelievedEmployee(
+      id: u.id,
+      name: u.fullName,
+      email: u.email,
+      code: u.employeeCode,
+    )).toList();
+    usersList.sort((a, b) =>
+        a.fullName.trim().toLowerCase().compareTo(b.fullName.trim().toLowerCase()));
+    return usersList;
+  }
+
+  Future<void> fetchUsers({bool showLoading = false}) async {
+    final List<UserEntity> currentUsers = state is UserManagementLoaded
+        ? (state as UserManagementLoaded).users
+        : (state is UserManagementLoading
+            ? (state as UserManagementLoading).previousUsers
+            : const []);
+
+    // Only emit loading spinner if we don't have any users yet or explicitly requested
+    if (showLoading || currentUsers.isEmpty) {
+      emit(UserManagementLoading(previousUsers: currentUsers));
+    }
+
     try {
       final orgId =
           _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
       final remoteUsers = await _supabase.fetchOrganizationUsers(orgId);
-      if (_supabase.isInitialized) {
+      if (_supabase.isInitialized && remoteUsers.isNotEmpty) {
         _db.setUsers(remoteUsers);
       }
 
-      final Map<String, UserEntity> userMap = {};
+      final usersList = buildUnifiedUserList(
+        sourceUsers: remoteUsers.isNotEmpty ? remoteUsers : _db.getUsers(),
+        sourceEmployees: _db.getEmployees(),
+        orgId: orgId,
+      );
 
-      for (final u in remoteUsers) {
-        final override = _db.getGeofenceOverride(
-          userId: u.id,
-          email: u.email,
-          employeeCode: u.employeeCode,
-          name: u.fullName,
-        );
-        final effectiveUser = override != null
-            ? u.copyWith(bypassGeofence: override)
-            : u;
 
-        final key = effectiveUser.email.trim().isNotEmpty
-            ? effectiveUser.email.trim().toLowerCase()
-            : (effectiveUser.fullName.trim().isNotEmpty
-                ? effectiveUser.fullName.trim().toLowerCase()
-                : effectiveUser.id);
-        userMap[key] = effectiveUser;
-      }
-
-      // If remote was unreachable (offline mode and uninitialized), fallback to local cache
-      if (remoteUsers.isEmpty && !_supabase.isInitialized) {
-        final localEmployees = _db.getEmployees();
-        for (final e in localEmployees) {
-          final localUser = UserEntity(
-            id: e.id,
-            firebaseUid: e.id,
-            email: e.email,
-            fullName: e.name,
-            phoneNumber: e.mobileNumber,
-            role: UserRole.employee,
-            organizationId: orgId,
-            isActive: e.isActive,
-            useDefaultOffice: e.useDefaultOffice,
-            assignedOfficeId: e.assignedOfficeId,
-            assignedOfficeName: e.assignedOfficeName,
-            bypassGeofence: _db.getGeofenceOverride(userId: e.id, email: e.email, employeeCode: e.employeeCode, name: e.name) ?? e.bypassGeofence,
-          );
-          final key = localUser.email.trim().isNotEmpty
-              ? localUser.email.trim().toLowerCase()
-              : (localUser.fullName.trim().isNotEmpty
-                  ? localUser.fullName.trim().toLowerCase()
-                  : localUser.id);
-          userMap[key] = localUser;
-        }
-      }
-
-      final usersList = userMap.values.toList();
-      usersList.sort((a, b) => a.fullName
-          .trim()
-          .toLowerCase()
-          .compareTo(b.fullName.trim().toLowerCase()));
       emit(UserManagementLoaded(usersList));
     } catch (e) {
-      emit(UserManagementError('Failed to fetch user list: ${e.toString()}'));
+      if (currentUsers.isNotEmpty) {
+        // Keep existing users visible on screen rather than showing a blank error
+        emit(UserManagementLoaded(currentUsers));
+      } else {
+        emit(UserManagementError('Failed to fetch user list: ${e.toString()}'));
+      }
     }
+  }
+
+  List<UserEntity> get _currentUsers {
+    if (state is UserManagementLoaded) {
+      return (state as UserManagementLoaded).users;
+    } else if (state is UserManagementLoading) {
+      return (state as UserManagementLoading).previousUsers;
+    }
+    return const [];
   }
 
   Future<void> createUser({
@@ -140,9 +351,10 @@ class UserManagementCubit extends Cubit<UserManagementState> {
     bool useDefaultOffice = true,
     String? assignedOfficeId,
     String? assignedOfficeName,
+    String? photoUrl,
     bool bypassGeofence = false,
   }) async {
-    emit(UserManagementLoading());
+    emit(UserManagementLoading(previousUsers: _currentUsers));
     try {
       final orgId =
           _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
@@ -221,6 +433,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         assignedOfficeId: assignedOfficeId,
         assignedOfficeName: assignedOfficeName,
         isActive: true,
+        photoUrl: photoUrl,
         bypassGeofence: bypassGeofence,
       );
       _db.saveEmployee(newLocalEmp);
@@ -261,6 +474,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
           assignedOfficeId: assignedOfficeId,
           assignedOfficeName: assignedOfficeName,
           isActive: true,
+          photoUrl: photoUrl,
           bypassGeofence: bypassGeofence,
         );
         _db.saveEmployee(officialLocalEmp);
@@ -288,13 +502,17 @@ class UserManagementCubit extends Cubit<UserManagementState> {
     bool? useDefaultOffice,
     String? assignedOfficeId,
     String? assignedOfficeName,
+    String? photoUrl,
     bool? bypassGeofence,
   }) async {
-    emit(UserManagementLoading());
+    emit(UserManagementLoading(previousUsers: _currentUsers));
     try {
       final orgId =
           _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
       final actorUserId = _db.currentUser?.id;
+      final effectiveUseDefault = useDefaultOffice ?? (assignedOfficeId == null);
+      final effectiveOfficeId = effectiveUseDefault ? null : assignedOfficeId;
+      final effectiveOfficeName = effectiveUseDefault ? null : assignedOfficeName;
 
       // Update local UserEntity if present
       final cleanEmail = (email ?? '').trim().toLowerCase();
@@ -313,10 +531,16 @@ class UserManagementCubit extends Cubit<UserManagementState> {
               : existingUser.email,
           phoneNumber: phoneNumber?.trim() ?? existingUser.phoneNumber,
           role: role ?? existingUser.role,
-          useDefaultOffice: useDefaultOffice ?? existingUser.useDefaultOffice,
-          assignedOfficeId: assignedOfficeId ?? existingUser.assignedOfficeId,
-          assignedOfficeName:
-              assignedOfficeName ?? existingUser.assignedOfficeName,
+          employeeCode: (employeeCode != null && employeeCode.trim().isNotEmpty)
+              ? employeeCode.trim()
+              : existingUser.employeeCode,
+          designation: designation?.trim() ?? existingUser.designation,
+          department: department?.trim() ?? existingUser.department,
+          useDefaultOffice: effectiveUseDefault,
+          clearAssignedOffice: effectiveUseDefault,
+          assignedOfficeId: effectiveOfficeId,
+          assignedOfficeName: effectiveOfficeName,
+          photoUrl: photoUrl ?? existingUser.photoUrl,
           bypassGeofence: bypassGeofence ?? existingUser.bypassGeofence,
         );
         _db.saveUser(updatedUser);
@@ -347,6 +571,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
           email: email?.trim() ?? '',
           designation: designation ?? 'Team Member',
           department: department ?? 'Operations',
+          photoUrl: photoUrl,
         ),
       );
 
@@ -362,11 +587,11 @@ class UserManagementCubit extends Cubit<UserManagementState> {
             : existingEmp.email,
         designation: designation?.trim() ?? existingEmp.designation,
         department: department?.trim() ?? existingEmp.department,
-        useDefaultOffice: useDefaultOffice ?? existingEmp.useDefaultOffice,
-        assignedOfficeId: assignedOfficeId ?? existingEmp.assignedOfficeId,
-        assignedOfficeName:
-            assignedOfficeName ?? existingEmp.assignedOfficeName,
+        useDefaultOffice: effectiveUseDefault,
+        assignedOfficeId: effectiveOfficeId,
+        assignedOfficeName: effectiveOfficeName,
         isActive: existingEmp.isActive,
+        photoUrl: photoUrl ?? existingEmp.photoUrl,
         bypassGeofence: bypassGeofence ?? existingEmp.bypassGeofence,
       );
       _db.saveEmployee(updatedEmp);
@@ -391,8 +616,8 @@ class UserManagementCubit extends Cubit<UserManagementState> {
         employeeCode: employeeCode,
         designation: designation,
         department: department,
-        useDefaultOffice: useDefaultOffice,
-        assignedOfficeId: assignedOfficeId,
+        useDefaultOffice: effectiveUseDefault,
+        assignedOfficeId: effectiveOfficeId,
         actorUserId: actorUserId,
         bypassGeofence: bypassGeofence,
       );
@@ -451,8 +676,55 @@ class UserManagementCubit extends Cubit<UserManagementState> {
     }
   }
 
+  Future<void> updateEmployeePhoto(String userId, String photoUrl) async {
+    try {
+      final localUsers = _db.getUsers();
+      final userIndex = localUsers.indexWhere((u) => u.id == userId || u.email == userId);
+      if (userIndex >= 0) {
+        final existingUser = localUsers[userIndex];
+        _db.saveUser(existingUser.copyWith(photoUrl: photoUrl));
+      }
+
+      final localEmployees = _db.getEmployees();
+      final empIndex = localEmployees.indexWhere((e) => e.id == userId || e.email == userId);
+      if (empIndex >= 0) {
+        final existingEmp = localEmployees[empIndex];
+        _db.saveEmployee(existingEmp.copyWith(photoUrl: photoUrl));
+      } else {
+        final user = localUsers.firstWhere(
+          (u) => u.id == userId || u.email == userId,
+          orElse: () => _db.currentUser ??
+              UserEntity(
+                id: userId,
+                firebaseUid: userId,
+                email: '',
+                fullName: 'Employee',
+                role: UserRole.employee,
+                organizationId: '',
+                isActive: true,
+              ),
+        );
+        _db.saveEmployee(EmployeeEntity(
+          id: userId,
+          employeeCode: user.employeeCode ?? 'EMP-001',
+          name: user.fullName,
+          mobileNumber: user.phoneNumber ?? '',
+          email: user.email,
+          designation: user.designation ?? 'Team Member',
+          department: user.department ?? 'Operations',
+          photoUrl: photoUrl,
+        ));
+      }
+
+      emit(UserManagementActionSuccess('Employee photo attached successfully.'));
+      await fetchUsers();
+    } catch (e) {
+      emit(UserManagementError('Failed to attach employee photo: ${e.toString()}'));
+    }
+  }
+
   Future<void> setUserActiveStatus(String userId, bool isActive) async {
-    emit(UserManagementLoading());
+    emit(UserManagementLoading(previousUsers: _currentUsers));
     try {
       final orgId =
           _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
@@ -495,9 +767,8 @@ class UserManagementCubit extends Cubit<UserManagementState> {
     }
   }
 
-  Future<void> softDeleteUser(String userId,
-      {String? email, String? fullName}) async {
-    emit(UserManagementLoading());
+  Future<void> softDeleteUser(String userId, {String? email, String? fullName}) async {
+    emit(UserManagementLoading(previousUsers: _currentUsers));
     try {
       final orgId =
           _db.organization?.id ?? '00000000-0000-0000-0000-000000000001';
@@ -534,7 +805,7 @@ class UserManagementCubit extends Cubit<UserManagementState> {
   }
 
   Future<void> sendPasswordReset(String email, String userId) async {
-    emit(UserManagementLoading());
+    emit(UserManagementLoading(previousUsers: _currentUsers));
     try {
       try {
         await _fbAuth?.sendPasswordResetEmail(

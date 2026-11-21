@@ -216,35 +216,49 @@ class TimesheetCalculator {
     DateTime? startDate,
     DateTime? endDate,
   }) {
+    final bool hasTarget = (targetEmployeeId != null && targetEmployeeId.isNotEmpty) ||
+        (targetFirebaseUid != null && targetFirebaseUid.isNotEmpty) ||
+        (targetEmployeeName != null && targetEmployeeName.isNotEmpty);
+
     final filteredRecords = records.where((r) {
       if (startDate != null && r.eventTimestamp.isBefore(startDate)) return false;
       if (endDate != null && r.eventTimestamp.isAfter(endDate)) return false;
-      if (targetEmployeeId == null || targetEmployeeId.isEmpty) return true;
-      final idMatch = r.employeeId == targetEmployeeId ||
-          (targetFirebaseUid != null &&
-              targetFirebaseUid.isNotEmpty &&
-              r.employeeId == targetFirebaseUid);
-      final nameMatch = targetEmployeeName != null &&
-          targetEmployeeName.isNotEmpty &&
-          r.employeeName.trim().toLowerCase() ==
-              targetEmployeeName.trim().toLowerCase();
-      final identityMatch = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+      if (!hasTarget) return true;
+
+      return EmployeeDirectoryHelper.matchesEmployeeIdentity(
         recordEmployeeId: r.employeeId,
         recordEmployeeName: r.employeeName,
-        employeeId: targetEmployeeId,
+        employeeId: (targetEmployeeId != null && targetEmployeeId.isNotEmpty)
+            ? targetEmployeeId
+            : targetFirebaseUid,
         employeeName: targetEmployeeName,
       );
-      return idMatch || nameMatch || identityMatch;
     }).toList();
 
-    final bool isSingleEmployee = (targetEmployeeId != null && targetEmployeeId.isNotEmpty) ||
-        (targetEmployeeName != null && targetEmployeeName.isNotEmpty);
+    final bool isSingleEmployee = hasTarget;
 
     // Map key: "yyyy-MM-dd" for single employee, or "empKey__yyyy-MM-dd" for workforce
-    final Map<String, List<AttendanceRecord>> groupedMap = groupRecordsByShiftDate(
-      filteredRecords,
-      isSingleEmployee: isSingleEmployee,
-    );
+    final Map<String, List<AttendanceRecord>> groupedMap = {};
+
+    for (final record in filteredRecords) {
+      final localEv = record.eventTimestamp.toLocal();
+      final dateStr =
+          "${localEv.year}-${localEv.month.toString().padLeft(2, '0')}-${localEv.day.toString().padLeft(2, '0')}";
+      final canonicalEmpId = EmployeeDirectoryHelper.getEmployeeId(
+        currentCode: record.employeeId,
+        name: record.employeeName,
+        id: record.employeeId,
+      );
+      final empKey = canonicalEmpId.isNotEmpty
+          ? canonicalEmpId
+          : (record.employeeId.isNotEmpty
+              ? record.employeeId
+              : (record.employeeName.trim().isNotEmpty
+                  ? record.employeeName.trim().toLowerCase()
+                  : 'unknown'));
+      final groupKey = isSingleEmployee ? dateStr : "${empKey}__$dateStr";
+      groupedMap.putIfAbsent(groupKey, () => []).add(record);
+    }
 
     final List<DailyTimesheetEntry> entries = [];
 
@@ -286,14 +300,20 @@ class TimesheetCalculator {
       DateTime? checkOutTimestamp;
       final officeOutMatches = dayRecords
           .where((r) => r.workflowStep == WorkflowStep.officeCheckOut);
-      if (officeOutMatches.isNotEmpty) {
+      final siteOutMatches = dayRecords
+          .where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
+
+      // Separate genuine employee check-outs from synthetic auto check-outs
+      final realOfficeOutMatches = officeOutMatches.where((r) =>
+          !r.address.contains('Auto Check-Out') &&
+          (r.siteName == null || !r.siteName!.contains('Auto Completed')));
+
+      if (realOfficeOutMatches.isNotEmpty) {
+        checkOutTimestamp = realOfficeOutMatches.last.eventTimestamp;
+      } else if (siteOutMatches.isNotEmpty) {
+        checkOutTimestamp = siteOutMatches.last.eventTimestamp;
+      } else if (officeOutMatches.isNotEmpty) {
         checkOutTimestamp = officeOutMatches.last.eventTimestamp;
-      } else {
-        final siteOutMatches = dayRecords
-            .where((r) => r.workflowStep == WorkflowStep.siteCheckOut);
-        if (siteOutMatches.isNotEmpty) {
-          checkOutTimestamp = siteOutMatches.last.eventTimestamp;
-        }
       }
 
       // 3. Calculate Total Break Duration for this day
@@ -365,13 +385,14 @@ class TimesheetCalculator {
       }
 
       final DateTime? checkInTimestamp = checkInRecord.eventTimestamp;
-      final bool hasExplicitOfficeCheckOut = officeOutMatches.isNotEmpty;
+      final bool hasExplicitCheckOut =
+          realOfficeOutMatches.isNotEmpty || siteOutMatches.isNotEmpty;
       final bool isPreviouslyAutoCompleted = officeOutMatches.any((r) =>
           r.address.contains('Auto Check-Out') ||
           (r.siteName != null && r.siteName!.contains('Auto Completed')));
 
-      bool isAutoCompleted = isPreviouslyAutoCompleted;
-      bool isCompleted = hasExplicitOfficeCheckOut;
+      bool isAutoCompleted = isPreviouslyAutoCompleted && !hasExplicitCheckOut;
+      bool isCompleted = hasExplicitCheckOut || isPreviouslyAutoCompleted;
       if (!hasRegularCheckIn && dayRecords.any((r) => r.workflowStep == WorkflowStep.emergencyCheckOut)) {
         isCompleted = true;
         checkOutTimestamp = dayRecords
@@ -389,9 +410,8 @@ class TimesheetCalculator {
         final now = DateTime.now();
         final elapsedSinceCheckIn = now.difference(checkInTimestamp);
 
-        // If no explicit office check-out and elapsed time crosses 24 hours:
-        // Automatically capture data after 8 hrs from check-in time, complete only regular time (8h), and check out.
-        if (!hasExplicitOfficeCheckOut &&
+        // Auto check out automatically ONLY when the employee forgot to checkout AND after 24 hrs of check in:
+        if (!hasExplicitCheckOut &&
             elapsedSinceCheckIn >= const Duration(hours: 24)) {
           checkOutTimestamp = checkInTimestamp.add(const Duration(hours: 8));
           netWorkedDuration = const Duration(hours: 8);
@@ -408,7 +428,7 @@ class TimesheetCalculator {
             grossDuration = effectiveEnd.difference(checkInTimestamp);
           }
 
-          if (isPreviouslyAutoCompleted) {
+          if (isPreviouslyAutoCompleted && !hasExplicitCheckOut) {
             netWorkedDuration = const Duration(hours: 8);
             finalBreakDuration = Duration.zero;
             travelToleranceDuration = Duration.zero;

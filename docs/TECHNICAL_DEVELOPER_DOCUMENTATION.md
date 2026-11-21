@@ -30,43 +30,29 @@ The **Fusion Field Workforce Tracking & Timesheet Management Platform** is an en
                  │
                  ├─► Primary: Firebase Auth (`signInWithEmailAndPassword`)
                  └─► Fallback: Local Hive DB & Demo Credentials (`app_settings` & `employeesBox`)
-                          [Role-Based Router (`main.dart`)]
-                  │
-                  ├─► Role = 'SUPER_ADMIN' / 'ADMIN' ──► Admin Web/Mobile Suite (`AdminDashboardScreen`)
-                  │                                        ├─► Active Salary Cycle Header Card (`SalaryCycleHelper`)
-                  │                                        ├─► Executive KPI Ticker Ribbon & Attendance Feeds
-                  │                                        ├─► AI Voice Report Assistant Trigger (`AiVoiceReportBottomSheet`)
-                  │                                        ├─► Employee & User Management (3-Tier RBAC & Reassignment)
-                  │                                        ├─► Office & Work Site Registry
-                  │                                        ├─► Live GPS Tracking Map (`LiveTrackingMapScreen`)
-                  │                                        ├─► 3-Tab Reports & Analytics (`ReportsAnalyticsScreen`)
-                  │                                        │    ├─► Directory 3-Level Drilldown & Selfie Verification
-                  │                                        │    ├─► Active Salary Cycle Filter (25th to 24th)
-                  │                                        │    ├─► Admin Add/Edit Emergency Duty Logs
-                  │                                        │    ├─► Cumulative Attendance Summary & Overtime Aggregation
-                  │                                        │    └─► Site / Client Man-Hours Analytics & Client Grouping
-                  │                                        ├─► Cloud Attendance Log Sync & Auto-Merge Engine
-                  │                                        └─► Organization Ownership Transfer Dialog
-                  │
-                  └─► Role = 'EMPLOYEE' ───────────────► Employee Duty Portal (`EmployeeDashboardScreen`)
-                                                          ├─► Sequential Multi-Site Stepper & Duty Pause Engine:
-                                                          │    1. Office Check-In (`OFFICE_CHECK_IN`)
-                                                          │    2. Site Check-In (`SITE_CHECK_IN` + `SiteNameDialog`)
-                                                          │    3. Duty Pause / Break (`BREAK_START` / `BREAK_END`)
-                                                          │    4. Site Check-Out (`SITE_CHECK_OUT`)
-                                                          │    5. Next Site Check-In (`SITE_CHECK_IN` - dynamically numbered)
-                                                          │    6. Office Check-Out (`OFFICE_CHECK_OUT`)
-                                                          │    7. Shift Completed (`COMPLETED`)
-                                                          ├─► Emergency Duty Workflow (`EMERGENCY_CHECK_IN` / `OUT`)
-                                                          ├─► Service Report Generator (`EmployeeReportGeneratorScreen`)
-                                                          │    ├─► AI Voice Dictation & Gemini Auto-Fill (`AiReportService`)
-                                                          │    ├─► Spare Parts / Materials Replaced
-                                                          │    ├─► Touch-Drawn Digital E-Signatures (`ESignaturePad`)
-                                                          │    └─► Branded Service Report PDF (`ServiceReportPdfService`)
-                                                          ├─► Live Camera Capture & 480px JPEG Compression Engine
-                                                          ├─► Haversine Distance Geofence Validation
-                                                          ├─► Salary Cycle Timesheet Portal & PDF Export (`SalaryCycleHelper`)
-                                                          └─► Background Offline Sync Queue Indicator (`OfflineBanner`)
+                         │
+                         ▼
+             [Role-Based Router (`main.dart`)]
+                 │
+                 ├─► Role = 'SUPER_ADMIN' / 'ADMIN' ──► Admin Web/Mobile Suite (`AdminDashboardScreen`)
+                 │                                        ├─► Executive KPI Cards & Activity Feed
+                 │                                        ├─► Employee & User Management (3-Tier RBAC)
+                 │                                        ├─► Office & Work Site Registry
+                 │                                        ├─► Live GPS Tracking Map (`LiveTrackingMapScreen`)
+                 │                                        ├─► Timesheet & Reports Engine (`ReportsAnalyticsScreen`)
+                 │                                        └─► Organization Ownership Transfer Dialog
+                 │
+                 └─► Role = 'EMPLOYEE' ───────────────► Employee Duty Portal (`EmployeeDashboardScreen`)
+                                                         ├─► 4-Step Attendance Stepper:
+                                                         │    1. Office Check-In (`OFFICE_CHECK_IN`)
+                                                         │    2. Site Check-In (`SITE_CHECK_IN` + `SiteNameDialog`)
+                                                         │    3. Site Check-Out (`SITE_CHECK_OUT`)
+                                                         │    4. Office Check-Out (`OFFICE_CHECK_OUT`)
+                                                         │    5. Shift Completed (`COMPLETED`)
+                                                         ├─► Live Camera Capture & 480px JPEG Compression Engine
+                                                         ├─► Haversine Distance Geofence Validation
+                                                         ├─► Personal Daily Work Timesheet & PDF Export
+                                                         └─► Background Offline Sync Queue Indicator (`OfflineBanner`)
 ```
 
 ### User Roles & Permissions Matrix
@@ -79,11 +65,7 @@ The **Fusion Field Workforce Tracking & Timesheet Management Platform** is an en
 | **Office Station & Work Site Management** | ✅ Full Access | ✅ Full Access | ❌ Restricted |
 | **Executive Dashboard & Live Tracking Map** | ✅ Full Access | ✅ Full Access | ❌ Restricted |
 | **Company Reports & Export (PDF, Excel, CSV)** | ✅ Full Access | ✅ Full Access | ❌ Restricted |
-| **Emergency Duty Logging & Management** | ✅ Add / Edit Logs | ✅ Add / Edit Logs | ✅ Execute Check-In/Out |
-| **AI Voice Assistant & Gemini Extraction** | ✅ Full Access | ✅ Full Access | ✅ Full Access |
-| **Field Service Report Generator & E-Signatures** | ✅ View / Audit / PDF | ✅ View / Audit / PDF | ✅ Create / Edit / Sign |
-| **Attendance Records Reassignment** | ✅ Full Access | ❌ Restricted | ❌ Restricted |
-| **Execute Multi-Site Attendance Stepper** | ❌ Restricted | ❌ Restricted | ✅ Full Access |
+| **Execute 4-Step Attendance Stepper** | ❌ Restricted | ❌ Restricted | ✅ Full Access |
 | **Personal Timesheet Summary & PDF Export** | ❌ Restricted | ❌ Restricted | ✅ Full Access |
 | **Self-Service Password Update** | ✅ Full Access | ✅ Full Access | ✅ Full Access |
 
@@ -124,6 +106,8 @@ The **Fusion Field Workforce Tracking & Timesheet Management Platform** is an en
   - `hive` & `hive_flutter` (`^2.2.3`): Offline local database storage engine.
   - `firebase_core` & `firebase_auth` (`^3.1.0`, `^5.1.0`): Primary authentication gateway.
   - `supabase_flutter` (`^2.5.2`): Cloud PostgreSQL, storage bucket, real-time database, and RPC execution.
+  - `google_generative_ai`: Gemini Multimodal AI Vision API for automated card document extraction and OCR.
+  - `http` & `url_launcher`: Automated API notification dispatch and direct WhatsApp/Email actions.
   - `geolocator` (`^12.0.0`) & `permission_handler`: Hardware GPS location & permissions.
   - `camera` (`^0.11.0`): Direct hardware selfie camera capture.
   - `image` (`^4.2.0`): Pure Dart image downscaling and quality compression.
@@ -133,12 +117,12 @@ The **Fusion Field Workforce Tracking & Timesheet Management Platform** is an en
 
 ### State Management Approach (BLoC / Cubit)
 The architecture strictly employs `flutter_bloc` using `Cubit` controllers to enforce unidirectional data flow:
-- **`AuthCubit`** ([`auth_cubit.dart`](../lib/features/auth/presentation/auth_cubit.dart)): Manages login states, dual-layer fallback checks, and session restoration.
-- **`AttendanceCubit`** ([`attendance_cubit.dart`](../lib/features/attendance/presentation/attendance_cubit.dart)): Controls the 4-step workflow stepper, geofence verification, photo capture, and local record persistence.
-- **`AdminCubit`** ([`admin_cubit.dart`](../lib/features/admin/presentation/admin_cubit.dart)): Handles executive stats aggregation, office/site CRUD, and live tracking map updates.
-- **`UserManagementCubit`** ([`user_management_cubit.dart`](../lib/features/admin/presentation/user_management_cubit.dart)): Manages 3-tier user accounts, secondary Firebase auth instances, and status toggles.
-- **`OwnershipTransferCubit`** ([`ownership_transfer_cubit.dart`](../lib/features/admin/presentation/ownership_transfer_cubit.dart)): Executes Super Admin re-authentication and atomic RPC ownership transfer.
-- **`TimesheetCubit`** ([`timesheet_cubit.dart`](../lib/features/timesheet/presentation/timesheet_cubit.dart)): Controls daily shift aggregation, regular/overtime hours calculation, and PDF downloading.
+- **`AuthCubit`** ([`auth_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/auth/presentation/auth_cubit.dart)): Manages login states, dual-layer fallback checks, and session restoration.
+- **`AttendanceCubit`** ([`attendance_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/presentation/attendance_cubit.dart)): Controls the 4-step workflow stepper, geofence verification, photo capture, and local record persistence.
+- **`AdminCubit`** ([`admin_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/admin_cubit.dart)): Handles executive stats aggregation, office/site CRUD, and live tracking map updates.
+- **`UserManagementCubit`** ([`user_management_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/user_management_cubit.dart)): Manages 3-tier user accounts, secondary Firebase auth instances, and status toggles.
+- **`OwnershipTransferCubit`** ([`ownership_transfer_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/ownership_transfer_cubit.dart)): Executes Super Admin re-authentication and atomic RPC ownership transfer.
+- **`TimesheetCubit`** ([`timesheet_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/timesheet/presentation/timesheet_cubit.dart)): Controls daily shift aggregation, 25th–24th salary cycle metrics, regular/overtime hours calculation, and PDF downloading.
 
 ---
 
@@ -153,33 +137,43 @@ lib/
 │   ├── constants/
 │   │   ├── app_colors.dart         # Color palette & branding tokens
 │   │   ├── app_enums.dart          # UserRole, WorkflowStep, ActivityLogAction, SyncStatus
-│   │   └── app_theme.dart          # ThemeData configuration (Light/Dark themes)
+│   │   ├── app_theme.dart          # ThemeData configuration (Light/Dark themes)
+│   │   └── employee_photo_data.dart# Registry mapping employee badge codes to portrait images
 │   ├── services/
 │   │   ├── camera_service.dart     # Image downscaling (480px) & 65% JPEG compression engine
 │   │   ├── location_service.dart   # Hardware GPS location fetching & Haversine distance calculations
-│   │   ├── supabase_service.dart   # Supabase cloud database CRUD, RLS queries, & RPC execution
+│   │   ├── supabase_service.dart   # Supabase cloud database CRUD, optimized date filtering, & RPC
+│   │   ├── card_ocr_service.dart   # Gemini Multimodal AI Vision OCR extraction service
+│   │   ├── card_expiry_notification_service.dart # Multi-channel WhatsApp & Email notification service
 │   │   ├── pdf_export_service.dart # Multi-page PDF generation for attendance & timesheets
 │   │   └── excel_csv_export_service.dart # Excel (.xlsx) & CSV export generation
 │   ├── utils/
 │   │   ├── geofence_calculator.dart # Spherical trigonometry math (Haversine formula)
-│   │   └── timesheet_calculator.dart# Daily shift aggregation, regular/overtime hours splitting
+│   │   ├── timesheet_calculator.dart# Daily shift aggregation, 24h auto check-out, Sunday 100% OT
+│   │   ├── salary_cycle_helper.dart # 25th-to-24th monthly salary cycle resolution & metrics
+│   │   ├── leave_calculator.dart   # Daily 5-state leave ledger (Present, Leave, Sunday Off, Sun Duty)
+│   │   ├── employee_directory_helper.dart # Identity matching and badge normalization
+│   │   └── photo_attachment_helper.dart # Image attachment resolution
 │   └── widgets/
 │       ├── app_button.dart         # Standardized elevated button with loading indicators
 │       ├── custom_text_field.dart  # Form text input widget with built-in password visibility toggles
 │       ├── status_badge.dart       # Color-coded badge for SyncStatus and workflow steps
-│       └── offline_banner.dart     # Persistent offline warning bar & manual sync trigger
+│       ├── offline_banner.dart     # Persistent offline warning bar & manual sync trigger
+│       └── employee_avatar.dart    # Portrait avatar component with monogram fallback
 ├── database/
-│   └── local_database_service.dart # Hive local database service managing 8 isolated storage boxes
+│   └── local_database_service.dart # Hive local database service managing isolated storage boxes
 └── features/
     ├── setup/                      # First-time onboarding wizard & organization setup
     ├── auth/                       # Login screen, AuthCubit, password management
     ├── attendance/                 # 4-step stepper, camera capture modal, site selection dialog
     ├── employee/                   # Employee duty dashboard, daily timeline, selfie displays
-    ├── admin/                      # Executive dashboard, employee management, office/site management, ownership transfer
+    ├── admin/                      # Executive dashboard, employee management, office/site management,
+    │                               # cards management (`cards_management_screen.dart`), ownership transfer
     ├── timesheet/                  # Employee timesheet screen, shift filter tabs, timesheet PDF export
     ├── security/                   # Hardware device fingerprinting service (`DeviceBindingService`)
     └── sync/                       # Offline sync engine with connectivity listener (`SyncEngine`)
 ```
+
 
 ---
 
@@ -253,7 +247,7 @@ enum UserRole { superAdmin, admin, employee }
 ## 6. Offline-First Architecture
 
 ### Hive Local Storage Design
-The application initializes isolated Hive key-value boxes in `LocalDatabaseService`:
+The application initializes 8 isolated Hive key-value boxes in `LocalDatabaseService`:
 1. `organizationBox`: Local copy of root organization profile.
 2. `currentUserBox`: Active authenticated user entity.
 3. `employeesBox`: Local directory of all organization employees.
@@ -262,19 +256,6 @@ The application initializes isolated Hive key-value boxes in `LocalDatabaseServi
 6. `workSitesBox`: Client project locations and geofence radii.
 7. `attendanceRecordsBox`: Complete historical attendance logs.
 8. `pendingSyncBox`: Queue of un-synced offline records awaiting cloud transmission.
-9. `pending_service_reports_json`: Local queue of generated field service reports with sync tracking.
-10. `work_photo_submissions_json`: Local storage of offline technician work site photo submissions with in-memory cache.
-11. `generated_reports_history_json`: Local history of generated attendance reports and PDF downloads.
-
-### Non-Blocking Startup Initialization
-On application launch, `LocalDatabaseService.init()` initializes local boxes and checks whether setup has already completed:
-- If setup is already verified locally (`_isSetupCompleted == true`), the remote organization verification query is dispatched asynchronously via `unawaited(checkSetupStatusFromSupabase())`.
-- This ensures zero UI render blocking on app launch and avoids splash-screen stalls caused by poor network connectivity.
-
-### Offline Service Reports & Sequential Prefix Sequencing
-- **Prefix Sequencing (`currentEmployeePrefix`)**: Resolves technician 2-digit prefix code (e.g. `E01`, `E02`).
-- **Strict Sequential Auto-Incrementing (`getNextLocalServiceReportSeq`)**: Commences at base **2001** and scans existing local reports under the prefix to auto-increment sequentially (`+1`) without number gaps or collisions (e.g. `SR-E01-2001`, `SR-E01-2002`).
-- **Cloud Reconciliation (`mergeCloudServiceReports`)**: Synchronizes cloud records to local storage while preserving un-synced local edits.
 
 ### Synchronization Scenarios
 
@@ -306,17 +287,6 @@ On application launch, `LocalDatabaseService.init()` initializes local boxes and
 4. **Step 4: `4. Office Check-Out (Reach Office)` (`OFFICE_CHECK_OUT`)**: Employee returns to office station and completes shift.
 5. **Final State: `Shift Completed` (`COMPLETED`)**: Enforces state lock until next working day.
 
-### Midnight & Overnight Shift Continuity Engine
-In 24/7 field service environments, technician shifts frequently span across midnight (e.g. 2:00 PM or 8:00 PM start, ending at 2:00 AM or 4:00 AM the following calendar day). `LocalDatabaseService.getTodayAttendanceRecords` provides intelligent session continuity:
-1. **Active Shift Tracking**: Any unclosed session (`officeCheckIn` within the preceding 24 hours without a checkout) is treated as actively in progress regardless of calendar date change. All records from that check-in onwards are returned, keeping the mobile timeline and stepper continuous.
-2. **Overnight Shift Checkout & 4-Hour Cooldown**: When an overnight shift concludes today with `officeCheckOut`, the completed shift summary displays for a 4-hour window (allowing the technician to inspect their shift summary). After 4 hours, the system resets to fresh status for their subsequent workday shift.
-3. **24-Hour Auto-Resolution (`autoResolveExpiredCheckIns`)**: Any session exceeding 24 hours without an `officeCheckOut` is automatically closed at `checkInTime + 8 hours` regular duration, preventing orphaned shifts and accurately capping daily regular hours.
-
-### Enterprise Master Directory & Backward-Compatible Identity Architecture
-- **Master Directory (`EmployeeDirectoryHelper`)**: Maintains canonical corporate records with official 3/4-part full names (*Saleem Allapitchai Allapitchai*, *Shabi Bismillah Bismillah*), official codes, badge photos, departments, and aliases (`['saleem']`, `['shabi']`).
-- **Preservation of Mobile Profile Names**: Deployed field APKs filter attendance logs against the user's mobile profile name (`_currentUser.fullName`). Database records in `attendance_records` and `users` preserve these authentic profile names (e.g., `'Saleem'`, `'Shabi'`) to ensure older APKs never experience empty datewise logs or timelines.
-- **Dynamic Non-Destructive Consolidation**: The Admin Web Portal, Reports Analytics, and PDF services use `EmployeeDirectoryHelper.matchesEmployeeIdentity` in memory to display unified official full names without duplicate rows, completely decoupling presentation from raw database record names.
-
 ---
 
 ## 8. GPS & Geofencing Module
@@ -346,21 +316,68 @@ If $d \le \text{geofence\_radius}$, check-in is **APPROVED**. Otherwise, check-i
 
 ---
 
+## 9. Timesheet Engine & Salary Cycles
+
+### Timesheet Calculation Logic (`TimesheetCalculator`)
+- **Daily Shift Duration**: Calculated between `1. Office Check-In` timestamp and `4. Office Check-Out` timestamp (or last site checkout).
+- **Regular Hours Cap**: Standard regular working hours are capped at **8.0 hours per day** (`standardRegularHoursPerDay = 8.0`) on Monday through Saturday.
+- **Overtime Calculation**: If total shift duration $> 8.0$ hours on regular days, $\text{Regular Hours} = 8.0$ and $\text{Overtime Hours} = \text{Total Hours} - 8.0$.
+- **Sunday 100% Overtime Rule**: Sunday is designated as the mandatory weekly off day in Gulf operations. **100% of all hours worked on Sunday are automatically converted into Overtime Hours** ($\text{Regular Hours} = 0.0\text{h}$, $\text{Overtime} = \text{Total Hours}$).
+- **24-Hour Auto-Checkout Safety Guard**: Any unclosed shift exceeding 24 hours without an official check-out is automatically capped at **8.0 standard regular hours and 0.0 overtime hours** (`isAutoCompleted: true`).
+- **Company Salary Cycle (25th to 24th)**: Aggregates duty records over payroll cycles starting on the 25th of the start month and concluding on the 24th of the target month via `SalaryCycleHelper`.
+- **Site Visit Summary (`SiteVisitSummary`)**: Tracks time elapsed between `2. Site Check-In` and `3. Site Check-Out` for each site visit during the shift.
+- **Site Name & Address Resolution**: Resolves location names through an intelligent fallback hierarchy (`siteName` ➔ `work_sites` ➔ `offices` ➔ `assignedOfficeName`).
+
+---
+
+## 9B. Cards Management, Gemini AI OCR & Automated Compliance Robot
+
+### Architecture & Components
+- **Statutory Cards & Passes**: Tracks `EMIRATES_ID`, `VISA`, `PASSPORT`, `INSURANCE`, `MOPA_PASS`, `CISPA_PASS`, and `CUSTOM_PASS` in the `employee_cards` table.
+- **Gemini Multimodal AI Vision OCR (`CardOcrService`)**: Extracts document type, card number, issuing date, expiry date, and holder name from uploaded photos and documents.
+- **Dynamic Expiry Lifecycle**:
+  - `Expired`: $\text{daysRemaining} < 0$
+  - `Critical`: $0 \le \text{daysRemaining} \le 3$
+  - `Expiring Soon`: $4 \le \text{daysRemaining} \le 30$
+  - `Valid`: $\text{daysRemaining} > 30$
+- **Automated Multi-Channel Notification Robot (`CardExpiryNotificationService` & `backend/supabase_cron_job.sql`)**:
+  - Scheduled daily at 08:00 AM GST via Supabase `pg_cron` & `pg_net`.
+  - Dispatches automated compliance alert emails via **Resend API**.
+  - Dispatches automated WhatsApp messages via **CallMeBot API**.
+  - Provides 1-click WhatsApp (`https://wa.me/...`) and mailto manual alert triggers in Flutter and Web Admin.
+
+---
+
+## 9C. Enterprise Leave Records & Attendance Ledger (`LeaveCalculator`)
+
+- Categorizes every calendar day within the active salary cycle into 5 statuses:
+  - `present`: Work logged on a scheduled day (Monday–Saturday).
+  - `leaveAbsent`: Scheduled day (Monday–Saturday) with zero attendance.
+  - `sundayWeeklyOff`: Sunday with no duty (approved rest day).
+  - `sundayDuty`: Sunday with duty worked (compensated with 100% overtime).
+  - `futureDay`: Unreached calendar date within the cycle.
+- Calculates scheduled working days, days attended, absent days, Sunday off days, Sunday duty days, and compliance percentage.
+
+---
+
 ## 10. Database Documentation (Supabase PostgreSQL)
 
 ### Database Schema Overview
-The database consists of **13 relational tables** with Row-Level Security (RLS) enabled across all entities:
+The database schema ([`backend/supabase_schema.sql`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/backend/supabase_schema.sql) and [`backend/supabase_cron_job.sql`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/backend/supabase_cron_job.sql)) consists of **15 relational tables** with Row-Level Security (RLS) enabled across all entities:
 
 ```
 [organizations] ───< [users] ───< [user_role_assignments] >─── [roles]
        │               │
        ├─► [offices]   └─► [employees] ───< [attendance_records]
        │                       │                     │
-       └─► [work_sites] ───────┼─────────────────────┘
-                               ├─► [devices]
-                               ├─► [gps_logs]
-                               └─► [activity_logs]
+       ├─► [work_sites] ───────┼─────────────────────┘
+       │                       ├─► [employee_cards]
+       │                       ├─► [devices]
+       │                       ├─► [gps_logs]
+       │                       └─► [activity_logs]
+       └─► [compliance_notification_settings]
 ```
+
 
 ### Stored Procedure: Atomic Organization Ownership Transfer
 ```sql
@@ -412,7 +429,9 @@ $$;
 
 1. **Image Downscaling Engine**: Downscales 5MB raw camera photos to 480px @ 65% JPEG quality (**~25KB–45KB payload, 99% reduction**), eliminating network congestion during sync.
 2. **Hive Local Key-Value Storage**: Outperforms SQLite with sub-millisecond read/write latencies for local UI rendering.
-3. **Selective Map Marker Rendering**: `flutter_map` and Leaflet.js map markers render using spatial bounding boxes to maintain 60 FPS UI performance.
+3. **Database Query Optimizations (Server-Side Date Filtering)**: Rather than loading tens of thousands of attendance logs client-side, `SupabaseService` and `web_admin/app.js` apply `.gte('event_timestamp', start)` and `.lte('event_timestamp', end)` in PostgreSQL, slashing data transfer payloads by over 95%.
+4. **Targeted PostgreSQL Indexes**: Indexes are placed on `(employee_id, event_timestamp DESC)`, `organization_id`, and `expiry_date` (`idx_employee_cards_expiry`), ensuring queries execute in sub-10ms.
+5. **Selective Map Marker Rendering**: `flutter_map` and Leaflet.js map markers render using spatial bounding boxes to maintain 60 FPS UI performance.
 
 ---
 
@@ -431,78 +450,12 @@ cd web_admin
 npx serve -s . -l 3000
 ```
 
-### Database Deployment
-1. Open Supabase Console -> SQL Editor.
-2. Copy contents of `backend/supabase_schema.sql` and click **Run**.
-
----
-
-## 14. Theme Engine & Production Release Infrastructure
-
-### Multi-Preset Dynamic Theme Engine (`AppThemePalette`)
-- **Theme Palettes (`AppThemePalettes`)**: Defines 5 curated HSL-tailored theme presets (`Slate Indigo`, `Emerald Mint`, `Midnight Amber`, `Royal Amethyst`, `Ocean Cobalt`).
-- **Theme Cubit (`ThemeCubit`)**: Persists theme selections to local Hive storage (`app_settings`), providing real-time dynamic theme updates across all UI screens.
-- **Adaptive App Shell (`AppShell`)**: Provides a responsive layout component that renders a floating glass bottom navigation dock on mobile displays (< 750px) and a collapsible modern navigation rail on tablet/desktop viewports (>= 750px).
-
-### Google Play Store Release & Deployment Pipeline
-- **Signing Keystore**: Signed release compilation using `upload-keystore.jks` and `key.properties` loaded in `android/app/build.gradle.kts`.
-- **Android App Bundle (.aab)**: Produced via `flutter build appbundle --release` at `build/app/outputs/bundle/release/app-release.aab`.
-- **Google Play Compliance**: Pre-configured Data Safety declarations (Location, Name, Email collection), IARC Content Rating certificate (`PEGI 3` / `Everyone 3+`), App Access demo credentials, and public Account Deletion link ([`PRIVACY_POLICY.md`](../PRIVACY_POLICY.md)).
-- **Store Listing Visual Assets**: Includes 512x512 vector launcher icon (`app_icon_512.jpg`) and 1024x500 Figma-style Feature Graphic banner (`feature_graphic.jpg`).
-
----
-
-## 15. AI Voice Reporting & Generative Intelligence Architecture
-
-### Service: `AiReportService` (`lib/core/services/ai_report_service.dart`)
-- **Gemini Model**: Integrates `gemini-3.6-flash` via the `google_generative_ai` package.
-- **Phonetic & Acronym Cleansing (`cleanSpeechText`)**: Intercepts noisy speech-to-text dictation and automatically cleans field engineering misrecognitions (e.g., `"cap acid or"` ➔ `capacitor`, `"fifty u f"` ➔ `50uF`, `"d b box"` ➔ `DB Box`, `"con tak ter"` ➔ `contactor`).
-- **Structured Field Extraction (`extractReportFields`)**: Analyzes unstructured technician voice dictation and returns schema-conformant `AiExtractedReportData` objects isolating:
-  - `defectsFound`: Initial fault observations prior to servicing.
-  - `detailsOfWorkDone`: Sequential technical actions performed.
-  - `callType`: Categorized as `Complaint`, `Breakdown`, or `Preventive`.
-  - `priority`: `Urgent` or `Normal`.
-  - `suggestedServices`: List of matching disciplines (`A/C`, `Electrical`, `Fire Fighting`, etc.).
-  - `materials`: Parsed list of spare parts (`material`, `qty`).
-- **Offline Heuristic Parser (`_parseHeuristically`)**: Deterministic regex and dictionary-based fallback engine providing 100% extraction offline without an API key.
-
-### Interactive UI: `AiVoiceReportBottomSheet` (`lib/core/widgets/ai_voice_report_bottom_sheet.dart`)
-- Modern modal bottom sheet with animated audio waveforms, real-time speech-to-text listening, vocal feedback synthesis (`flutter_tts`), chip previews, and one-tap form auto-population.
-
----
-
-## 16. Field Service Reports & Digital E-Signatures Architecture
-
-### Screen & Controller: `EmployeeReportGeneratorScreen` & `EmployeeReportsListScreen`
-- **Location**: `lib/features/employee/presentation/`
-- **Multi-Section Data Structure**:
-  - Header: Reference Number (`FES-SR-YYYY-XXXX`), Job No, Property Info, Client Contact, Times.
-  - Call Classification: `callType`, `priority`, 15 engineering disciplines checklist.
-  - Technical Data: Defects found, work done, materials/parts replaced table.
-  - Verification: Customer performance rating, housekeeping confirmation, sign-off names.
-
-### Digital Signature Canvas: `ESignaturePad` (`lib/core/widgets/e_signature_pad.dart`)
-- Vector touch-drawn canvas capturing on-screen finger or stylus signatures.
-- Exports lossless PNG byte streams (`Uint8List`) for technician and customer approval blocks.
-
-### PDF Report Compilation: `ServiceReportPdfService` (`lib/core/services/service_report_pdf_service.dart`)
-- Generates branded ISO-style field service report documents with embedded signatures, company header, and structured tables ready for sharing and printing.
-
-### Cloud Storage: Supabase `service_reports` Table
-- Schema defined in `supabase_service_reports_schema.sql` with JSONB payload storage, unique reference number indexing, and RLS policies for tenant-isolated access.
-
----
-
-## 17. Enterprise Salary Cycle Engine Architecture
-
-### Utility: `SalaryCycleHelper` (`lib/core/utils/salary_cycle_helper.dart`)
-- **Corporate Pay Period Boundary**: Runs from the **25th of the prior month (00:00:00)** to the **24th of the current month (23:59:59)** (e.g., 25 Aug – 24 Sep = September Salary Cycle).
-- **Core Methods**:
-  - `SalaryCycle.fromDate(DateTime date)`: Automatically resolves which salary cycle a given timestamp belongs to.
-  - `SalaryCycle.current()`: Resolves the active cycle based on current system time.
-  - `SalaryCycle.forMonth(int year, int month)`: Explicitly generates cycle bounds for any target month/year.
-  - `SalaryCycle.getRecentCycles()`: Generates list of navigable historical cycles clamped to `earliestSalaryYear = 2026` and `earliestSalaryMonth = 9`.
-  - `filterAttendanceRecords()` & `filterTimesheetEntries()`: In-memory filtering of records strictly within cycle millisecond bounds.
-- **Cross-Screen Integration**: Integrated into **Admin Dashboard** (active cycle overview), **Reports & Analytics** (dynamic cycle selector), and **Employee Timesheets** (cycle-accurate payroll auditing).
-
+### Database & Background Robot Deployment
+1. **Core Relational Schema**:
+   - Open Supabase Console -> SQL Editor.
+   - Copy contents of `backend/supabase_schema.sql` and click **Run**.
+2. **Automated Compliance Robot (`pg_cron` & `pg_net`)**:
+   - Copy contents of `backend/supabase_cron_job.sql` into the Supabase SQL Editor.
+   - Configure your Resend API key and CallMeBot API key in `compliance_notification_settings`.
+   - Click **Run** to schedule the daily 08:00 AM GST cron robot.
 

@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'admin_cubit.dart';
 import 'employee_management_screen.dart';
+import 'cards_management_screen.dart';
 import 'office_management_screen.dart';
 import 'work_site_management_screen.dart';
 import 'live_tracking_map_screen.dart';
 import 'reports_analytics_screen.dart';
+import '../../salary/presentation/salary_payroll_screen.dart';
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'ownership_transfer_dialog.dart';
 import '../../../core/constants/app_theme.dart';
 import '../../../core/theme/app_theme_preset.dart';
@@ -14,17 +18,18 @@ import '../../../database/local_database_service.dart';
 import '../../auth/presentation/auth_cubit.dart';
 import '../../auth/presentation/login_screen.dart';
 import '../domain/employee_entity.dart';
+import '../domain/employee_card.dart';
 import '../../attendance/domain/attendance_record.dart';
-
+import '../../../core/utils/timesheet_calculator.dart';
+import '../../../core/utils/salary_cycle_helper.dart';
+import '../../../core/utils/employee_directory_helper.dart';
+import '../../../core/widgets/status_badge.dart';
+import '../../../core/widgets/employee_avatar.dart';
 
 import '../../../core/widgets/app_bounceable.dart';
 import '../../../core/widgets/app_glass_card.dart';
 import '../../../core/widgets/app_shell.dart';
 import '../../../core/widgets/staggered_animated_item.dart';
-import '../../../core/widgets/status_badge.dart';
-import '../../../core/utils/salary_cycle_helper.dart';
-import '../../../core/utils/timesheet_calculator.dart';
-import '../../../core/utils/employee_directory_helper.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -48,6 +53,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       label: 'Employees',
     ),
     NavDestinationItem(
+      icon: Icons.badge_outlined,
+      activeIcon: Icons.badge_rounded,
+      label: 'Cards & Passes',
+    ),
+    NavDestinationItem(
       icon: Icons.business_outlined,
       activeIcon: Icons.business_rounded,
       label: 'Offices',
@@ -67,6 +77,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       activeIcon: Icons.analytics_rounded,
       label: 'Reports',
     ),
+    NavDestinationItem(
+      icon: Icons.payments_outlined,
+      activeIcon: Icons.payments_rounded,
+      label: 'Salary & Payroll',
+    ),
   ];
 
   void _showOwnershipTransferDialog() {
@@ -81,7 +96,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       context: adminCtx,
       builder: (dialogCtx) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Row(
             children: [
               Icon(Icons.cleaning_services_rounded, color: Colors.orangeAccent),
@@ -110,10 +126,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               onPressed: () {
                 LocalDatabaseService().clearAttendanceCache();
                 Navigator.pop(dialogCtx);
-                adminCtx.read<AdminCubit>().loadDashboardData('Local attendance cache cleared.');
+                adminCtx
+                    .read<AdminCubit>()
+                    .loadDashboardData('Local attendance cache cleared.');
                 ScaffoldMessenger.of(adminCtx).showSnackBar(
                   const SnackBar(
-                    content: Text('Local attendance cache cleared successfully.'),
+                    content:
+                        Text('Local attendance cache cleared successfully.'),
                     backgroundColor: Colors.orangeAccent,
                   ),
                 );
@@ -164,6 +183,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 AppShellActionItem(
                   label: 'Sign Out',
                   icon: Icons.logout_rounded,
+                  color: Colors.redAccent,
                   onTap: () {
                     context.read<AuthCubit>().logout();
                     Navigator.of(context).pushAndRemoveUntil(
@@ -171,24 +191,31 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       (route) => false,
                     );
                   },
-                  color: Colors.redAccent,
                 ),
               ],
               body: IndexedStack(
                 index: _currentNavIndex,
                 children: [
                   AdminOverviewTab(
-                    key: ValueKey('overview_$_currentNavIndex'),
+                    key: const ValueKey('admin_overview_tab'),
                     onNavigateTab: (index) {
                       setState(() => _currentNavIndex = index);
                       adminCtx.read<AdminCubit>().loadDashboardData();
                     },
                   ),
-                  EmployeeManagementScreen(key: ValueKey('employee_$_currentNavIndex')),
-                  OfficeManagementScreen(key: ValueKey('office_$_currentNavIndex')),
-                  WorkSiteManagementScreen(key: ValueKey('worksite_$_currentNavIndex')),
-                  LiveTrackingMapScreen(key: ValueKey('live_map_$_currentNavIndex')),
-                  ReportsAnalyticsScreen(key: ValueKey('reports_$_currentNavIndex')),
+                  const EmployeeManagementScreen(
+                      key: ValueKey('employee_management_tab')),
+                  const CardsManagementScreen(
+                      key: ValueKey('cards_management_tab')),
+                  const OfficeManagementScreen(
+                      key: ValueKey('office_management_tab')),
+                  const WorkSiteManagementScreen(
+                      key: ValueKey('worksite_management_tab')),
+                  const LiveTrackingMapScreen(key: ValueKey('live_map_tab')),
+                  const ReportsAnalyticsScreen(
+                      key: ValueKey('reports_analytics_tab')),
+                  const SalaryPayrollScreen(
+                      key: ValueKey('salary_payroll_tab')),
                 ],
               ),
             ),
@@ -357,6 +384,18 @@ class AdminOverviewTab extends StatelessWidget {
                 const SizedBox(height: 20),
                 StaggeredAnimatedItem(
                   index: 7,
+                  child: _buildDocumentExpiryAlertCenter(
+                    context,
+                    db,
+                    employees,
+                    isDark,
+                    palette,
+                    primary,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                StaggeredAnimatedItem(
+                  index: 8,
                   child: AppGlassCard(
                     padding: const EdgeInsets.all(20.0),
                     child: Column(
@@ -407,11 +446,14 @@ class AdminOverviewTab extends StatelessWidget {
                             ),
                             const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
                                 color: palette.success.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: palette.success.withValues(alpha: 0.3)),
+                                border: Border.all(
+                                    color:
+                                        palette.success.withValues(alpha: 0.3)),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -442,19 +484,22 @@ class AdminOverviewTab extends StatelessWidget {
                         const SizedBox(height: 16),
                         const Divider(height: 1),
                         const SizedBox(height: 16),
-                        
+
                         // Recent activity events stream
-                        ..._buildRecentActivityList(context, todayRecords, employees, isDark, palette),
+                        ..._buildRecentActivityList(
+                            context, todayRecords, employees, isDark, palette),
 
                         const SizedBox(height: 16),
-                        
+
                         // Quick Action Navigation Bar
                         Text(
                           'Quick Administrative Actions',
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: isDark ? palette.textSecondaryDark : palette.textSecondaryLight,
+                            color: isDark
+                                ? palette.textSecondaryDark
+                                : palette.textSecondaryLight,
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -464,17 +509,24 @@ class AdminOverviewTab extends StatelessWidget {
                           children: [
                             _buildQuickActionButton(
                               context: context,
+                              icon: Icons.badge_rounded,
+                              label: 'Cards & Pass Expiry',
+                              color: palette.info,
+                              onTap: () => onNavigateTab?.call(2),
+                            ),
+                            _buildQuickActionButton(
+                              context: context,
                               icon: Icons.map_rounded,
                               label: 'Live Field Map',
                               color: primary,
-                              onTap: () => onNavigateTab?.call(4),
+                              onTap: () => onNavigateTab?.call(5),
                             ),
                             _buildQuickActionButton(
                               context: context,
                               icon: Icons.analytics_rounded,
                               label: 'Reports & Timesheets',
                               color: palette.secondary,
-                              onTap: () => onNavigateTab?.call(5),
+                              onTap: () => onNavigateTab?.call(6),
                             ),
                             _buildQuickActionButton(
                               context: context,
@@ -488,7 +540,7 @@ class AdminOverviewTab extends StatelessWidget {
                               icon: Icons.business_rounded,
                               label: 'Office Stations',
                               color: palette.warning,
-                              onTap: () => onNavigateTab?.call(2),
+                              onTap: () => onNavigateTab?.call(3),
                             ),
                           ],
                         ),
@@ -517,20 +569,27 @@ class AdminOverviewTab extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
           decoration: BoxDecoration(
-            color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02),
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.03)
+                : Colors.black.withValues(alpha: 0.02),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             children: [
               Icon(Icons.history_toggle_off_rounded,
-                  color: isDark ? palette.textSecondaryDark : palette.textSecondaryLight, size: 24),
+                  color: isDark
+                      ? palette.textSecondaryDark
+                      : palette.textSecondaryLight,
+                  size: 24),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   'No check-in activities recorded today yet. Real-time updates will stream here automatically as field officers clock in.',
                   style: TextStyle(
                     fontSize: 13,
-                    color: isDark ? palette.textSecondaryDark : palette.textSecondaryLight,
+                    color: isDark
+                        ? palette.textSecondaryDark
+                        : palette.textSecondaryLight,
                   ),
                 ),
               ),
@@ -546,7 +605,8 @@ class AdminOverviewTab extends StatelessWidget {
 
     return recentRecords.map((r) {
       final empMatches = employees.where((e) => e.id == r.employeeId);
-      final empName = empMatches.isNotEmpty ? empMatches.first.name : r.employeeName;
+      final empName =
+          empMatches.isNotEmpty ? empMatches.first.name : r.employeeName;
       final stepInfo = _getStepDisplayInfo(r.workflowStep, palette, isDark);
       final timeStr =
           '${r.eventTimestamp.hour.toString().padLeft(2, '0')}:${r.eventTimestamp.minute.toString().padLeft(2, '0')}';
@@ -559,10 +619,14 @@ class AdminOverviewTab extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.02),
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.04)
+                : Colors.black.withValues(alpha: 0.02),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04),
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.black.withValues(alpha: 0.04),
             ),
           ),
           child: Row(
@@ -586,13 +650,15 @@ class AdminOverviewTab extends StatelessWidget {
                         Flexible(
                           child: Text(
                             empName.isNotEmpty ? empName : 'Field Officer',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 14),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: stepInfo.color.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(6),
@@ -615,7 +681,9 @@ class AdminOverviewTab extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
-                        color: isDark ? palette.textSecondaryDark : palette.textSecondaryLight,
+                        color: isDark
+                            ? palette.textSecondaryDark
+                            : palette.textSecondaryLight,
                       ),
                     ),
                   ],
@@ -626,16 +694,21 @@ class AdminOverviewTab extends StatelessWidget {
                 children: [
                   Text(
                     timeStr,
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 12),
                   ),
                   const SizedBox(height: 2),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        r.isGeofenceValid ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
+                        r.isGeofenceValid
+                            ? Icons.check_circle_rounded
+                            : Icons.warning_amber_rounded,
                         size: 12,
-                        color: r.isGeofenceValid ? palette.success : palette.warning,
+                        color: r.isGeofenceValid
+                            ? palette.success
+                            : palette.warning,
                       ),
                       const SizedBox(width: 3),
                       Text(
@@ -643,7 +716,9 @@ class AdminOverviewTab extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
-                          color: r.isGeofenceValid ? palette.success : palette.warning,
+                          color: r.isGeofenceValid
+                              ? palette.success
+                              : palette.warning,
                         ),
                       ),
                     ],
@@ -657,27 +732,35 @@ class AdminOverviewTab extends StatelessWidget {
     }).toList();
   }
 
-  _StepInfo _getStepDisplayInfo(WorkflowStep step, AppThemePalette palette, bool isDark) {
-    final primary = palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
+  _StepInfo _getStepDisplayInfo(
+      WorkflowStep step, AppThemePalette palette, bool isDark) {
+    final primary =
+        palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
     switch (step) {
       case WorkflowStep.officeCheckIn:
         return _StepInfo('Office Check-In', Icons.login_rounded, primary);
       case WorkflowStep.siteCheckIn:
-        return _StepInfo('Site Check-In', Icons.location_on_rounded, palette.secondary);
+        return _StepInfo(
+            'Site Check-In', Icons.location_on_rounded, palette.secondary);
       case WorkflowStep.siteCheckOut:
-        return _StepInfo('Site Check-Out', Icons.logout_rounded, palette.warning);
+        return _StepInfo(
+            'Site Check-Out', Icons.logout_rounded, palette.warning);
       case WorkflowStep.breakStart:
         return _StepInfo('Break Start', Icons.coffee_rounded, palette.info);
       case WorkflowStep.breakEnd:
         return _StepInfo('Break End', Icons.coffee_maker_rounded, palette.info);
       case WorkflowStep.officeCheckOut:
-        return _StepInfo('Office Check-Out', Icons.task_alt_rounded, palette.success);
+        return _StepInfo(
+            'Office Check-Out', Icons.task_alt_rounded, palette.success);
       case WorkflowStep.completed:
-        return _StepInfo('Shift Completed', Icons.verified_rounded, palette.success);
+        return _StepInfo(
+            'Shift Completed', Icons.verified_rounded, palette.success);
       case WorkflowStep.emergencyCheckIn:
-        return _StepInfo('Emergency Check-In', Icons.warning_amber_rounded, palette.error);
+        return _StepInfo(
+            'Emergency Check-In', Icons.warning_amber_rounded, palette.error);
       case WorkflowStep.emergencyCheckOut:
-        return _StepInfo('Emergency Check-Out', Icons.warning_rounded, palette.error);
+        return _StepInfo(
+            'Emergency Check-Out', Icons.warning_rounded, palette.error);
     }
   }
 
@@ -696,7 +779,8 @@ class AdminOverviewTab extends StatelessWidget {
         decoration: BoxDecoration(
           color: color.withValues(alpha: isDark ? 0.15 : 0.08),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withValues(alpha: isDark ? 0.35 : 0.2)),
+          border:
+              Border.all(color: color.withValues(alpha: isDark ? 0.35 : 0.2)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -733,19 +817,21 @@ class AdminOverviewTab extends StatelessWidget {
     int activeStaffCount = 0;
 
     for (final emp in employees) {
-      final empRecords = cycleRecords.where((r) =>
-          EmployeeDirectoryHelper.matchesEmployeeIdentity(
-            recordEmployeeId: r.employeeId,
-            recordEmployeeName: r.employeeName,
-            employeeId: emp.id,
-            employeeCode: emp.employeeCode,
-            employeeName: emp.name,
-            employeeEmail: emp.email,
-          )).toList();
+      final empRecords = cycleRecords
+          .where((r) => EmployeeDirectoryHelper.matchesEmployeeIdentity(
+                recordEmployeeId: r.employeeId,
+                recordEmployeeName: r.employeeName,
+                employeeId: emp.id,
+                employeeCode: emp.employeeCode,
+                employeeName: emp.name,
+                employeeEmail: emp.email,
+              ))
+          .toList();
 
       if (empRecords.isNotEmpty) {
         activeStaffCount++;
-        final timesheets = TimesheetCalculator.calculateDailyTimesheets(empRecords);
+        final timesheets =
+            TimesheetCalculator.calculateDailyTimesheets(empRecords);
         for (final entry in timesheets) {
           totalRegHours += entry.regularHours;
           totalOtHours += entry.overtimeHours;
@@ -809,7 +895,11 @@ class AdminOverviewTab extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
-                                  '25th - 24th Cutoff',
+                                  currentCycle.isTransition
+                                      ? 'Transition'
+                                      : (currentCycle.startDate.day == 1
+                                          ? 'Calendar Month'
+                                          : '25th - 24th Cutoff'),
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
@@ -938,6 +1028,28 @@ class AdminOverviewTab extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                onNavigateTab?.call(7); // Navigate to Salary & Payroll tab
+              },
+              icon: const Icon(Icons.payments_rounded, size: 16),
+              label: const Text(
+                'Open Salary & Payroll Module',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1015,6 +1127,523 @@ class AdminOverviewTab extends StatelessWidget {
       ),
     );
   }
+
+  static EmployeeEntity _resolveEmployeeForCard(
+      EmployeeCard card, List<EmployeeEntity> employees) {
+    final cleanId = card.employeeId.trim();
+
+    // 1. Direct ID match
+    if (cleanId.isNotEmpty) {
+      for (final e in employees) {
+        if (e.id.toLowerCase() == cleanId.toLowerCase()) return e;
+      }
+    }
+
+    // 2. Employee code match
+    if (cleanId.isNotEmpty) {
+      final normCode = cleanId.toUpperCase().replaceAll('EMP-', '');
+      for (final e in employees) {
+        final eCode = e.employeeCode.toUpperCase().replaceAll('EMP-', '');
+        if (eCode.isNotEmpty &&
+            (eCode == normCode ||
+                e.employeeCode.toUpperCase() == cleanId.toUpperCase())) {
+          return e;
+        }
+      }
+    }
+
+    // 3. Email match
+    if (cleanId.isNotEmpty && cleanId.contains('@')) {
+      for (final e in employees) {
+        if (e.email.trim().toLowerCase() == cleanId.toLowerCase()) return e;
+      }
+    }
+
+    // 4. Name match
+    if (cleanId.isNotEmpty) {
+      for (final e in employees) {
+        if (e.name.trim().toLowerCase() == cleanId.toLowerCase()) return e;
+      }
+    }
+
+    // 5. Master enterprise directory lookup via EmployeeDirectoryHelper
+    if (cleanId.isNotEmpty) {
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: cleanId,
+        name: cleanId,
+        id: cleanId,
+        email: cleanId,
+      );
+      if (official != null) {
+        return EmployeeEntity(
+          id: official.employeeId,
+          employeeCode: official.employeeId,
+          name: official.fullName,
+          mobileNumber: '',
+          photoUrl: official.photoAsset,
+          email: official.email,
+          designation: official.designation,
+          department: official.department,
+        );
+      }
+    }
+
+    // 6. Check card fileName or notes for employee name/code
+    final texts = [card.fileName ?? '', card.notes ?? '', card.cardName];
+    for (final t in texts) {
+      if (t.trim().isEmpty) continue;
+      final tLower = t.toLowerCase();
+      for (final e in employees) {
+        if (e.name.length >= 3 && tLower.contains(e.name.toLowerCase())) {
+          return e;
+        }
+        final eCode = e.employeeCode.toUpperCase().replaceAll('EMP-', '');
+        if (eCode.length >= 3 && t.toUpperCase().contains(eCode)) {
+          return e;
+        }
+      }
+      for (final off in EmployeeDirectoryHelper.masterDirectory) {
+        if (off.fullName.length >= 3 &&
+            tLower.contains(off.fullName.toLowerCase())) {
+          return EmployeeEntity(
+            id: off.employeeId,
+            employeeCode: off.employeeId,
+            name: off.fullName,
+            mobileNumber: '',
+            photoUrl: off.photoAsset,
+            email: off.email,
+            designation: off.designation,
+            department: off.department,
+          );
+        }
+      }
+    }
+
+    // 7. Clean filename candidate
+    if (card.fileName != null && card.fileName!.isNotEmpty) {
+      var raw = card.fileName!;
+      raw = raw.replaceAll(
+          RegExp(r'\.(pdf|png|jpg|jpeg|webp)$', caseSensitive: false), '');
+      raw = raw.replaceAll(
+          RegExp(
+              r'_(EMIRATES_ID|VISA|PASSPORT|INSURANCE|MOPA|CISPA|PASS|CARD).*$',
+              caseSensitive: false),
+          '');
+      raw = raw.replaceAll('_', ' ').replaceAll('-', ' ').trim();
+      if (raw.isNotEmpty &&
+          raw.length >= 3 &&
+          !raw.toLowerCase().contains('unnamed') &&
+          !raw.toLowerCase().contains('scan')) {
+        return EmployeeEntity(
+          id: card.employeeId,
+          name: raw,
+          employeeCode:
+              card.employeeId.length <= 10 && !card.employeeId.contains('-')
+                  ? card.employeeId
+                  : 'EMP',
+          department: 'Operations',
+          designation: 'Officer',
+          mobileNumber: '',
+          email: '',
+        );
+      }
+    }
+
+    return EmployeeEntity(
+      id: card.employeeId,
+      name: card.employeeId.length <= 10 && !card.employeeId.contains('-')
+          ? 'Staff (${card.employeeId})'
+          : 'Staff',
+      employeeCode:
+          card.employeeId.length <= 10 && !card.employeeId.contains('-')
+              ? card.employeeId
+              : 'EMP',
+      department: 'Operations',
+      designation: 'Officer',
+      mobileNumber: '',
+      email: '',
+    );
+  }
+
+  Widget _buildDocumentExpiryAlertCenter(
+    BuildContext context,
+    LocalDatabaseService db,
+    List<EmployeeEntity> employees,
+    bool isDark,
+    AppThemePalette palette,
+    Color primary,
+  ) {
+    final dateFormat = DateFormat('dd MMM yyyy');
+    final cardMaps = db.getSavedEmployeeCards();
+    final cards = cardMaps.map((m) => EmployeeCard.fromJson(m)).toList();
+
+    // Sort: earliest expiry / most urgent first
+    cards.sort((a, b) => a.daysUntilExpiry.compareTo(b.daysUntilExpiry));
+
+    final criticalCards =
+        cards.where((c) => c.isExpired || c.isCritical).toList();
+
+    Future<void> launchWhatsAppNotification(EmployeeCard card) async {
+      final emp = _resolveEmployeeForCard(card, employees);
+
+      final days = card.daysUntilExpiry;
+      final daysText = card.isExpired
+          ? 'expired ${days.abs()} days ago'
+          : (days == 0
+              ? 'expires TODAY'
+              : 'expires in $days day${days == 1 ? '' : 's'}');
+      final message = '🚨 *URGENT COMPLIANCE NOTICE*\n\n'
+          'Dear ${emp.name} (${emp.employeeCode}),\n'
+          'Your *${card.cardName}* (Card No: ${card.cardNumber}) $daysText (Expiry Date: ${dateFormat.format(card.expiryDate)}).\n\n'
+          '⚠️ Immediate document renewal is required. Please submit your renewed card to Administration/HR without delay.\n\n'
+          'Regards,\nWorkforce Compliance Department';
+
+      final phone = emp.mobileNumber.replaceAll(RegExp(r'[^0-9]'), '');
+      final encodedMsg = Uri.encodeComponent(message);
+      final waUrl = phone.isNotEmpty
+          ? 'https://wa.me/$phone?text=$encodedMsg'
+          : 'https://wa.me/?text=$encodedMsg';
+
+      final uri = Uri.parse(waUrl);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Could not open WhatsApp for ${emp.name}'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      }
+    }
+
+    if (criticalCards.isNotEmpty) {
+      return AppGlassCard(
+        customBackgroundColor:
+            Colors.redAccent.withValues(alpha: isDark ? 0.14 : 0.06),
+        customBorderColor:
+            Colors.redAccent.withValues(alpha: isDark ? 0.45 : 0.35),
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.warning_amber_rounded,
+                          color: Colors.redAccent, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              'Document Expiry & Compliance Radar',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${criticalCards.length} CRITICAL',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          'Cards expiring in ≤3 days or expired. Immediate renewal action required.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? palette.textSecondaryDark
+                                : palette.textSecondaryLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF25D366),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                  ),
+                  icon: const Icon(Icons.chat_bubble_rounded, size: 16),
+                  label: const Text('WhatsApp All Alerts',
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  onPressed: () =>
+                      launchWhatsAppNotification(criticalCards.first),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 14),
+
+            // Critical Cards List
+            ...criticalCards.take(4).map((card) {
+              final emp = _resolveEmployeeForCard(card, employees);
+
+              final isExp = card.isExpired;
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.black.withValues(alpha: 0.25)
+                      : Colors.white.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.redAccent.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    EmployeeAvatar(
+                      fullName: emp.name,
+                      radius: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                emp.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '(${emp.employeeCode})',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark
+                                      ? palette.textSecondaryDark
+                                      : palette.textSecondaryLight,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${card.cardName} • ${card.cardNumber}',
+                            style: const TextStyle(
+                                fontSize: 11, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: (isExp ? Colors.red : Colors.orange)
+                                .withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: (isExp ? Colors.red : Colors.orange)
+                                  .withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Text(
+                            card.statusLabel,
+                            style: TextStyle(
+                              color: isExp
+                                  ? Colors.redAccent
+                                  : Colors.orangeAccent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Expires: ${dateFormat.format(card.expiryDate)}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: isDark
+                                ? palette.textSecondaryDark
+                                : palette.textSecondaryLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 10),
+                    IconButton(
+                      icon: const Icon(Icons.chat_bubble_outline_rounded,
+                          color: Color(0xFF25D366), size: 20),
+                      tooltip: 'Send WhatsApp Alert to ${emp.name}',
+                      onPressed: () => launchWhatsAppNotification(card),
+                    ),
+                  ],
+                ),
+              );
+            }),
+
+            const SizedBox(height: 6),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => onNavigateTab?.call(2),
+                icon: const Icon(Icons.badge_rounded, size: 16),
+                label: const Text('Manage & View All Cards in Hub',
+                    style:
+                        TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(
+                      color: Colors.redAccent.withValues(alpha: 0.35)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (cards.isNotEmpty) {
+      return AppGlassCard(
+        customBackgroundColor:
+            palette.success.withValues(alpha: isDark ? 0.12 : 0.05),
+        customBorderColor:
+            palette.success.withValues(alpha: isDark ? 0.35 : 0.2),
+        padding: const EdgeInsets.all(18.0),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: palette.success.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.verified_user_rounded,
+                  color: palette.success, size: 24),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Workforce Document & Security Pass Radar',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'All ${cards.length} tracked employee cards (Emirates ID, Visa, Passport, Passes) are compliant. 0 expirations in the 3-day notice window.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark
+                          ? palette.textSecondaryDark
+                          : palette.textSecondaryLight,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            OutlinedButton.icon(
+              onPressed: () => onNavigateTab?.call(2),
+              icon: const Icon(Icons.badge_outlined, size: 16),
+              label: const Text('Cards Hub', style: TextStyle(fontSize: 12)),
+              style: OutlinedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return AppGlassCard(
+      padding: const EdgeInsets.all(18.0),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: primary.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.badge_outlined, color: primary, size: 24),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Automated Employee Cards & Pass Expiry Tracking',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Select employees and scan cards (Emirates ID, Visa, Passport, MOPA, CISPA) to automatically fetch expiry dates and receive 3-day alerts.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark
+                        ? palette.textSecondaryDark
+                        : palette.textSecondaryLight,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          ElevatedButton.icon(
+            onPressed: () => onNavigateTab?.call(2),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(Icons.add_card_rounded, size: 16),
+            label: const Text('Add Cards',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _StepInfo {
@@ -1023,5 +1652,3 @@ class _StepInfo {
   final Color color;
   _StepInfo(this.label, this.icon, this.color);
 }
-
-

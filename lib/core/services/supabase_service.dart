@@ -11,6 +11,7 @@ import '../../features/admin/domain/employee_entity.dart';
 import '../../features/admin/domain/work_site_entity.dart';
 import '../../database/local_database_service.dart';
 import '../constants/app_enums.dart';
+import '../utils/employee_directory_helper.dart';
 
 class SupabaseService {
   static final SupabaseService _instance = SupabaseService._internal();
@@ -241,6 +242,33 @@ class SupabaseService {
     }
   }
 
+  /// Delete Office from Supabase (Soft delete by setting is_deleted = true)
+  Future<void> deleteOfficeFromSupabase(String officeId) async {
+    if (!_isInitialized || client == null) return;
+    try {
+      final now = DateTime.now().toIso8601String();
+      await client!
+          .from('offices')
+          .update({
+            'is_deleted': true,
+            'updated_at': now,
+          })
+          .eq('id', officeId);
+
+      // Revert any employees assigned to this office back to the default office
+      await client!
+          .from('employees')
+          .update({
+            'assigned_office_id': null,
+            'use_default_office': true,
+            'updated_at': now,
+          })
+          .eq('assigned_office_id', officeId);
+    } catch (e) {
+      debugPrint('Supabase deleteOfficeFromSupabase error: $e');
+    }
+  }
+
   /// Fetch User Profile by Firebase UID / ID / Email
   Future<UserEntity?> fetchUserByFirebaseUid(String identifier) async {
     if (!_isInitialized || client == null) return null;
@@ -458,16 +486,24 @@ class SupabaseService {
 
       List<dynamic> usersResp = [];
       try {
-        usersResp = await client!
+        final allUsers = await client!
             .from('users')
             .select()
-            .eq('organization_id', targetOrgId)
             .eq('is_deleted', false)
             .order('created_at', ascending: false);
-      } catch (_) {}
 
-      // Fallback: If orgId filter returned empty list, fetch all non-deleted users
-      if (usersResp.isEmpty) {
+        if (targetOrgId.isNotEmpty) {
+          usersResp = allUsers.where((u) {
+            final uOrg = u['organization_id']?.toString().trim();
+            return uOrg == null ||
+                uOrg.isEmpty ||
+                uOrg == targetOrgId ||
+                uOrg == '00000000-0000-0000-0000-000000000001';
+          }).toList();
+        } else {
+          usersResp = allUsers;
+        }
+      } catch (_) {
         try {
           usersResp = await client!
               .from('users')
@@ -542,7 +578,15 @@ class SupabaseService {
           }
         }
 
-        result.add(UserEntity.fromJson(map));
+        final user = UserEntity.fromJson(map);
+        if (!EmployeeDirectoryHelper.isRelievedEmployee(
+          id: user.id,
+          name: user.fullName,
+          email: user.email,
+          code: user.employeeCode,
+        )) {
+          result.add(user);
+        }
       }
 
       return result;
@@ -561,34 +605,42 @@ class SupabaseService {
           ? await ensureOrganizationExistsInCloud(orgId) ?? orgId
           : null;
 
+      final List<dynamic> allUsers = await client!
+          .from('users')
+          .select()
+          .eq('is_deleted', false);
+
       final List<dynamic> usersResp;
       if (targetOrgId != null && targetOrgId.isNotEmpty) {
-        final filtered = await client!
-            .from('users')
-            .select()
-            .eq('organization_id', targetOrgId)
-            .eq('is_deleted', false);
-        usersResp = filtered.isNotEmpty
-            ? filtered
-            : await client!.from('users').select().eq('is_deleted', false);
+        usersResp = allUsers.where((u) {
+          if (u is! Map) return false;
+          final uOrg = u['organization_id']?.toString().trim();
+          return uOrg == null ||
+              uOrg.isEmpty ||
+              uOrg == targetOrgId ||
+              uOrg == '00000000-0000-0000-0000-000000000001';
+        }).toList();
       } else {
-        usersResp =
-            await client!.from('users').select().eq('is_deleted', false);
+        usersResp = allUsers;
       }
+
+      final List<dynamic> allEmployees = await client!
+          .from('employees')
+          .select()
+          .eq('is_deleted', false);
 
       final List<dynamic> empResp;
       if (targetOrgId != null && targetOrgId.isNotEmpty) {
-        final filtered = await client!
-            .from('employees')
-            .select()
-            .eq('organization_id', targetOrgId)
-            .eq('is_deleted', false);
-        empResp = filtered.isNotEmpty
-            ? filtered
-            : await client!.from('employees').select().eq('is_deleted', false);
+        empResp = allEmployees.where((e) {
+          if (e is! Map) return false;
+          final eOrg = e['organization_id']?.toString().trim();
+          return eOrg == null ||
+              eOrg.isEmpty ||
+              eOrg == targetOrgId ||
+              eOrg == '00000000-0000-0000-0000-000000000001';
+        }).toList();
       } else {
-        empResp =
-            await client!.from('employees').select().eq('is_deleted', false);
+        empResp = allEmployees;
       }
 
       final offices = await fetchOfficesFromSupabase();
@@ -711,11 +763,21 @@ class SupabaseService {
             (empCode.isNotEmpty &&
                 r.employeeCode.toLowerCase() == empCode.toLowerCase()));
 
+        final resolvedId = e['user_id']?.toString() ??
+            (empId.isNotEmpty ? empId : empCode);
+        if (EmployeeDirectoryHelper.isRelievedEmployee(
+          id: resolvedId,
+          name: empName,
+          email: empEmail,
+          code: empCode,
+        )) {
+          continue;
+        }
+
         if (!alreadyAdded) {
           final bool eBypass = (e['bypass_geofence'] ?? e['bypassGeofence'] ?? false) == true;
           result.add(EmployeeEntity(
-            id: e['user_id']?.toString() ??
-                (empId.isNotEmpty ? empId : empCode),
+            id: resolvedId,
             employeeCode: empCode.isNotEmpty ? empCode : 'EMP-000',
             name: empName,
             mobileNumber: empPhone,
@@ -742,6 +804,7 @@ class SupabaseService {
   Future<void> syncCloudDataToLocal([String? orgId]) async {
     if (!_isInitialized || client == null) return;
     try {
+      await fetchGeofenceOverridesFromCloud();
       final db = LocalDatabaseService();
       final targetOrgId = orgId ?? db.organization?.id;
       final remoteUsers = await fetchOrganizationUsers(targetOrgId ?? '00000000-0000-0000-0000-000000000001');
@@ -883,6 +946,8 @@ class SupabaseService {
         assignedOfficeName = officeRow?['name']?.toString();
       }
 
+      final bool bypassGeofence = (userRow?['bypass_geofence'] == true) || (empRow?['bypass_geofence'] == true);
+
       return EmployeeEntity(
         id: actualUserId.isNotEmpty ? actualUserId : (firebaseUid.isNotEmpty ? firebaseUid : clean),
         employeeCode: empCode,
@@ -895,6 +960,7 @@ class SupabaseService {
         assignedOfficeId: assignedOfficeId,
         assignedOfficeName: assignedOfficeName,
         isActive: isActive,
+        bypassGeofence: bypassGeofence,
       );
     } catch (e) {
       debugPrint('Supabase fetchEmployeeDetails error: $e');
@@ -1094,37 +1160,66 @@ class SupabaseService {
       }
       if (designation != null) empUpdates['designation'] = designation.trim();
       if (department != null) empUpdates['department'] = department.trim();
-      if (useDefaultOffice != null)
-        empUpdates['use_default_office'] = useDefaultOffice;
-      if (assignedOfficeId != null) {
+      if (useDefaultOffice == true) {
+        empUpdates['use_default_office'] = true;
+        empUpdates['assigned_office_id'] = null;
+      } else if (assignedOfficeId != null) {
         empUpdates['assigned_office_id'] =
             _isValidUuid(assignedOfficeId) ? assignedOfficeId : null;
+        empUpdates['use_default_office'] = (empUpdates['assigned_office_id'] == null);
+      } else if (useDefaultOffice != null) {
+        empUpdates['use_default_office'] = useDefaultOffice;
       }
       if (bypassGeofence != null) {
         empUpdates['bypass_geofence'] = bypassGeofence;
       }
 
-      final lookupId = _isValidUuid(targetId) ? targetId : cleanId;
-      final existingEmp = await client!
-          .from('employees')
-          .select('id')
-          .eq('user_id', lookupId)
-          .maybeSingle();
+      final isTargetUuid = _isValidUuid(targetId);
+      final isCleanUuid = _isValidUuid(cleanId);
+      final uuidToUse = isTargetUuid ? targetId : (isCleanUuid ? cleanId : null);
+      final lookupId = uuidToUse ?? cleanId;
 
-      if (existingEmp != null) {
-        await client!.from('employees').update(empUpdates).eq('user_id', lookupId);
-      } else {
-        final targetOrgId =
-            await ensureOrganizationExistsInCloud(orgId) ?? orgId;
-        empUpdates['user_id'] = lookupId;
-        empUpdates['organization_id'] = targetOrgId;
-        empUpdates['employee_code'] = employeeCode?.trim() ?? 'EMP-000';
-        empUpdates['designation'] = designation?.trim() ?? 'Staff';
-        empUpdates['department'] = department?.trim() ?? 'Operations';
-        empUpdates['use_default_office'] = useDefaultOffice ?? true;
-        empUpdates['is_deleted'] = false;
-        empUpdates['created_at'] = DateTime.now().toIso8601String();
-        await client!.from('employees').upsert(empUpdates);
+      try {
+        if (uuidToUse != null) {
+          final existingEmp = await client!
+              .from('employees')
+              .select('id')
+              .eq('user_id', uuidToUse)
+              .maybeSingle();
+
+          if (existingEmp != null) {
+            await client!.from('employees').update(empUpdates).eq('user_id', uuidToUse);
+          } else {
+            final targetOrgId =
+                await ensureOrganizationExistsInCloud(orgId) ?? orgId;
+            empUpdates['user_id'] = uuidToUse;
+            empUpdates['organization_id'] = targetOrgId;
+            empUpdates['employee_code'] = employeeCode?.trim() ?? 'EMP-000';
+            empUpdates['designation'] = designation?.trim() ?? 'Staff';
+            empUpdates['department'] = department?.trim() ?? 'Operations';
+            empUpdates['use_default_office'] = useDefaultOffice ?? true;
+            empUpdates['is_deleted'] = false;
+            empUpdates['created_at'] = DateTime.now().toIso8601String();
+            await client!.from('employees').upsert(empUpdates);
+          }
+        } else if (employeeCode != null && employeeCode.trim().isNotEmpty) {
+          await client!.from('employees').update(empUpdates).eq('employee_code', employeeCode.trim());
+        }
+      } catch (empErr) {
+        debugPrint('Could not update employees table: $empErr');
+      }
+
+      // If bypass_geofence is also requested, delegate to setEmployeeGeofenceBypass
+      if (bypassGeofence != null) {
+        await setEmployeeGeofenceBypass(
+          userId: userId,
+          orgId: orgId,
+          bypassGeofence: bypassGeofence,
+          email: email,
+          employeeCode: employeeCode,
+          employeeName: fullName,
+          actorUserId: actorUserId,
+        );
       }
 
       if (_isValidUuid(orgId)) {
@@ -1172,14 +1267,36 @@ class SupabaseService {
           ? existingUser.id
           : cleanId;
 
-      // Update in users table
+      // 1. Log activity override to Supabase activity_logs for cloud cross-platform sync
+      final validOrgId = _isValidUuid(orgId) ? orgId : 'bcc6c36c-cfa3-461b-ade6-de7d770e720c';
+      try {
+        await logActivity(
+          orgId: validOrgId,
+          actorUserId: _isValidUuid(actorUserId) ? actorUserId : null,
+          targetUserId: _isValidUuid(targetId) ? targetId : null,
+          action: 'GEOFENCE_BYPASS_OVERRIDE',
+          details: {
+            'employee_id': targetId,
+            'user_id': targetId,
+            'firebase_uid': cleanId,
+            'email': email,
+            'employee_code': employeeCode,
+            'employee_name': employeeName,
+            'bypass_geofence': bypassGeofence,
+            'bypassGeofence': bypassGeofence,
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+        );
+      } catch (e) {
+        debugPrint('Supabase logActivity for geofence error: $e');
+      }
+
+      // 2. Update in users table if bypass_geofence column exists
       try {
         final orClausesUsers = <String>[];
         if (_isValidUuid(targetId)) orClausesUsers.add('id.eq.$targetId');
-        if (cleanId.isNotEmpty) orClausesUsers.add('firebase_uid.eq.$cleanId');
-        if (cleanId != targetId) orClausesUsers.add('id.eq.$cleanId');
+        if (cleanId.isNotEmpty && cleanId != targetId) orClausesUsers.add('firebase_uid.eq.$cleanId');
         if (email != null && email.trim().isNotEmpty) orClausesUsers.add('email.eq.${email.trim()}');
-        if (employeeCode != null && employeeCode.trim().isNotEmpty) orClausesUsers.add('employee_code.eq.${employeeCode.trim()}');
 
         if (orClausesUsers.isNotEmpty) {
           await client!.from('users').update({
@@ -1188,37 +1305,69 @@ class SupabaseService {
           }).or(orClausesUsers.join(','));
         }
       } catch (e) {
-        debugPrint('Supabase bypass_geofence update users error: $e');
+        debugPrint('Supabase bypass_geofence update users note: $e');
       }
 
-      // Update in employees table
+      // 3. Update in employees table if bypass_geofence column exists
       try {
-        final orClauses = <String>['user_id.eq.$targetId', 'id.eq.$targetId'];
-        if (cleanId != targetId) {
-          orClauses.add('user_id.eq.$cleanId');
-          orClauses.add('id.eq.$cleanId');
+        final orClauses = <String>[];
+        if (_isValidUuid(targetId)) {
+          orClauses.add('user_id.eq.$targetId');
+          orClauses.add('id.eq.$targetId');
         }
         if (employeeCode != null && employeeCode.trim().isNotEmpty) {
           orClauses.add('employee_code.eq.${employeeCode.trim()}');
         }
-        if (email != null && email.trim().isNotEmpty) {
-          orClauses.add('email.eq.${email.trim()}');
+        if (orClauses.isNotEmpty) {
+          await client!.from('employees').update({
+            'bypass_geofence': bypassGeofence,
+            'updated_at': DateTime.now().toIso8601String(),
+          }).or(orClauses.join(','));
         }
-        if (employeeName != null && employeeName.trim().isNotEmpty) {
-          orClauses.add('name.eq.${employeeName.trim()}');
-        }
-        await client!.from('employees').update({
-          'bypass_geofence': bypassGeofence,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).or(orClauses.join(','));
       } catch (e) {
-        debugPrint('Supabase bypass_geofence update employees error: $e');
+        debugPrint('Supabase bypass_geofence update employees note: $e');
       }
 
       return true;
     } catch (e) {
       debugPrint('Supabase setEmployeeGeofenceBypass error: $e');
       return false;
+    }
+  }
+
+  /// Fetch Geofence bypass overrides from Supabase activity_logs and apply to local storage
+  Future<void> fetchGeofenceOverridesFromCloud() async {
+    if (!_isInitialized || client == null) return;
+    try {
+      final List<dynamic> logs = await client!
+          .from('activity_logs')
+          .select('details, created_at')
+          .eq('action', 'GEOFENCE_BYPASS_OVERRIDE')
+          .order('created_at', ascending: true);
+
+      final db = LocalDatabaseService();
+      for (final item in logs) {
+        if (item is Map && item['details'] != null && item['details'] is Map) {
+          final details = item['details'] as Map;
+          final idOrEmail = (details['employee_id'] ?? details['user_id'] ?? details['userId'] ?? details['email'] ?? '').toString().trim();
+          final bypass = details['bypass_geofence'] == true || details['bypassGeofence'] == true;
+          final email = details['email']?.toString();
+          final employeeCode = (details['employee_code'] ?? details['employeeCode'])?.toString();
+          final employeeName = (details['employee_name'] ?? details['name'])?.toString();
+
+          if (idOrEmail.isNotEmpty || (email != null && email.isNotEmpty) || (employeeCode != null && employeeCode.isNotEmpty)) {
+            db.toggleEmployeeGeofenceBypass(
+              idOrEmail.isNotEmpty ? idOrEmail : (employeeCode ?? email!),
+              bypass,
+              email: email,
+              employeeCode: employeeCode,
+              employeeName: employeeName,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Supabase fetchGeofenceOverridesFromCloud note: $e');
     }
   }
 
@@ -1592,13 +1741,135 @@ class SupabaseService {
     }
   }
 
+  /// Uploads and compresses employee identity card/pass documents to Supabase Storage
+  /// Stores file in 'employee_documents' bucket and returns CDN public URL, keeping PostgreSQL row size < 1 KB.
+  Future<String?> uploadEmployeeCardDocument({
+    required String employeeId,
+    required String cardId,
+    required Uint8List bytes,
+    required String fileName,
+    String? mimeType,
+  }) async {
+    if (!_isInitialized || client == null) return null;
+    try {
+      final ext = fileName.split('.').last.toLowerCase();
+      final effectiveMime = mimeType ?? (ext == 'pdf' ? 'application/pdf' : 'image/jpeg');
+      final safeCardId = cardId.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '');
+      final storagePath = 'cards/$employeeId/${safeCardId}_${DateTime.now().millisecondsSinceEpoch}.$ext';
+
+      await client!.storage.from('employee_documents').uploadBinary(
+            storagePath,
+            bytes,
+            fileOptions: FileOptions(
+              contentType: effectiveMime,
+              cacheControl: '86400',
+              upsert: true,
+            ),
+          );
+
+      final publicUrl = client!.storage.from('employee_documents').getPublicUrl(storagePath);
+      return publicUrl;
+    } catch (e) {
+      debugPrint('Supabase Storage employee_documents upload error: $e');
+      return null;
+    }
+  }
+
+  /// Generates a time-limited signed URL (default 3600 seconds = 1 hour) for confidential card documents
+  /// Ensures zero-trust security so document URLs cannot be permanently shared or accessed.
+  Future<String?> getSignedEmployeeCardUrl(String? documentUrlOrPath, {int expiresIn = 3600}) async {
+    if (!_isInitialized || client == null || documentUrlOrPath == null) return null;
+    final trimmed = documentUrlOrPath.trim();
+    if (trimmed.isEmpty || trimmed.startsWith('data:')) return trimmed;
+
+    try {
+      String storagePath = trimmed;
+      if (storagePath.contains('/employee_documents/')) {
+        storagePath = storagePath.split('/employee_documents/').last;
+      }
+      if (storagePath.contains('?')) {
+        storagePath = storagePath.split('?').first;
+      }
+
+      final signedUrl = await client!.storage.from('employee_documents').createSignedUrl(
+        storagePath,
+        expiresIn,
+      );
+      return signedUrl;
+    } catch (e) {
+      debugPrint('Error generating signed URL for card document: $e');
+      return trimmed;
+    }
+  }
+
   /// Helper to guarantee that a valid employee record exists in public.employees in Supabase
   Future<String?> ensureEmployeeExistsInCloud(
       String employeeIdOrUid, String employeeName) async {
     if (!_isInitialized || client == null) return null;
 
     try {
-      // 1. Check if employeeIdOrUid is a valid UUID in public.employees(id)
+      // 1. Resolve via Master Employee Directory FIRST using employeeName & employeeIdOrUid
+      // This prevents misattributed UUIDs from persisting or creating cross-employee log contamination.
+      final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+        code: employeeIdOrUid,
+        name: employeeName,
+        id: employeeIdOrUid,
+      );
+
+      if (official != null) {
+        // 1a. Search by email in users table
+        try {
+          final userByEmail = await client!
+              .from('users')
+              .select('id')
+              .eq('email', official.email.toLowerCase())
+              .maybeSingle();
+
+          if (userByEmail != null && userByEmail['id'] != null) {
+            final empByUser = await client!
+                .from('employees')
+                .select('id')
+                .eq('user_id', userByEmail['id'].toString())
+                .maybeSingle();
+            if (empByUser != null && empByUser['id'] != null) {
+              return empByUser['id'].toString();
+            }
+          }
+        } catch (_) {}
+
+        // 1b. Search by employee_code in employees table
+        try {
+          final empByCode = await client!
+              .from('employees')
+              .select('id')
+              .or('employee_code.eq.${official.employeeId},employee_code.eq.EMP-${official.employeeId}')
+              .maybeSingle();
+          if (empByCode != null && empByCode['id'] != null) {
+            return empByCode['id'].toString();
+          }
+        } catch (_) {}
+
+        // 1c. Search by employee_code in users table
+        try {
+          final userByCode = await client!
+              .from('users')
+              .select('id')
+              .or('employee_code.eq.${official.employeeId},employee_code.eq.EMP-${official.employeeId}')
+              .maybeSingle();
+          if (userByCode != null && userByCode['id'] != null) {
+            final empByUser = await client!
+                .from('employees')
+                .select('id')
+                .eq('user_id', userByCode['id'].toString())
+                .maybeSingle();
+            if (empByUser != null && empByUser['id'] != null) {
+              return empByUser['id'].toString();
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 2. Check if employeeIdOrUid is a valid UUID in public.employees(id)
       if (_isValidUuid(employeeIdOrUid)) {
         final existingEmp = await client!
             .from('employees')
@@ -1622,7 +1893,7 @@ class SupabaseService {
         }
       }
 
-      // 2. Resolve user_id from public.users by firebase_uid or id
+      // 3. Resolve user_id from public.users by firebase_uid or id
       String? userUuid;
       if (_isValidUuid(employeeIdOrUid)) {
         userUuid = employeeIdOrUid;
@@ -1638,7 +1909,6 @@ class SupabaseService {
         }
       }
 
-      // 3. If user found, check if employee row exists for this user_id
       if (userUuid != null) {
         final empByUser = await client!
             .from('employees')
@@ -1651,30 +1921,60 @@ class SupabaseService {
         }
       }
 
-      // 4. Auto-provision user + employee in cloud if missing
+      // 4. Search by employee name in employees and users tables
+      if (employeeName.trim().isNotEmpty) {
+        try {
+          final cleanName = employeeName.trim();
+          final empByName = await client!
+              .from('employees')
+              .select('id')
+              .or('name.ilike.%$cleanName%,full_name.ilike.%$cleanName%')
+              .limit(1)
+              .maybeSingle();
+          if (empByName != null && empByName['id'] != null) {
+            return empByName['id'].toString();
+          }
+
+          final userByName = await client!
+              .from('users')
+              .select('id')
+              .ilike('full_name', '%$cleanName%')
+              .limit(1)
+              .maybeSingle();
+          if (userByName != null && userByName['id'] != null) {
+            final empByUser = await client!
+                .from('employees')
+                .select('id')
+                .eq('user_id', userByName['id'].toString())
+                .maybeSingle();
+            if (empByUser != null && empByUser['id'] != null) {
+              return empByUser['id'].toString();
+            }
+            return userByName['id'].toString();
+          }
+        } catch (_) {}
+      }
+
+      // 5. Provision employee if known in directory
       final localOrg = LocalDatabaseService().organization;
       final orgId = localOrg?.id ?? '00000000-0000-0000-0000-000000000001';
       final validOrgId = await ensureOrganizationExistsInCloud(orgId) ?? orgId;
-      final currentUser = LocalDatabaseService().currentUser;
 
-      final targetFirebaseUid = _isValidUuid(employeeIdOrUid)
-          ? 'user_${_uuid.v4()}'
-          : employeeIdOrUid;
+      final targetName = official != null ? official.fullName : (employeeName.isNotEmpty ? employeeName : 'Field Employee');
+      final targetEmail = official != null ? official.email : 'user_${_uuid.v4().substring(0, 8)}@enterprise.com';
+      final targetCode = official != null ? official.employeeId : 'EMP-${_uuid.v4().substring(0, 4).toUpperCase()}';
+      final targetUid = 'user_${official?.employeeId ?? _uuid.v4()}';
 
       final createdUser = await createUserInSupabase(
-        firebaseUid: targetFirebaseUid,
+        firebaseUid: targetUid,
         orgId: validOrgId,
-        email: currentUser?.email ?? 'user@enterprise.com',
-        fullName: employeeName.isNotEmpty
-            ? employeeName
-            : (currentUser?.fullName ?? 'Field Employee'),
-        phoneNumber: currentUser?.phoneNumber,
-        role: currentUser?.role ?? UserRole.employee,
+        email: targetEmail,
+        fullName: targetName,
+        role: UserRole.employee,
         requiresPasswordChange: false,
-        employeeCode:
-            'EMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
-        designation: 'Field Engineer',
-        department: 'Operations',
+        employeeCode: targetCode,
+        designation: official?.designation ?? 'Field Staff',
+        department: official?.department ?? 'Operations',
       );
 
       if (createdUser != null) {
@@ -1693,19 +1993,9 @@ class SupabaseService {
       debugPrint('ensureEmployeeExistsInCloud note: $e');
     }
 
-    // 5. Fallback: Any active employee in employees table
-    try {
-      final anyEmp = await client!
-          .from('employees')
-          .select('id')
-          .eq('is_deleted', false)
-          .limit(1)
-          .maybeSingle();
-
-      if (anyEmp != null && anyEmp['id'] != null) {
-        return anyEmp['id'].toString();
-      }
-    } catch (_) {}
+    if (_isValidUuid(employeeIdOrUid)) {
+      return employeeIdOrUid;
+    }
 
     return null;
   }
@@ -1814,50 +2104,167 @@ class SupabaseService {
     }
   }
 
-  /// Save or update admin attendance override records directly in Supabase DB
+  /// Save or update admin attendance override records directly in Supabase DB using high-speed bulk upsert
   Future<bool> saveAdminAttendanceOverride({
     required List<AttendanceRecord> records,
   }) async {
     if (!_isInitialized || client == null || records.isEmpty) return false;
 
-    bool allSuccess = true;
-    for (final rec in records) {
-      final ok = await insertAttendanceEntry(record: rec);
-      if (!ok) allSuccess = false;
+    try {
+      final localOrg = LocalDatabaseService().organization;
+      final orgId = localOrg?.id ?? '00000000-0000-0000-0000-000000000001';
+      final validOrgId = await ensureOrganizationExistsInCloud(orgId) ?? orgId;
+
+      // Cache resolved employee cloud UUIDs across this batch to avoid repeating lookups
+      final Map<String, String?> resolvedEmployeeIds = {};
+      for (final rec in records) {
+        final key = '${rec.employeeId}|${rec.employeeName}';
+        if (!resolvedEmployeeIds.containsKey(key)) {
+          resolvedEmployeeIds[key] = await ensureEmployeeExistsInCloud(
+            rec.employeeId,
+            rec.employeeName,
+          );
+        }
+      }
+
+      final List<Map<String, dynamic>> payloads = [];
+      for (final record in records) {
+        final key = '${record.employeeId}|${record.employeeName}';
+        final validEmployeeId = resolvedEmployeeIds[key] ??
+            (_isValidUuid(record.employeeId) ? record.employeeId : null);
+
+        if (validEmployeeId == null) {
+          debugPrint('saveAdminAttendanceOverride: No valid employee cloud ID for ${record.employeeName}');
+          continue;
+        }
+
+        String? targetRecordUuid = _isValidUuid(record.id) ? record.id : null;
+
+        final payload = <String, dynamic>{
+          if (targetRecordUuid != null) 'id': targetRecordUuid,
+          'organization_id': validOrgId,
+          'employee_id': validEmployeeId,
+          'employee_name': record.employeeName,
+          'workflow_step': record.workflowStep.name,
+          'event_timestamp': record.eventTimestamp.toIso8601String(),
+          'latitude': record.latitude,
+          'longitude': record.longitude,
+          'is_geofence_valid': record.isGeofenceValid,
+          'photo_url': record.photoBase64.isNotEmpty ? record.photoBase64 : null,
+          'address': record.address,
+          if (record.officeId != null && record.officeId!.isNotEmpty && _isValidUuid(record.officeId))
+            'office_id': record.officeId,
+          if (record.workSiteId != null && record.workSiteId!.isNotEmpty && _isValidUuid(record.workSiteId))
+            'work_site_id': record.workSiteId,
+          if (record.siteName != null && record.siteName!.isNotEmpty)
+            'site_name': record.siteName,
+          'manual_overtime_hours': record.manualOvertimeHours,
+          'remarks': record.remarks,
+          'is_edited': record.isEdited,
+          'edited_by': record.editedBy,
+          'device_id': record.deviceId.isEmpty ? 'OFFICE_CALENDAR_ENTRY' : record.deviceId,
+          'created_at': DateTime.now().toIso8601String(),
+        };
+        payloads.add(payload);
+      }
+
+      if (payloads.isEmpty) return false;
+
+      // Upsert in chunks of 50 to stay within request size limits
+      const chunkSize = 50;
+      for (var i = 0; i < payloads.length; i += chunkSize) {
+        final chunk = payloads.sublist(
+          i,
+          (i + chunkSize > payloads.length) ? payloads.length : i + chunkSize,
+        );
+        int retries = 0;
+        while (retries < 3) {
+          try {
+            await client!.from('attendance_records').upsert(chunk);
+            break;
+          } catch (e) {
+            final errStr = e.toString();
+            if (errStr.contains('PGRST204') || errStr.contains('Could not find the')) {
+              final RegExp regExp = RegExp(r"Could not find the '([^']+)' column");
+              final match = regExp.firstMatch(errStr);
+              if (match != null) {
+                final missingCol = match.group(1);
+                if (missingCol != null) {
+                  for (final item in chunk) {
+                    item.remove(missingCol);
+                  }
+                  retries++;
+                  continue;
+                }
+              }
+            }
+            debugPrint('Supabase bulk upsert chunk error: $e');
+            break;
+          }
+        }
+      }
+      return true;
+    } catch (e) {
+      debugPrint('Supabase saveAdminAttendanceOverride bulk error: $e');
+      // Fallback: try individual inserts if bulk has unexpected schema error
+      for (final rec in records) {
+        try {
+          await insertAttendanceEntry(record: rec);
+        } catch (_) {}
+      }
+      return false;
     }
-    return allSuccess;
   }
 
-  /// Fetch attendance records from Supabase cloud database with optional filtering and automatic pagination
+  /// Delete attendance records by their IDs from Supabase cloud database
+  Future<bool> deleteAttendanceRecords(List<String> recordIds) async {
+    if (!_isInitialized || client == null || recordIds.isEmpty) return false;
+    try {
+      await client!.from('attendance_records').delete().inFilter('id', recordIds);
+      return true;
+    } catch (e) {
+      debugPrint('Supabase deleteAttendanceRecords inFilter error: $e. Retrying per id...');
+      try {
+        for (final id in recordIds) {
+          await client!.from('attendance_records').delete().eq('id', id);
+        }
+        return true;
+      } catch (inner) {
+        debugPrint('Supabase deleteAttendanceRecords per id error: $inner');
+        return false;
+      }
+    }
+  }
+
+  /// Lightweight attendance fetch optimized for free-tier Supabase:
+  /// - Excludes heavy binary/base64 photo_url from bulk list queries (~200 bytes per record)
+  /// - Fully dynamic: works seamlessly for all past records and all coming future months
+  /// - Uses safe pagination up to 50,000 records without arbitrary date cutoffs
   Future<List<AttendanceRecord>> fetchAttendanceRecordsFromSupabase({
     String? employeeId,
     String? employeeName,
+    int maxRecords = 50000,
     DateTime? since,
-    int maxRecords = 20000,
   }) async {
     if (!_isInitialized || client == null) return [];
     try {
       final List<AttendanceRecord> records = [];
-      final int pageSize = employeeId != null ? 500 : 1000;
+      const int pageSize = 1000;
       int from = 0;
       bool hasMore = true;
 
+      // Column projection: includes photo_url (CDN URL string) so attendance verification photos are visible
+      const String lightColumns =
+          'id, organization_id, employee_id, employee_name, workflow_step, event_timestamp, sync_timestamp, latitude, longitude, gps_accuracy, address, device_id, is_geofence_valid, office_id, work_site_id, site_name, manual_overtime_hours, remarks, is_edited, edited_by, created_at, photo_url';
+
       while (hasMore && records.length < maxRecords) {
-        var query = client!.from('attendance_records').select();
-
-        final hasId = employeeId != null && employeeId.trim().isNotEmpty;
-        final hasName = employeeName != null && employeeName.trim().isNotEmpty;
-
-        if (hasId && hasName) {
-          query = query.or('employee_id.eq.${employeeId.trim()},employee_name.ilike.%${employeeName.trim()}%');
-        } else if (hasId) {
-          query = query.eq('employee_id', employeeId.trim());
-        } else if (hasName) {
-          query = query.ilike('employee_name', '%${employeeName.trim()}%');
-        }
+        var query = client!.from('attendance_records').select(lightColumns);
 
         if (since != null) {
-          query = query.gte('event_timestamp', since.toUtc().toIso8601String());
+          query = query.gte('event_timestamp', since.toIso8601String());
+        }
+        if (employeeId != null && employeeId.trim().isNotEmpty) {
+          query = query.eq('employee_id', employeeId.trim());
         }
 
         final List<dynamic> response = await query
@@ -1873,7 +2280,12 @@ class SupabaseService {
           try {
             final map = Map<String, dynamic>.from(json);
             final rec = AttendanceRecord.fromJson(map);
-            records.add(rec.copyWith(syncStatus: SyncStatus.synced));
+            if (!EmployeeDirectoryHelper.isRelievedEmployee(
+              id: rec.employeeId,
+              name: rec.employeeName,
+            )) {
+              records.add(rec.copyWith(syncStatus: SyncStatus.synced));
+            }
           } catch (e) {
             debugPrint('Supabase parse attendance record error: $e');
           }
@@ -1885,6 +2297,7 @@ class SupabaseService {
           from += pageSize;
         }
       }
+
 
       return records;
     } catch (e) {
@@ -2259,5 +2672,53 @@ class SupabaseService {
       reportsSynced: reportsSynced,
       workPhotosSynced: workPhotosSynced,
     );
+  }
+
+  /// Fetches photo URL or base64 proof on demand for a single attendance record.
+  Future<String?> fetchAttendanceRecordPhoto(String recordId) async {
+    if (!_isInitialized || client == null || recordId.isEmpty) return null;
+    try {
+      final response = await client!
+          .from('attendance_records')
+          .select('photo_url')
+          .eq('id', recordId)
+          .maybeSingle();
+      if (response != null && response['photo_url'] != null) {
+        final val = response['photo_url']?.toString().trim();
+        if (val != null && val.isNotEmpty) {
+          return val;
+        }
+      }
+    } catch (e) {
+      debugPrint('Supabase fetchAttendanceRecordPhoto error: $e');
+    }
+    return null;
+  }
+
+  /// Fetches photo URLs on demand for multiple attendance records in a single query.
+  Future<Map<String, String>> fetchAttendanceRecordPhotos(List<String> recordIds) async {
+    if (!_isInitialized || client == null || recordIds.isEmpty) return {};
+    try {
+      final validIds = recordIds.where((id) => id.isNotEmpty).toList();
+      if (validIds.isEmpty) return {};
+      final List<dynamic> response = await client!
+          .from('attendance_records')
+          .select('id, photo_url')
+          .inFilter('id', validIds);
+
+      final Map<String, String> photoMap = {};
+      for (final item in response) {
+        if (item is Map && item['id'] != null && item['photo_url'] != null) {
+          final url = item['photo_url'].toString().trim();
+          if (url.isNotEmpty) {
+            photoMap[item['id'].toString()] = url;
+          }
+        }
+      }
+      return photoMap;
+    } catch (e) {
+      debugPrint('Supabase fetchAttendanceRecordPhotos error: $e');
+      return {};
+    }
   }
 }

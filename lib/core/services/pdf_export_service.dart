@@ -10,6 +10,11 @@ import '../utils/leave_calculator.dart';
 import '../utils/salary_cycle_helper.dart';
 import '../utils/timesheet_calculator.dart';
 import '../utils/employee_directory_helper.dart';
+import '../../features/salary/domain/employee_salary_config.dart';
+import '../../features/salary/domain/daily_salary_record.dart';
+import '../../features/salary/domain/employee_salary_summary.dart';
+import '../../features/salary/utils/salary_calculator.dart';
+import '../../database/local_database_service.dart';
 
 class PdfExportService {
   /// Generates a formatted PDF binary document for cumulative employee hours report
@@ -22,41 +27,10 @@ class PdfExportService {
   }) async {
     final pdf = pw.Document();
 
-    double grandReg = 0.0;
-    double grandOt = 0.0;
-    int grandLeaves = 0;
-    int grandSundays = 0;
-    int grandDaysWorked = 0;
-
     final List<Map<String, dynamic>> empRows = [];
     final activeCycle = salaryCycle ?? SalaryCycle.current();
 
     for (final emp in employees) {
-      final empRecords = records.where((r) {
-        return EmployeeDirectoryHelper.matchesEmployeeIdentity(
-          recordEmployeeId: r.employeeId,
-          recordEmployeeName: r.employeeName,
-          employeeId: emp.id,
-          employeeCode: emp.employeeCode,
-          employeeName: emp.name,
-          employeeEmail: emp.email,
-        );
-      }).toList();
-
-      final timesheets = TimesheetCalculator.calculateDailyTimesheets(empRecords);
-
-      double regHours = 0.0;
-      double otHours = 0.0;
-
-      for (final t in timesheets) {
-        regHours += t.regularHours;
-        otHours += t.overtimeHours;
-      }
-
-      grandReg += regHours;
-      grandOt += otHours;
-      grandDaysWorked += timesheets.length;
-
       final empEntity = emp is EmployeeEntity
           ? emp
           : EmployeeEntity(
@@ -68,20 +42,52 @@ class PdfExportService {
               designation: emp.designation ?? '',
               department: emp.department ?? 'General',
             );
+
+      final empRecords = records.where((r) {
+        return EmployeeDirectoryHelper.matchesEmployeeIdentity(
+          recordEmployeeId: r.employeeId,
+          recordEmployeeName: r.employeeName,
+          employeeId: empEntity.id,
+          employeeCode: empEntity.employeeCode,
+          employeeName: empEntity.name,
+          employeeEmail: empEntity.email,
+        );
+      }).toList();
+
+      // Strictly clamp attendance records to the salary cycle range
+      final cycleRecords = empRecords
+          .where((r) => activeCycle.contains(r.eventTimestamp))
+          .toList();
+
+      final timesheets = TimesheetCalculator.calculateDailyTimesheets(
+        cycleRecords,
+        targetEmployeeId: empEntity.id,
+        targetEmployeeName: empEntity.name,
+        startDate: activeCycle.startDate,
+        endDate: activeCycle.endDate,
+      );
+
+      double regHours = 0.0;
+      double otHours = 0.0;
+
+      for (final t in timesheets) {
+        regHours += t.regularHours;
+        otHours += t.overtimeHours;
+      }
+
       final leaveSummary = LeaveCalculator.calculateEmployeeLeave(
         empEntity,
-        empRecords,
+        cycleRecords,
         activeCycle,
       );
 
-      grandLeaves += leaveSummary.leaveDays;
-      grandSundays += leaveSummary.sundayWeeklyOffs;
+      final int daysWorked = leaveSummary.daysWorked;
 
       empRows.add({
-        'code': emp.employeeCode ?? '',
-        'name': emp.name ?? '',
-        'dept': emp.department ?? 'General',
-        'days': timesheets.length,
+        'code': empEntity.employeeCode,
+        'name': empEntity.name,
+        'dept': empEntity.department.isNotEmpty ? empEntity.department : 'General',
+        'days': daysWorked,
         'leaves': leaveSummary.leaveDays,
         'sundays': leaveSummary.sundayWeeklyOffs,
         'reg': regHours,
@@ -90,7 +96,30 @@ class PdfExportService {
       });
     }
 
-    final grandCombined = grandReg + grandOt;
+    // Split workforce into active staff (days > 0) and zero days staff (days == 0)
+    final activeEmpRows = empRows.where((r) => (r['days'] as int) > 0).toList();
+    final zeroDaysEmpRows = empRows.where((r) => (r['days'] as int) == 0).toList();
+
+    double activeReg = 0.0;
+    double activeOt = 0.0;
+    int activeDays = 0;
+    int activeLeaves = 0;
+    int activeSundays = 0;
+    for (final r in activeEmpRows) {
+      activeReg += (r['reg'] as double);
+      activeOt += (r['ot'] as double);
+      activeDays += (r['days'] as int);
+      activeLeaves += (r['leaves'] as int);
+      activeSundays += (r['sundays'] as int);
+    }
+    final activeCombined = activeReg + activeOt;
+
+    int zeroLeaves = 0;
+    int zeroSundays = 0;
+    for (final r in zeroDaysEmpRows) {
+      zeroLeaves += (r['leaves'] as int);
+      zeroSundays += (r['sundays'] as int);
+    }
 
     pdf.addPage(
       pw.MultiPage(
@@ -170,90 +199,364 @@ class PdfExportService {
             pw.Divider(thickness: 1, color: PdfColors.grey300),
             pw.SizedBox(height: 10),
 
-            // Summary Header Box with Leave Taken Data Count
+            // Tab 1: Executive Summary - Employees with Working Days
             pw.Container(
-              padding: const pw.EdgeInsets.all(10),
+              margin: const pw.EdgeInsets.only(bottom: 8),
               decoration: pw.BoxDecoration(
-                color: PdfColors.blueGrey50,
+                color: PdfColors.indigo50,
                 borderRadius: pw.BorderRadius.circular(6),
-                border: pw.Border.all(color: PdfColors.blueGrey200),
+                border: pw.Border.all(color: PdfColors.indigo200, width: 0.8),
               ),
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Column(children: [
-                    pw.Text('Total Staff', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
-                    pw.SizedBox(height: 2),
-                    pw.Text('${employees.length}', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
-                  ]),
-                  pw.Column(children: [
-                    pw.Text('Days Worked', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
-                    pw.SizedBox(height: 2),
-                    pw.Text('${grandDaysWorked} d', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.green800)),
-                  ]),
-                  pw.Column(children: [
-                    pw.Text('Leaves Taken', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
-                    pw.SizedBox(height: 2),
-                    pw.Text('${grandLeaves} Days', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: grandLeaves > 0 ? PdfColors.red800 : PdfColors.green800)),
-                  ]),
-                  pw.Column(children: [
-                    pw.Text('Sunday Offs', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
-                    pw.SizedBox(height: 2),
-                    pw.Text('${grandSundays} d', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.purple800)),
-                  ]),
-                  pw.Column(children: [
-                    pw.Text('Regular Hours', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
-                    pw.SizedBox(height: 2),
-                    pw.Text('${grandReg.toStringAsFixed(1)} hrs', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
-                  ]),
-                  pw.Column(children: [
-                    pw.Text('Overtime OT', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
-                    pw.SizedBox(height: 2),
-                    pw.Text('+${grandOt.toStringAsFixed(1)} hrs', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.orange900)),
-                  ]),
-                  pw.Column(children: [
-                    pw.Text('Combined Total', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
-                    pw.SizedBox(height: 2),
-                    pw.Text('${grandCombined.toStringAsFixed(1)} hrs', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
-                  ]),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: const pw.BoxDecoration(
+                      color: PdfColors.indigo900,
+                      borderRadius: pw.BorderRadius.only(
+                        topLeft: pw.Radius.circular(5),
+                        topRight: pw.Radius.circular(5),
+                      ),
+                    ),
+                    child: pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text(
+                          'SUMMARY: EMPLOYEES WITH WORKING DAYS',
+                          style: pw.TextStyle(
+                            fontSize: 8.5,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.white,
+                          ),
+                        ),
+                        pw.Text(
+                          '${activeEmpRows.length} Active Staff',
+                          style: pw.TextStyle(
+                            fontSize: 8,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    child: pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+                      children: [
+                        pw.Column(children: [
+                          pw.Text('Active Staff', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                          pw.SizedBox(height: 2),
+                          pw.Text('${activeEmpRows.length}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
+                        ]),
+                        pw.Column(children: [
+                          pw.Text('Days Worked', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                          pw.SizedBox(height: 2),
+                          pw.Text('${activeDays}d', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.green800)),
+                        ]),
+                        pw.Column(children: [
+                          pw.Text('Leaves Taken', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                          pw.SizedBox(height: 2),
+                          pw.Text('${activeLeaves}d', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: activeLeaves > 0 ? PdfColors.red800 : PdfColors.green800)),
+                        ]),
+                        pw.Column(children: [
+                          pw.Text('Sunday Offs', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                          pw.SizedBox(height: 2),
+                          pw.Text('${activeSundays}d', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.purple800)),
+                        ]),
+                        pw.Column(children: [
+                          pw.Text('Regular Hours', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                          pw.SizedBox(height: 2),
+                          pw.Text('${activeReg.toStringAsFixed(1)}h', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
+                        ]),
+                        pw.Column(children: [
+                          pw.Text('Overtime OT', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                          pw.SizedBox(height: 2),
+                          pw.Text('+${activeOt.toStringAsFixed(1)}h', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.orange900)),
+                        ]),
+                        pw.Column(children: [
+                          pw.Text('Combined Total', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                          pw.SizedBox(height: 2),
+                          pw.Text('${activeCombined.toStringAsFixed(1)}h', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
+                        ]),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
-            pw.SizedBox(height: 14),
 
-            // Employee Cumulative Table with Leave Count and Total Summary Row
-            pw.TableHelper.fromTextArray(
-              headers: ['Emp Code', 'Employee Name', 'Department', 'Worked', 'Leaves Taken', 'Sun Off', 'Regular', 'OT', 'Combined Total'],
-              data: [
-                ...empRows.map((row) => [
-                  row['code'],
-                  row['name'],
-                  row['dept'],
-                  '${row['days']} d',
-                  '${row['leaves']} d',
-                  '${row['sundays']} d',
-                  '${(row['reg'] as double).toStringAsFixed(1)} h',
-                  '+${(row['ot'] as double).toStringAsFixed(1)} h',
-                  '${(row['combined'] as double).toStringAsFixed(1)} h',
-                ]),
-                [
-                  'TOTAL',
-                  '${employees.length} Staff',
-                  'All Depts',
-                  '${grandDaysWorked} d',
-                  '${grandLeaves} d',
-                  '${grandSundays} d',
-                  '${grandReg.toStringAsFixed(1)} h',
-                  '+${grandOt.toStringAsFixed(1)} h',
-                  '${grandCombined.toStringAsFixed(1)} h',
+            // Tab 2: Executive Summary - Employees with Zero Working Days
+            pw.Container(
+              margin: const pw.EdgeInsets.only(bottom: 12),
+              decoration: pw.BoxDecoration(
+                color: zeroDaysEmpRows.isNotEmpty ? PdfColors.red50 : PdfColors.blueGrey50,
+                borderRadius: pw.BorderRadius.circular(6),
+                border: pw.Border.all(
+                  color: zeroDaysEmpRows.isNotEmpty ? PdfColors.red200 : PdfColors.blueGrey200,
+                  width: 0.8,
+                ),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: pw.BoxDecoration(
+                      color: zeroDaysEmpRows.isNotEmpty ? PdfColors.red900 : PdfColors.blueGrey700,
+                      borderRadius: const pw.BorderRadius.only(
+                        topLeft: pw.Radius.circular(5),
+                        topRight: pw.Radius.circular(5),
+                      ),
+                    ),
+                    child: pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text(
+                          'SUMMARY: EMPLOYEES WITH ZERO WORKING DAYS',
+                          style: pw.TextStyle(
+                            fontSize: 8.5,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.white,
+                          ),
+                        ),
+                        pw.Text(
+                          '${zeroDaysEmpRows.length} Staff (0 Shifts Logged)',
+                          style: pw.TextStyle(
+                            fontSize: 8,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    child: pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+                      children: [
+                        pw.Column(children: [
+                          pw.Text('Zero Days Staff', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                          pw.SizedBox(height: 2),
+                          pw.Text('${zeroDaysEmpRows.length}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: zeroDaysEmpRows.isNotEmpty ? PdfColors.red900 : PdfColors.grey700)),
+                        ]),
+                        pw.Column(children: [
+                          pw.Text('Days Worked', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                          pw.SizedBox(height: 2),
+                          pw.Text('0d', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                        ]),
+                        pw.Column(children: [
+                          pw.Text('Leaves / Absent', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                          pw.SizedBox(height: 2),
+                          pw.Text('${zeroLeaves}d', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: zeroLeaves > 0 ? PdfColors.red800 : PdfColors.grey700)),
+                        ]),
+                        pw.Column(children: [
+                          pw.Text('Sunday Offs', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                          pw.SizedBox(height: 2),
+                          pw.Text('${zeroSundays}d', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.purple800)),
+                        ]),
+                        pw.Column(children: [
+                          pw.Text('Regular Hours', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                          pw.SizedBox(height: 2),
+                          pw.Text('0.0h', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                        ]),
+                        pw.Column(children: [
+                          pw.Text('Overtime OT', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                          pw.SizedBox(height: 2),
+                          pw.Text('+0.0h', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                        ]),
+                        pw.Column(children: [
+                          pw.Text('Combined Total', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                          pw.SizedBox(height: 2),
+                          pw.Text('0.0h', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                        ]),
+                      ],
+                    ),
+                  ),
                 ],
-              ],
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 8.5),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo900),
-              cellStyle: const pw.TextStyle(fontSize: 8.5),
-              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 5),
-              cellAlignment: pw.Alignment.centerLeft,
+              ),
             ),
+            pw.SizedBox(height: 4),
+
+            // Section 1 Header: Active Workforce (Worked >= 1 Day)
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  'ACTIVE CONTRIBUTING WORKFORCE (Worked >= 1 Day)',
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.indigo900,
+                  ),
+                ),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.green50,
+                    borderRadius: pw.BorderRadius.circular(4),
+                    border: pw.Border.all(color: PdfColors.green300, width: 0.5),
+                  ),
+                  child: pw.Text(
+                    '${activeEmpRows.length} Active Staff',
+                    style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.green900),
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 6),
+
+            if (activeEmpRows.isEmpty)
+              pw.Container(
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+                child: pw.Center(
+                  child: pw.Text(
+                    'No active employees logged work shifts during this salary cycle.',
+                    style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700),
+                  ),
+                ),
+              )
+            else
+              pw.TableHelper.fromTextArray(
+                headers: ['Emp Code', 'Employee Name', 'Department', 'Worked', 'Leaves Taken', 'Sun Off', 'Regular', 'OT', 'Combined Total'],
+                data: [
+                  ...activeEmpRows.map((row) => [
+                    row['code'],
+                    row['name'],
+                    row['dept'],
+                    '${row['days']}d',
+                    '${row['leaves']}d',
+                    '${row['sundays']}d',
+                    '${(row['reg'] as double).toStringAsFixed(1)}h',
+                    '+${(row['ot'] as double).toStringAsFixed(1)}h',
+                    '${(row['combined'] as double).toStringAsFixed(1)}h',
+                  ]),
+                  [
+                    'SUBTOTAL',
+                    '${activeEmpRows.length} Active Staff',
+                    'Active Depts',
+                    '${activeDays}d',
+                    '${activeLeaves}d',
+                    '${activeSundays}d',
+                    '${activeReg.toStringAsFixed(1)}h',
+                    '+${activeOt.toStringAsFixed(1)}h',
+                    '${activeCombined.toStringAsFixed(1)}h',
+                  ],
+                ],
+                columnWidths: const {
+                  0: pw.FlexColumnWidth(1.2),
+                  1: pw.FlexColumnWidth(2.2),
+                  2: pw.FlexColumnWidth(1.6),
+                  3: pw.FlexColumnWidth(1.0),
+                  4: pw.FlexColumnWidth(1.1),
+                  5: pw.FlexColumnWidth(1.0),
+                  6: pw.FlexColumnWidth(1.2),
+                  7: pw.FlexColumnWidth(1.1),
+                  8: pw.FlexColumnWidth(1.4),
+                },
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 8.5),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo900),
+                cellStyle: const pw.TextStyle(fontSize: 8.5),
+                cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+                cellAlignment: pw.Alignment.centerLeft,
+              ),
+            pw.SizedBox(height: 16),
+
+            // Section 2 Header: Personnel with Zero Days Worked
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  'PERSONNEL WITH ZERO DAYS WORKED (0 Shifts Logged in Cycle)',
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                    color: zeroDaysEmpRows.isNotEmpty ? PdfColors.red900 : PdfColors.grey700,
+                  ),
+                ),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: pw.BoxDecoration(
+                    color: zeroDaysEmpRows.isNotEmpty ? PdfColors.red50 : PdfColors.green50,
+                    borderRadius: pw.BorderRadius.circular(4),
+                    border: pw.Border.all(
+                      color: zeroDaysEmpRows.isNotEmpty ? PdfColors.red300 : PdfColors.green300,
+                      width: 0.5,
+                    ),
+                  ),
+                  child: pw.Text(
+                    '${zeroDaysEmpRows.length} Staff (0 Days Worked)',
+                    style: pw.TextStyle(
+                      fontSize: 8,
+                      fontWeight: pw.FontWeight.bold,
+                      color: zeroDaysEmpRows.isNotEmpty ? PdfColors.red900 : PdfColors.green900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 6),
+
+            if (zeroDaysEmpRows.isEmpty)
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.green50,
+                  borderRadius: pw.BorderRadius.circular(4),
+                  border: pw.Border.all(color: PdfColors.green200, width: 0.5),
+                ),
+                child: pw.Center(
+                  child: pw.Text(
+                    'All ${employees.length} registered employees have active attendance logged in this salary cycle.',
+                    style: pw.TextStyle(fontSize: 8.5, color: PdfColors.green900, fontWeight: pw.FontWeight.bold),
+                  ),
+                ),
+              )
+            else
+              pw.TableHelper.fromTextArray(
+                headers: ['Emp Code', 'Employee Name', 'Department', 'Worked', 'Leaves / Absent', 'Sunday Off', 'Status / Remarks'],
+                data: [
+                  ...zeroDaysEmpRows.map((row) => [
+                    row['code'],
+                    row['name'],
+                    row['dept'],
+                    '0d',
+                    '${row['leaves']}d',
+                    '${row['sundays']}d',
+                    '0 Shifts Recorded (Zero Duty Hours)',
+                  ]),
+                  [
+                    'SUBTOTAL',
+                    '${zeroDaysEmpRows.length} Staff',
+                    'All Depts',
+                    '0d',
+                    '${zeroLeaves}d',
+                    '${zeroSundays}d',
+                    'No logged attendance in cycle',
+                  ],
+                ],
+                columnWidths: const {
+                  0: pw.FlexColumnWidth(1.2),
+                  1: pw.FlexColumnWidth(2.2),
+                  2: pw.FlexColumnWidth(1.6),
+                  3: pw.FlexColumnWidth(1.0),
+                  4: pw.FlexColumnWidth(1.2),
+                  5: pw.FlexColumnWidth(1.0),
+                  6: pw.FlexColumnWidth(2.6),
+                },
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 8.5),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
+                cellStyle: const pw.TextStyle(fontSize: 8.5),
+                cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+                cellAlignment: pw.Alignment.centerLeft,
+              ),
             pw.SizedBox(height: 16),
 
             // Site / Client Man-Hours Breakdown in Cumulative Report
@@ -282,7 +585,7 @@ class PdfExportService {
                       return [
                         s.siteName,
                         s.clientGroup,
-                        '${s.totalHours.toStringAsFixed(1)} hrs',
+                        '${s.totalHours.toStringAsFixed(1)}h',
                         '$pct%',
                         '${s.totalVisits}',
                         '${s.distinctEmployeesCount} Staff',
@@ -391,7 +694,7 @@ class PdfExportService {
                   pw.Column(children: [
                     pw.Text('Total Site Man-Hours', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
                     pw.SizedBox(height: 2),
-                    pw.Text('${totalManHours.toStringAsFixed(1)} hrs', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
+                    pw.Text('${totalManHours.toStringAsFixed(1)}h', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
                   ]),
                   pw.Column(children: [
                     pw.Text('Active Sites/Clients', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
@@ -426,7 +729,7 @@ class PdfExportService {
                 return [
                   s.siteName,
                   s.clientGroup,
-                  '${s.totalHours.toStringAsFixed(1)} hrs',
+                  '${s.totalHours.toStringAsFixed(1)}h',
                   '$pct%',
                   '${s.totalVisits}',
                   '${s.distinctEmployeesCount}',
@@ -500,16 +803,7 @@ class PdfExportService {
     SalaryCycle? salaryCycle,
   }) async {
     final pdf = pw.Document();
-    final timesheets = TimesheetCalculator.calculateDailyTimesheets(records);
-
-    double totalReg = 0.0;
-    double totalOt = 0.0;
-    int totalBreakMinutes = 0;
-    for (final t in timesheets) {
-      totalReg += t.regularHours;
-      totalOt += t.overtimeHours;
-      totalBreakMinutes += t.breakDuration.inMinutes;
-    }
+    final activeCycle = salaryCycle ?? SalaryCycle.current();
 
     final String empName = employee.name ?? 'Employee';
     final String empCode = employee.employeeCode ?? 'EMP';
@@ -527,14 +821,44 @@ class PdfExportService {
             designation: employee.designation ?? '',
             department: department,
           );
-    final activeCycle = salaryCycle ?? SalaryCycle.current();
+
+    // Filter records strictly belonging to this employee and strictly within activeCycle
+    final cycleRecords = records.where((r) {
+      final isEmp = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: r.employeeId,
+        recordEmployeeName: r.employeeName,
+        employeeId: empEntity.id,
+        employeeCode: empEntity.employeeCode,
+        employeeName: empEntity.name,
+        employeeEmail: empEntity.email,
+      );
+      return isEmp && activeCycle.contains(r.eventTimestamp);
+    }).toList();
+
+    final timesheets = TimesheetCalculator.calculateDailyTimesheets(
+      cycleRecords,
+      targetEmployeeId: empEntity.id,
+      targetEmployeeName: empEntity.name,
+      startDate: activeCycle.startDate,
+      endDate: activeCycle.endDate,
+    );
+
+    double totalReg = 0.0;
+    double totalOt = 0.0;
+    int totalBreakMinutes = 0;
+    for (final t in timesheets) {
+      totalReg += t.regularHours;
+      totalOt += t.overtimeHours;
+      totalBreakMinutes += t.breakDuration.inMinutes;
+    }
+
     final empLeaveSummary = LeaveCalculator.calculateEmployeeLeave(
       empEntity,
-      records,
+      cycleRecords,
       activeCycle,
     );
 
-    final employeeSiteHours = TimesheetCalculator.calculateEmployeeSiteHours(empId, records);
+    final employeeSiteHours = TimesheetCalculator.calculateEmployeeSiteHours(empId, cycleRecords);
 
     // Map daily timesheets by date string (yyyy-MM-dd)
     final Map<String, DailyTimesheetEntry> timesheetMap = {};
@@ -555,8 +879,8 @@ class PdfExportService {
       String statusStr;
       String inTime = '--:--';
       String outTime = '--:--';
-      String regStr = '0.0 h';
-      String otStr = '+0.0 h';
+      String regStr = '0.0h';
+      String otStr = '+0.0h';
       String siteActivity = '';
 
       switch (d.type) {
@@ -565,8 +889,8 @@ class PdfExportService {
           if (t != null) {
             inTime = t.checkInTime != null ? DateFormat('HH:mm').format(t.checkInTime!) : '--:--';
             outTime = t.checkOutTime != null ? DateFormat('HH:mm').format(t.checkOutTime!) : '--:--';
-            regStr = '${t.regularHours.toStringAsFixed(1)} h';
-            otStr = '+${t.overtimeHours.toStringAsFixed(1)} h';
+            regStr = '${t.regularHours.toStringAsFixed(1)}h';
+            otStr = '+${t.overtimeHours.toStringAsFixed(1)}h';
             final resolvedSites = records
                 .where((r) => DateFormat('yyyy-MM-dd').format(r.eventTimestamp) == dateStr)
                 .map((r) => TimesheetCalculator.resolveSiteName(r))
@@ -597,8 +921,8 @@ class PdfExportService {
           if (t != null) {
             inTime = t.checkInTime != null ? DateFormat('HH:mm').format(t.checkInTime!) : '--:--';
             outTime = t.checkOutTime != null ? DateFormat('HH:mm').format(t.checkOutTime!) : '--:--';
-            regStr = '${t.regularHours.toStringAsFixed(1)} h';
-            otStr = '+${t.overtimeHours.toStringAsFixed(1)} h';
+            regStr = '${t.regularHours.toStringAsFixed(1)}h';
+            otStr = '+${t.overtimeHours.toStringAsFixed(1)}h';
             final resolvedSites = records
                 .where((r) => DateFormat('yyyy-MM-dd').format(r.eventTimestamp) == dateStr)
                 .map((r) => TimesheetCalculator.resolveSiteName(r))
@@ -620,23 +944,6 @@ class PdfExportService {
       }
 
       ledgerRows.add([dateStr, dayStr, statusStr, inTime, outTime, regStr, otStr, siteActivity]);
-    }
-
-    // Append any timesheet entries outside the active cycle range (if any)
-    for (final t in timesheets) {
-      final dateStr = DateFormat('yyyy-MM-dd').format(t.date);
-      if (!processedDates.contains(dateStr)) {
-        processedDates.add(dateStr);
-        final dayStr = DateFormat('EEE').format(t.date);
-        final inTime = t.checkInTime != null ? DateFormat('HH:mm').format(t.checkInTime!) : '--:--';
-        final outTime = t.checkOutTime != null ? DateFormat('HH:mm').format(t.checkOutTime!) : '--:--';
-        final regStr = '${t.regularHours.toStringAsFixed(1)} h';
-        final otStr = '+${t.overtimeHours.toStringAsFixed(1)} h';
-        final siteActivity = t.siteVisits.isNotEmpty
-            ? t.siteVisits.map((sv) => sv.siteName).toSet().join(', ')
-            : 'Work Location';
-        ledgerRows.add([dateStr, dayStr, 'Present', inTime, outTime, regStr, otStr, siteActivity]);
-      }
     }
 
     pdf.addPage(
@@ -736,28 +1043,28 @@ class PdfExportService {
                   pw.Column(children: [
                     pw.Text('Work Days', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
                     pw.SizedBox(height: 2),
-                    pw.Text('${empLeaveSummary.elapsedWorkingDays} d', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
+                    pw.Text('${empLeaveSummary.elapsedWorkingDays}d', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
                   ]),
                   pw.Column(children: [
                     pw.Text('Days Worked', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
                     pw.SizedBox(height: 2),
-                    pw.Text('${empLeaveSummary.daysWorked} d', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.green800)),
+                    pw.Text('${empLeaveSummary.daysWorked}d', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.green800)),
                   ]),
                   pw.Column(children: [
                     pw.Text('Leaves Taken', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
                     pw.SizedBox(height: 2),
-                    pw.Text('${empLeaveSummary.leaveDays} Days', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: empLeaveSummary.leaveDays > 0 ? PdfColors.red800 : PdfColors.green800)),
+                    pw.Text('${empLeaveSummary.leaveDays}d', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: empLeaveSummary.leaveDays > 0 ? PdfColors.red800 : PdfColors.green800)),
                   ]),
                   pw.Column(children: [
                     pw.Text('Sunday Offs', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
                     pw.SizedBox(height: 2),
-                    pw.Text('${empLeaveSummary.sundayWeeklyOffs} d', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.purple800)),
+                    pw.Text('${empLeaveSummary.sundayWeeklyOffs}d', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.purple800)),
                   ]),
                   if (empLeaveSummary.sundayDutyDays > 0)
                     pw.Column(children: [
                       pw.Text('Sunday Duty', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
                       pw.SizedBox(height: 2),
-                      pw.Text('${empLeaveSummary.sundayDutyDays} d', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.teal800)),
+                      pw.Text('${empLeaveSummary.sundayDutyDays}d', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.teal800)),
                     ]),
                   pw.Column(children: [
                     pw.Text('Attendance', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
@@ -767,12 +1074,12 @@ class PdfExportService {
                   pw.Column(children: [
                     pw.Text('Regular Hours', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
                     pw.SizedBox(height: 2),
-                    pw.Text('${totalReg.toStringAsFixed(1)} hrs', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
+                    pw.Text('${totalReg.toStringAsFixed(1)}h', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
                   ]),
                   pw.Column(children: [
                     pw.Text('Overtime OT', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
                     pw.SizedBox(height: 2),
-                    pw.Text('+${totalOt.toStringAsFixed(1)} hrs', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.orange900)),
+                    pw.Text('+${totalOt.toStringAsFixed(1)}h', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.orange900)),
                   ]),
                   if (totalBreakMinutes > 0)
                     pw.Column(children: [
@@ -783,7 +1090,7 @@ class PdfExportService {
                   pw.Column(children: [
                     pw.Text('Combined Total', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
                     pw.SizedBox(height: 2),
-                    pw.Text('${(totalReg + totalOt).toStringAsFixed(1)} hrs', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
+                    pw.Text('${(totalReg + totalOt).toStringAsFixed(1)}h', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
                   ]),
                 ],
               ),
@@ -832,11 +1139,21 @@ class PdfExportService {
                   '${empLeaveSummary.workingDaysPresent} Worked | ${empLeaveSummary.leaveDays} Leaves | ${empLeaveSummary.sundayWeeklyOffs} Sun Offs',
                   '',
                   '',
-                  '${totalReg.toStringAsFixed(1)} h',
-                  '+${totalOt.toStringAsFixed(1)} h',
-                  '${(totalReg + totalOt).toStringAsFixed(1)} hrs Net',
+                  '${totalReg.toStringAsFixed(1)}h',
+                  '+${totalOt.toStringAsFixed(1)}h',
+                  '${(totalReg + totalOt).toStringAsFixed(1)}h Net',
                 ],
               ],
+              columnWidths: const {
+                0: pw.FlexColumnWidth(1.2),
+                1: pw.FlexColumnWidth(0.7),
+                2: pw.FlexColumnWidth(1.8),
+                3: pw.FlexColumnWidth(0.9),
+                4: pw.FlexColumnWidth(0.9),
+                5: pw.FlexColumnWidth(1.0),
+                6: pw.FlexColumnWidth(1.0),
+                7: pw.FlexColumnWidth(2.5),
+              },
               headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 8.5),
               headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo900),
               cellStyle: const pw.TextStyle(fontSize: 8),
@@ -857,7 +1174,7 @@ class PdfExportService {
                   return [
                     e.key,
                     TimesheetCalculator.resolveClientGroup(e.key),
-                    '${e.value.toStringAsFixed(1)} hrs',
+                    '${e.value.toStringAsFixed(1)}h',
                   ];
                 }).toList(),
                 headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 8.5),
@@ -1164,6 +1481,568 @@ class PdfExportService {
       filename: 'Cumulative_Workforce_Attendance_Report.pdf',
     );
     return 'Cumulative PDF report downloaded.';
+  }
+
+  // ===========================================================================
+  // WORKFORCE SALARY & PAYROLL PDF GENERATION
+  // ===========================================================================
+
+  /// Builds a formatted workforce payroll sheet PDF for a salary cycle
+  static Future<Uint8List> buildWorkforceSalaryPdfBytes({
+    required String organizationName,
+    required List<EmployeeEntity> employees,
+    required List<AttendanceRecord> records,
+    required SalaryCycle cycle,
+    Map<String, EmployeeSalaryConfig>? salaryConfigs,
+  }) async {
+    final pdf = pw.Document();
+    final configs = salaryConfigs ?? LocalDatabaseService().getEmployeeSalaryMap();
+
+    final workforceSummary = SalaryCalculator.calculateWorkforcePayroll(
+      employees: employees,
+      salaryConfigs: configs,
+      records: records,
+      cycle: cycle,
+    );
+
+    final summaries = workforceSummary.employeeSummaries;
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(24),
+        build: (pw.Context context) {
+          return [
+            // Header
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      organizationName.toUpperCase(),
+                      style: pw.TextStyle(
+                        fontSize: 16,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.indigo900,
+                      ),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      'OFFICIAL WORKFORCE SALARY & PAYROLL REGISTER',
+                      style: pw.TextStyle(
+                        fontSize: 10,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      'SALARY CYCLE: ${cycle.shortPeriodLabel}',
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.indigo800,
+                      ),
+                    ),
+                    pw.Text(
+                      'Generated: ${DateFormat("dd MMM yyyy, HH:mm").format(DateTime.now())}',
+                      style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 10),
+
+            // Summary Financial Metrics Banner
+            pw.Container(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.indigo50,
+                borderRadius: pw.BorderRadius.circular(6),
+                border: pw.Border.all(color: PdfColors.indigo200),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Total Payroll Cost', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                      pw.Text(
+                        'AED ${workforceSummary.totalPayroll.toStringAsFixed(2)}',
+                        style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900),
+                      ),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Fixed Earned', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                      pw.Text(
+                        'AED ${workforceSummary.totalFixedEarned.toStringAsFixed(2)}',
+                        style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Variable Earned', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                      pw.Text(
+                        'AED ${workforceSummary.totalVariableEarned.toStringAsFixed(2)}',
+                        style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Overtime Earned (${workforceSummary.totalOtHours.toStringAsFixed(1)}h)', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                      pw.Text(
+                        'AED ${workforceSummary.totalOtEarned.toStringAsFixed(2)}',
+                        style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.orange900),
+                      ),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Payable Days', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                      pw.Text(
+                        '${workforceSummary.totalWorkforcePayableDays}d (${workforceSummary.totalWorkforceDaysWorked}d worked + ${workforceSummary.totalWorkforcePaidSundays}d Sun)',
+                        style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 12),
+
+            // Main Payroll Table
+            pw.TableHelper.fromTextArray(
+              headers: [
+                'Code',
+                'Employee Name',
+                'Dept',
+                'Fixed',
+                'Variable',
+                'Worked',
+                'Sun Off',
+                'Payable',
+                'Earned Fixed',
+                'Earned Var',
+                'OT Hours',
+                'Earned OT',
+                'Total Salary (AED)',
+              ],
+              data: [
+                ...summaries.map((s) => [
+                      s.employeeCode,
+                      s.employeeName,
+                      s.department,
+                      s.config.fixedSalary.toStringAsFixed(0),
+                      s.config.variableSalary.toStringAsFixed(0),
+                      '${s.daysWorked}d',
+                      '+${s.paidSundays}d',
+                      '${s.totalPayableDays}d',
+                      s.earnedFixedSalary.toStringAsFixed(2),
+                      s.earnedVariableSalary.toStringAsFixed(2),
+                      '${s.totalOvertimeHours.toStringAsFixed(1)}h',
+                      s.earnedOtSalary.toStringAsFixed(2),
+                      s.grossTotalSalary.toStringAsFixed(2),
+                    ]),
+                [
+                  'TOTAL',
+                  '${summaries.length} Employees',
+                  '',
+                  '',
+                  '',
+                  '${workforceSummary.totalWorkforceDaysWorked}d',
+                  '${workforceSummary.totalWorkforcePaidSundays}d',
+                  '${workforceSummary.totalWorkforcePayableDays}d',
+                  workforceSummary.totalFixedEarned.toStringAsFixed(2),
+                  workforceSummary.totalVariableEarned.toStringAsFixed(2),
+                  '${workforceSummary.totalOtHours.toStringAsFixed(1)}h',
+                  workforceSummary.totalOtEarned.toStringAsFixed(2),
+                  workforceSummary.totalPayroll.toStringAsFixed(2),
+                ],
+              ],
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 7.5),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo900),
+              cellStyle: const pw.TextStyle(fontSize: 7.5),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              cellAlignment: pw.Alignment.centerLeft,
+            ),
+            pw.SizedBox(height: 14),
+
+            // Policy & Footnote
+            pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey100,
+                borderRadius: pw.BorderRadius.circular(4),
+              ),
+              child: pw.Text(
+                'Salary Calculation Rules: Daily Basic = Basic/Days in Month • Daily Variable = Variable/Days in Month • Hourly OT Rate = (Basic Salary / Days in Month) / 8 hrs (Variable allowance is strictly excluded from OT rate calculation). '
+                'In-between Sundays surrounded by worked days are credited as Paid Weekly Offs (e.g. 8 worked days + 1 in-between Sunday = 9 credited days). Total Salary = Earned Basic + Earned Variable + Earned OT.',
+                style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700),
+              ),
+            ),
+          ];
+        },
+      ),
+    );
+
+    return pdf.save();
+  }
+
+  /// Exports workforce salary PDF and opens native sharing dialog
+  static Future<void> exportWorkforceSalaryPdf({
+    required String organizationName,
+    required List<EmployeeEntity> employees,
+    required List<AttendanceRecord> records,
+    required SalaryCycle cycle,
+  }) async {
+    final bytes = await buildWorkforceSalaryPdfBytes(
+      organizationName: organizationName,
+      employees: employees,
+      records: records,
+      cycle: cycle,
+    );
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'Workforce_Salary_Payroll_${cycle.id}.pdf',
+    );
+  }
+
+  /// Exports individual employee payslip PDF with day-by-day calculations
+  static Future<void> exportEmployeeSalarySlipPdf({
+    required String organizationName,
+    required EmployeeSalarySummary summary,
+  }) async {
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(28),
+        build: (pw.Context context) {
+          return [
+            // Company Header
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      organizationName.toUpperCase(),
+                      style: pw.TextStyle(
+                        fontSize: 16,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.indigo900,
+                      ),
+                    ),
+                    pw.Text('EMPLOYEE PAYSLIP & DAY-WISE LEDGER', style: pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text('Period: ${summary.cycle.shortPeriodLabel}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                    pw.Text('Date: ${DateFormat("dd MMM yyyy").format(DateTime.now())}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 12),
+
+            // Employee Profile & Salary Base Details
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey300),
+                borderRadius: pw.BorderRadius.circular(6),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Employee Name: ${summary.employeeName}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                      pw.Text('Employee Code: ${summary.employeeCode}', style: const pw.TextStyle(fontSize: 9)),
+                      pw.Text('Department: ${summary.department}', style: const pw.TextStyle(fontSize: 9)),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('Monthly Fixed: AED ${summary.config.fixedSalary.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 9)),
+                      pw.Text('Monthly Variable: AED ${summary.config.variableSalary.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 9)),
+                      pw.Text('Daily Rate: AED ${summary.config.dailyBaseRate.toStringAsFixed(2)}/day', style: const pw.TextStyle(fontSize: 9)),
+                      pw.Text('Hourly OT Rate: AED ${summary.hourlyOtRate.toStringAsFixed(2)}/hr', style: const pw.TextStyle(fontSize: 9, color: PdfColors.orange900)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 12),
+
+            // Pay Summary
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.indigo50,
+                borderRadius: pw.BorderRadius.circular(6),
+                border: pw.Border.all(color: PdfColors.indigo200),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'NET SALARY CREDITED: AED ${summary.grossTotalSalary.toStringAsFixed(2)}',
+                    style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900),
+                  ),
+                  pw.Text(
+                    '${summary.totalPayableDays} Payable Days (${summary.daysWorked}d worked + ${summary.paidSundays}d Sun off)',
+                    style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 12),
+
+            // Day-Wise Calculation Ledger Table
+            pw.TableHelper.fromTextArray(
+              headers: ['Date', 'Day', 'Status', 'Regular', 'OT Hours', 'Fixed', 'Variable', 'OT Credit', 'Day Total', 'Cumul Total'],
+              data: summary.dailyRecords.map((r) => [
+                    DateFormat('dd MMM').format(r.date),
+                    DateFormat('EEE').format(r.date),
+                    r.status.label,
+                    '${r.regularHours.toStringAsFixed(1)}h',
+                    '${r.overtimeHours.toStringAsFixed(1)}h',
+                    r.isPayable ? r.dailyFixedCredit.toStringAsFixed(1) : '-',
+                    r.isPayable ? r.dailyVariableCredit.toStringAsFixed(1) : '-',
+                    r.dailyOtCredit > 0 ? r.dailyOtCredit.toStringAsFixed(1) : '-',
+                    r.isPayable ? r.dailyTotalSalary.toStringAsFixed(2) : '-',
+                    r.isPayable ? r.cumulativeSalary.toStringAsFixed(2) : '-',
+                  ]).toList(),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 7.5),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo900),
+              cellStyle: const pw.TextStyle(fontSize: 7),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+              cellAlignment: pw.Alignment.centerLeft,
+            ),
+            pw.SizedBox(height: 10),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(6),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey100,
+                borderRadius: pw.BorderRadius.circular(4),
+              ),
+              child: pw.Text(
+                'Note: Hourly Overtime Rate is strictly derived from Basic Salary ONLY: (Basic Salary / Days in Month) / 8 hrs. Variable allowance is excluded from the OT rate calculation.',
+                style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700),
+              ),
+            ),
+          ];
+        },
+      ),
+    );
+
+    final bytes = await pdf.save();
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'Payslip_${summary.employeeCode}_${summary.cycle.id}.pdf',
+    );
+  }
+
+  /// Exports dedicated PDF document for Interim Overtime (26 Oct - 31 Oct 2026)
+  static Future<void> exportInterimOtPdf({
+    required List<EmployeeEntity> employees,
+    required List<AttendanceRecord> records,
+    required Map<String, EmployeeSalaryConfig> salaryConfigs,
+  }) async {
+    final cycle = SalaryCycle.octoberTransition();
+    final pdf = pw.Document();
+
+    final activeEmployees = employees.where((e) {
+      return !SalaryCalculator.isExcludedOwner(
+        name: e.name,
+        code: e.employeeCode,
+        email: e.email,
+        id: e.id,
+      );
+    }).toList();
+
+    // Calculate summaries for transition cycle
+    final List<Map<String, dynamic>> rowData = [];
+    double totalBasic = 0.0;
+    double totalOtHours = 0.0;
+    double totalOtPay = 0.0;
+
+    for (final emp in activeEmployees) {
+      final config = SalaryCalculator.resolveConfig(employee: emp, salaryConfigs: salaryConfigs);
+      final summary = SalaryCalculator.calculateEmployeeSalary(
+        config: config,
+        employee: emp,
+        records: records,
+        cycle: cycle,
+        referenceDate: DateTime(2026, 11, 1),
+      );
+
+      double ot26 = 0.0, ot27 = 0.0, ot28 = 0.0, ot29 = 0.0, ot30 = 0.0, ot31 = 0.0;
+      for (final r in summary.dailyRecords) {
+        if (r.date.year == 2026 && r.date.month == 10) {
+          switch (r.date.day) {
+            case 26: ot26 = r.overtimeHours; break;
+            case 27: ot27 = r.overtimeHours; break;
+            case 28: ot28 = r.overtimeHours; break;
+            case 29: ot29 = r.overtimeHours; break;
+            case 30: ot30 = r.overtimeHours; break;
+            case 31: ot31 = r.overtimeHours; break;
+          }
+        }
+      }
+
+      totalBasic += config.basicSalary;
+      totalOtHours += summary.totalOvertimeHours;
+      totalOtPay += summary.earnedOtSalary;
+
+      rowData.add({
+        'code': emp.employeeCode,
+        'name': emp.name,
+        'dept': emp.department,
+        'basic': config.basicSalary.toStringAsFixed(0),
+        'rate': config.otIncludedInVariable ? 'Fixed' : summary.hourlyOtRate.toStringAsFixed(2),
+        'ot26': ot26 > 0 ? ot26.toStringAsFixed(1) : '-',
+        'ot27': ot27 > 0 ? ot27.toStringAsFixed(1) : '-',
+        'ot28': ot28 > 0 ? ot28.toStringAsFixed(1) : '-',
+        'ot29': ot29 > 0 ? ot29.toStringAsFixed(1) : '-',
+        'ot30': ot30 > 0 ? ot30.toStringAsFixed(1) : '-',
+        'ot31': ot31 > 0 ? ot31.toStringAsFixed(1) : '-',
+        'totalHrs': summary.totalOvertimeHours.toStringAsFixed(1),
+        'totalPay': summary.earnedOtSalary.toStringAsFixed(2),
+      });
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(24),
+        build: (context) {
+          return [
+            // Title Header
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'FUSION ENTERPRISE GROUP',
+                      style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      'INTERIM OVERTIME REPORT (26 OCT – 31 OCT 2026)',
+                      style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      '6-Day Transition Period | Regular Calendar Cycle Begins 1 Nov 2026',
+                      style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      'Generated: ${DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now())}',
+                      style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Text(
+                      'Total OT Hours: ${totalOtHours.toStringAsFixed(1)} hrs',
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.amber800),
+                    ),
+                    pw.Text(
+                      'Total OT Payable: AED ${NumberFormat('#,##0.00').format(totalOtPay)}',
+                      style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.green800),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 12),
+            pw.Divider(thickness: 1, color: PdfColors.grey300),
+            pw.SizedBox(height: 8),
+
+            // Table
+            pw.Table.fromTextArray(
+              headers: ['SL', 'Code', 'Employee Name', 'Dept', 'Basic', 'Rate/h', '26 Oct', '27 Oct', '28 Oct', '29 Oct', '30 Oct', '31 Oct', 'Total Hrs', 'OT Pay (AED)'],
+              data: List.generate(rowData.length, (idx) {
+                final d = rowData[idx];
+                return [
+                  '${idx + 1}',
+                  d['code'],
+                  d['name'],
+                  d['dept'],
+                  d['basic'],
+                  d['rate'],
+                  d['ot26'],
+                  d['ot27'],
+                  d['ot28'],
+                  d['ot29'],
+                  d['ot30'],
+                  d['ot31'],
+                  d['totalHrs'],
+                  d['totalPay'],
+                ];
+              }),
+              headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 8),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo900),
+              cellStyle: const pw.TextStyle(fontSize: 7.5),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+              cellAlignment: pw.Alignment.center,
+              cellAlignments: {
+                2: pw.Alignment.centerLeft,
+                4: pw.Alignment.centerRight,
+                5: pw.Alignment.centerRight,
+                12: pw.Alignment.centerRight,
+                13: pw.Alignment.centerRight,
+              },
+            ),
+            pw.SizedBox(height: 8),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.end,
+              children: [
+                pw.Text(
+                  'Total Basic: AED ${totalBasic.toStringAsFixed(2)}   |   Total OT Hours: ${totalOtHours.toStringAsFixed(1)} hrs   |   Grand Total OT Payable: AED ${NumberFormat('#,##0.00').format(totalOtPay)}',
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.indigo900),
+                ),
+              ],
+            ),
+          ];
+        },
+      ),
+    );
+
+    final bytes = await pdf.save();
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'Interim_OT_26-31_Oct_2026.pdf',
+    );
   }
 }
 

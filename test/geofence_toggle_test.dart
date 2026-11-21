@@ -48,7 +48,7 @@ void main() {
 
     setUp(() {
       db = LocalDatabaseService();
-      db.clearLocalAttendanceRecords();
+      db.clearAttendanceCache();
       db.setOffices([testOffice]);
       db.setUsers([userWithGeofenceEnforced]);
       db.setEmployees([empWithGeofenceEnforced]);

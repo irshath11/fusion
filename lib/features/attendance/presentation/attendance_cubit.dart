@@ -150,7 +150,6 @@ class AttendanceCubit extends Cubit<AttendanceState> {
           break;
         }
       }
-
       final official = EmployeeDirectoryHelper.resolveOfficialRecord(
         code: user.employeeCode,
         name: user.fullName,

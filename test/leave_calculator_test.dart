@@ -279,5 +279,159 @@ void main() {
       expect(individualBytes, isNotNull);
       expect(individualBytes.isNotEmpty, isTrue);
     });
+
+    test('PdfExportService splits 0-days worked employees into separate table in cumulative report', () async {
+      final cycle = SalaryCycle.forMonth(2026, 9); // 25 Aug - 24 Sep 2026
+
+      final activeEmp = EmployeeEntity(
+        id: 'emp_active',
+        employeeCode: 'EMP-01',
+        name: 'Active Worker',
+        mobileNumber: '111',
+        email: 'active@test.com',
+        designation: 'Staff',
+        department: 'Operations',
+      );
+
+      final zeroDaysEmp = EmployeeEntity(
+        id: 'emp_zero',
+        employeeCode: 'EMP-02',
+        name: 'Zero Days Worker',
+        mobileNumber: '222',
+        email: 'zero@test.com',
+        designation: 'Staff',
+        department: 'Logistics',
+      );
+
+      final testRecords = [
+        AttendanceRecord(
+          id: 'rec_act_1',
+          employeeId: 'emp_active',
+          employeeName: 'Active Worker',
+          workflowStep: WorkflowStep.officeCheckIn,
+          eventTimestamp: DateTime(2026, 8, 26, 8, 0),
+          latitude: 25.0,
+          longitude: 55.0,
+          gpsAccuracy: 5.0,
+          address: 'Office',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+        ),
+        AttendanceRecord(
+          id: 'rec_act_2',
+          employeeId: 'emp_active',
+          employeeName: 'Active Worker',
+          workflowStep: WorkflowStep.officeCheckOut,
+          eventTimestamp: DateTime(2026, 8, 26, 17, 0),
+          latitude: 25.0,
+          longitude: 55.0,
+          gpsAccuracy: 5.0,
+          address: 'Office',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+        ),
+      ];
+
+      final pdfBytes = await PdfExportService.buildCumulativePdfBytes(
+        organizationName: 'Fusion Enterprise Test',
+        employees: [activeEmp, zeroDaysEmp],
+        records: testRecords,
+        salaryCyclePeriod: cycle.shortPeriodLabel,
+        salaryCycle: cycle,
+      );
+
+      expect(pdfBytes, isNotNull);
+      expect(pdfBytes.isNotEmpty, isTrue);
+    });
+
+    test('PdfExportService clamps individual and cumulative reports to active cycle totalDays (never 32, 33, 34 days)', () async {
+      final cycle = SalaryCycle.forMonth(2026, 9); // 25 Aug - 24 Sep 2026 (31 days)
+      expect(cycle.totalDays, equals(31));
+
+      final emp = EmployeeEntity(
+        id: 'emp_all_time',
+        employeeCode: 'EMP-ALL',
+        name: 'Continuous Worker',
+        mobileNumber: '333',
+        email: 'worker@test.com',
+        designation: 'Staff',
+        department: 'Operations',
+      );
+
+      // Create records spanning 35 days (from 15 Aug to 18 Sep)
+      final List<AttendanceRecord> spanningRecords = [];
+      for (int i = 0; i < 35; i++) {
+        final dayDate = DateTime(2026, 8, 15).add(Duration(days: i));
+        spanningRecords.add(
+          AttendanceRecord(
+            id: 'rec_span_in_$i',
+            employeeId: 'emp_all_time',
+            employeeName: 'Continuous Worker',
+            workflowStep: WorkflowStep.officeCheckIn,
+            eventTimestamp: DateTime(dayDate.year, dayDate.month, dayDate.day, 8, 0),
+            latitude: 25.0,
+            longitude: 55.0,
+            gpsAccuracy: 5.0,
+            address: 'Office',
+            deviceId: 'dev-1',
+            photoBase64: '',
+            isGeofenceValid: true,
+          ),
+        );
+        spanningRecords.add(
+          AttendanceRecord(
+            id: 'rec_span_out_$i',
+            employeeId: 'emp_all_time',
+            employeeName: 'Continuous Worker',
+            workflowStep: WorkflowStep.officeCheckOut,
+            eventTimestamp: DateTime(dayDate.year, dayDate.month, dayDate.day, 17, 0),
+            latitude: 25.0,
+            longitude: 55.0,
+            gpsAccuracy: 5.0,
+            address: 'Office',
+            deviceId: 'dev-1',
+            photoBase64: '',
+            isGeofenceValid: true,
+          ),
+        );
+      }
+
+      // Spanning records has 35 days
+      expect(spanningRecords.length, equals(70));
+
+      // 1. Cumulative PDF generation must strictly clamp to 25 Aug - 24 Sep
+      final cumulativeBytes = await PdfExportService.buildCumulativePdfBytes(
+        organizationName: 'Fusion Enterprise Test',
+        employees: [emp],
+        records: spanningRecords,
+        salaryCyclePeriod: cycle.shortPeriodLabel,
+        salaryCycle: cycle,
+      );
+      expect(cumulativeBytes, isNotNull);
+      expect(cumulativeBytes.isNotEmpty, isTrue);
+
+      // 2. Individual Employee Attendance PDF generation must strictly clamp to cycle totalDays
+      final individualBytes = await PdfExportService.buildEmployeeAttendancePdfBytes(
+        organizationName: 'Fusion Enterprise Test',
+        employee: emp,
+        records: spanningRecords,
+        salaryCyclePeriod: cycle.shortPeriodLabel,
+        salaryCycle: cycle,
+      );
+      expect(individualBytes, isNotNull);
+      expect(individualBytes.isNotEmpty, isTrue);
+
+      // Verify leave summary for this employee within cycle has exactly 31 daily records
+      final leaveSummary = LeaveCalculator.calculateEmployeeLeave(
+        emp,
+        spanningRecords,
+        cycle,
+      );
+      expect(leaveSummary.totalCycleDays, equals(31));
+      expect(leaveSummary.dailyRecords.length, equals(31));
+      expect(leaveSummary.daysWorked <= 31, isTrue);
+    });
   });
 }

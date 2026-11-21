@@ -250,6 +250,26 @@ class OfficeManagementScreen extends StatelessWidget {
                         child: const Text('Save Office Station'),
                       ),
                     ),
+                    if (office != null && !office.isDefault) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.error,
+                            side: const BorderSide(color: AppColors.error),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          icon: const Icon(Icons.delete_outline_rounded,
+                              size: 18),
+                          label: const Text('Delete This Office Station'),
+                          onPressed: () {
+                            Navigator.pop(modalCtx);
+                            _confirmDeleteOffice(context, office);
+                          },
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -257,6 +277,127 @@ class OfficeManagementScreen extends StatelessWidget {
           },
         );
       },
+    );
+  }
+
+  void _confirmDeleteOffice(BuildContext context, OfficeEntity office) {
+    if (office.isDefault) {
+      showDialog(
+        context: context,
+        builder: (dialogCtx) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.info_outline_rounded,
+                  color: AppColors.primary, size: 28),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Cannot Delete Main Office',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            '${office.name} is configured as the default Main Office and central geofence for your organization.\n\nTo delete this location, please edit or create another office and mark it as the default Main Office first.',
+            style: const TextStyle(fontSize: 14, height: 1.4),
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Understood'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_outline_rounded,
+                color: AppColors.error, size: 28),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Delete Office Station?',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to delete "${office.name}" from your active office stations?',
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('📍 ${office.address}',
+                      style: const TextStyle(fontSize: 12)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'GPS: ${office.latitude.toStringAsFixed(6)}, ${office.longitude.toStringAsFixed(6)} (Radius: ${office.geofenceRadiusMeters.toInt()}m)',
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Any employees currently assigned to this branch office will automatically revert to using the default Main Office.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(dialogCtx);
+              context.read<AdminCubit>().deleteOffice(office.id);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content:
+                      Text('Office "${office.name}" removed successfully.'),
+                  backgroundColor: AppColors.primary,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            child: const Text('Delete Office'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -275,60 +416,94 @@ class OfficeManagementScreen extends StatelessWidget {
               label: const Text('Add Office',
                   style: TextStyle(color: Colors.white)),
             ),
-            body: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: state.offices.length,
-              itemBuilder: (context, index) {
-                final off = state.offices[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: off.isDefault
-                          ? AppColors.primary
-                          : AppColors.secondary,
-                      child: const Icon(Icons.business_rounded,
-                          color: Colors.white),
-                    ),
-                    title: Row(
+            body: state.offices.isEmpty
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Expanded(
-                          child: Text(
-                            off.name,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (off.isDefault) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                                color:
-                                    AppColors.primary.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8)),
-                            child: const Text('MAIN OFFICE',
-                                style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.primary)),
-                          )
-                        ]
+                        Icon(Icons.business_outlined,
+                            size: 64, color: Colors.grey),
+                        SizedBox(height: 12),
+                        Text('No office stations configured.',
+                            style: TextStyle(color: Colors.grey, fontSize: 16)),
                       ],
                     ),
-                    subtitle: Text(
-                        '${off.address}\nGPS: ${off.latitude.toStringAsFixed(4)}, ${off.longitude.toStringAsFixed(4)} | Geofence: ${off.geofenceRadiusMeters}m'),
-                    isThreeLine: true,
-                    trailing: IconButton(
-                      icon: const Icon(Icons.edit_rounded),
-                      onPressed: () => _showOfficeForm(context, off),
-                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: state.offices.length,
+                    itemBuilder: (context, index) {
+                      final off = state.offices[index];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: off.isDefault
+                                ? AppColors.primary
+                                : AppColors.secondary,
+                            child: const Icon(Icons.business_rounded,
+                                color: Colors.white),
+                          ),
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  off.name,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (off.isDefault) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                      color: AppColors.primary
+                                          .withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(8)),
+                                  child: const Text('MAIN OFFICE',
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.primary)),
+                                )
+                              ]
+                            ],
+                          ),
+                          subtitle: Text(
+                              '${off.address}\nGPS: ${off.latitude.toStringAsFixed(4)}, ${off.longitude.toStringAsFixed(4)} | Geofence: ${off.geofenceRadiusMeters}m'),
+                          isThreeLine: true,
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.edit_rounded,
+                                    color: AppColors.primary),
+                                tooltip: 'Edit Office Details',
+                                onPressed: () => _showOfficeForm(context, off),
+                              ),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.delete_outline_rounded,
+                                  color: off.isDefault
+                                      ? Colors.grey.shade400
+                                      : AppColors.error,
+                                ),
+                                tooltip: off.isDefault
+                                    ? 'Cannot delete default Main Office'
+                                    : 'Delete Office',
+                                onPressed: () =>
+                                    _confirmDeleteOffice(context, off),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
           );
         }
         return const Center(child: CircularProgressIndicator());

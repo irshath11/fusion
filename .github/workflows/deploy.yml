@@ -27,18 +27,24 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Configure Git Safe Directory
+        run: git config --global --add safe.directory "*"
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          cache: true
 
       - name: Install dependencies
         run: flutter pub get
 
       - name: Build Web App
         run: |
-          flutter build web --release --base-href "/"
+          flutter build web --release --base-href "/" --no-wasm-dry-run
           cp build/web/index.html build/web/404.html
           echo "fusionmaint.org" > build/web/CNAME
           touch build/web/.nojekyll

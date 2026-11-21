@@ -18,15 +18,13 @@ Enterprise-grade, offline-first mobile and web application built using **Flutter
 - **Primary Firebase Auth + Local Hive Database Fallback**: Authenticates via Firebase Authentication; seamlessly falls back to local database profiles (`app_settings` Hive box) and demo admin credentials if Firebase is unreachable or throws credential exceptions (`invalid-credential`, `user-not-found`).
 - **Universal Password Visibility Toggles**: All password input fields across the application (Login, Setup Wizard, Employee Password Update, User Creation Form, Ownership Transfer) feature interactive show/hide eye icon toggle buttons (`Icons.visibility_outlined` / `Icons.visibility_off_outlined`).
 
-### 4. Sequential Multi-Site Attendance Workflow & Duty Pause Engine
-`1. Office Check-In` ➔ `2. Site Check-In` ➔ `3. Site Check-Out (Leaving Site)` ➔ `4. Site Check-In (Next Site)` ... ➔ `Office Check-Out (Reach Office)` ➔ `Shift Completed`
-- **Dynamic Chronological Numbering**: Every event in the timeline is numbered dynamically based on occurrence (`1.`, `2.`, `3.`, `4.`, `5.`, ...), seamlessly accommodating multiple field client visits per day.
-- **Site Selection Dropdown (`SiteNameDialog`)**: Pre-configured work sites (`RELAAM (AMC)`, `RELAAM (WO)`, `CARRIER`, `MOPA`, `MPM`, `ELV`, `OTHERS (AMC)`, `OTHERS (WO)`) or custom location inputs.
-- **Duty Pause & Break Tracking (`BreakTypeDialog`)**: Allows field personnel to pause duty for rest/errands with optional notes, excluding break duration from net billable duty hours without breaking the shift workflow.
-- **Emergency Duty Workflow**: Dedicated on-call check-in (`emergencyCheckIn`) and check-out (`emergencyCheckOut`) for out-of-hours emergencies, system breakdowns, and urgent client call-outs, with admin add/edit capabilities.
+### 4. Strict 4-Step Sequential Attendance Workflow Engine
+`1. Office Check-In` ➔ `2. Site Check-In` ➔ `3. Site Check-Out (Leaving Site)` ➔ `4. Office Check-Out (Reach Office)` ➔ `Shift Completed`
+- State locks prevent skipping steps or altering step execution order.
+- `SiteNameDialog` dropdown prompts selection from pre-configured work sites (`RELAAM (AMC)`, `RELAAM (WO)`, `CARRIER`, `MOPA`, `MPM`, `ELV`, `OTHERS (AMC)`, `OTHERS (WO)`) or custom location inputs.
 
 ### 5. Employee Work Timesheet Engine
-- **Automatic Hour Calculation**: Calculates total daily work duration between `1. Office Check-In` and `4. Office Check-Out`, factoring out logged duty breaks.
+- **Automatic Hour Calculation**: Calculates total daily work duration between `1. Office Check-In` and `4. Office Check-Out`.
 - **Regular vs. Overtime Hours**: Automatically caps regular working hours at **8.0 hours per day** and allocates any excess duration as **Overtime Hours**.
 - **Site Visit Breakdown**: Captures detailed site visit durations (`SiteVisitSummary`) for each field location visited during the shift.
 - **Timesheet PDF Export**: Generates and downloads individual and master timesheet reports in PDF format directly from the app.
@@ -59,74 +57,35 @@ Enterprise-grade, offline-first mobile and web application built using **Flutter
 - Local Hive key-value boxes store attendance logs, photos, and sync queues without internet.
 - Sync engine automatically flushes queue upon connectivity restoration while preserving original `event_timestamp`.
 
-### 13. 3-Tab Advanced Reports & Analytics Suite
-- **Directory 3-Level Drilldown View**:
-  - *Level 1*: All Employee list with real-time search, Executive KPI Ticker Ribbon (Total Staff, Active Duty, Attendance %, Geofence Audit %), and Cloud Log Sync.
-  - *Level 2*: Selected employee date-wise duty log timeline & check-in/out timestamps.
-  - *Level 3*: Date detailed view with high-res camera selfie photo verification, exact GPS coordinates, geofence compliance badges, and site visit breakdown.
-- **Cumulative Summary Tab**: Cross-employee aggregate attendance statistics, present/absent counts, total regular hours, overtime hours, cumulative site visits, and export shortcuts.
-- **Site / Client Man-Hours Analytics Tab**: Site-wise and Client-wise man-hour aggregation engine, date range filters (`All Time`, `This Month`, `This Week`, `Today`), grouping toggle (`Group by Client` vs. `Specific Site`), and expandable site cards with detailed worker lists.
-
-### 14. Cloud Attendance Log Sync & Local Auto-Merge Engine
-- On-demand and automatic synchronization of remote attendance logs from Supabase (`fetchAttendanceRecordsFromSupabase()`).
-- Auto-merges remote records into local Hive storage while eliminating duplicates, featuring live progress indicator controls (`_isLoadingCloud`).
-
-### 15. Analytics & Multi-Format Report Export
+### 13. Analytics & Multi-Format Report Export
 - Generates downloadable compliance reports in **PDF**, **Excel (.xlsx)**, and **CSV** formats with customizable filters.
 
-### 16. Multi-Preset Dynamic Theme Engine & Adaptive UI Shell
-- **5 Curated Color Palettes (`AppThemePalette`)**: `Slate Indigo`, `Emerald Mint`, `Midnight Amber`, `Royal Amethyst`, and `Ocean Cobalt`.
-- **Interactive Theme Selector Modal (`ThemeSelectorModal`)**: Allows users and administrators to switch color presets dynamically with real-time UI previews.
-- **Adaptive Application Shell (`AppShell`)**: Automatically renders a floating glass bottom navigation dock on mobile screens (< 750px) and a collapsible modern navigation rail on tablet/desktop displays (>= 750px).
-- **Glassmorphic Design System**: Uses backdrop glass blur cards (`AppGlassCard`) and smooth micro-animations (`AppBounceable`, `StaggeredAnimatedItem`).
+### 14. Statutory Cards Management & Gemini Multimodal AI Vision OCR
+- **Compliance Document Tracking**: Centrally tracks employee statutory cards and field access passes (`EMIRATES_ID`, `VISA`, `PASSPORT`, `INSURANCE`, `MOPA_PASS`, `CISPA_PASS`, and `CUSTOM_PASS`).
+- **Google Gemini Multimodal AI Vision**: Automatically scans uploaded card photos or PDF scans (`CardOcrService`) and extracts document type, card number, employee name, issue date, and expiry date.
+- **Dynamic Expiry Lifecycle**: Real-time status badges for **Expired** (<0d), **Critical** (≤3d), **Expiring Soon** (≤30d), and **Valid** (>30d).
 
-### 17. Google Play Store Release & Publishing Infrastructure
-- **Production Android App Bundle (`.aab`)**: Signed compilation pipeline configured via `upload-keystore.jks`, `key.properties`, and `build.gradle.kts`.
-- **Play Console Compliance Declarations**: Configured Data Safety (Location, Name, Email collection), IARC Content Rating (PEGI 3 / Everyone 3+), App Access credentials, and Public Account Deletion Link.
-- **Store Listing Visual Assets**: Includes customized 512x512 PNG App Icon (`app_icon_512.jpg`) and 1024x500 Figma-style Feature Graphic banner (`feature_graphic.jpg`).
+### 15. Automated Multi-Channel Notification Robot
+- **Supabase Database Cron (`pg_cron` & `pg_net`)**: Dispatches automated daily compliance checks every morning at **08:00 AM Gulf Standard Time (GST)** via `backend/supabase_cron_job.sql`.
+- **Automated Email & WhatsApp Alerts**: Broadcasts urgent renewal alerts via **Resend API** to operations executives (`sr.irshath@gmail.com, nasuru@fusionmaint.com`) and automated WhatsApp alerts via **CallMeBot API** to `+971586939371`.
+- **Client-Side Quick Triggers**: 1-click WhatsApp (`https://wa.me/...`) and pre-composed email drafting directly from the Flutter app and Web Admin Portal.
+- **Dedicated Documentation**: See [Cards Management & Expiry Notification Module Manual](docs/CARD_AND_EXPIRY_NOTIFICATION_MODULE.md) for full operational, architectural, and setup runbooks.
 
-### 18. AI Voice Reporting & Google Gemini AI Integration
-- **Speech-to-Text Engineering Cleansing**: Corrects acoustic dictation errors and technical engineering acronyms (`"cap acid or"` ➔ `capacitor`, `"fifty u f"` ➔ `50uF`, `"d b box"` ➔ `DB Box`, `"m c b"` ➔ `MCB`) using Google Gemini AI (`gemini-3.6-flash`).
-- **Automated Field Service Extraction**: Generates structured JSON reports separating *Defects Found*, *Details of Work Done*, *Call Type* (`Complaint`, `Breakdown`, `Preventive`), *Priority* (`Urgent`, `Normal`), *Suggested Services*, and *Materials Replaced*.
-- **Interactive Voice Assistant Modal (`AiVoiceReportBottomSheet`)**: Real-time microphone listening, pulsing waveforms, speech-to-text integration, and text-to-speech (`flutter_tts`) voice synthesis.
-- **Offline Heuristic Engine**: Fallback deterministic regex parser ensuring 100% extraction functionality with zero network connectivity.
+### 16. Company Salary Cycle Engine (25th to 24th) & Leave Records Ledger
+- **25th-to-24th Monthly Salary Cycles**: Aligns shift aggregation and timesheets with Gulf payroll billing periods (`SalaryCycleHelper`), dynamically resolving cycles based on selected reference dates.
+- **Daily Leave Records Ledger**: Categorizes every calendar day into 5 definitive states: `Present`, `Leave / Absent`, `Sunday (Weekly Off)`, `Sunday Duty (Worked)`, and `Upcoming` (`LeaveCalculator`).
 
-### 19. Field Service Report Generator & Digital E-Signatures
-- **Multi-Section Service Sheet (`EmployeeReportGeneratorScreen`, `EmployeeReportsListScreen`)**: Captures property info, job numbers, contact details, 15 engineering disciplines, spare parts tables, customer ratings, and housekeeping status.
-- **Touch-Drawn Digital E-Signatures (`ESignaturePad`)**: High-fidelity vector signature pad for on-screen customer and technician approvals.
-- **ISO-Standard PDF Generation (`ServiceReportPdfService`)**: Generates printable branded service report documents with embedded signatures, logo, and metadata tables.
-- **Supabase Cloud Sync**: Synchronizes reports to remote `service_reports` PostgreSQL table with offline Hive caching.
+### 17. 24-Hour Auto-Checkout Safety Guard & Sunday 100% OT Rule
+- **24-Hour Auto-Checkout**: Any unclosed shift exceeding 24 hours without an official check-out is automatically capped at **8.0 standard regular hours** and **0.0 overtime hours** (`isAutoCompleted: true`), protecting timesheet calculations from runaway shift lengths.
+- **Sunday 100% Overtime Rule**: Sunday is designated as the mandatory weekly off day; **100% of all hours worked on Sunday are automatically converted to Overtime Hours**.
 
-### 20. Enterprise Salary Cycle Engine (25th-to-24th Cutoffs)
-- **Corporate Payroll Boundaries (`SalaryCycleHelper`)**: Aligns attendance and timesheets with corporate 25th-to-24th salary cycles (e.g., September 2026 cycle runs from 25 Aug 2026 to 24 Sep 2026).
-- **Active Cycle Headers & Selectors**: Real-time display of the active cycle and dynamic historical cycle selectors in the Admin Dashboard, Reports & Analytics, and Employee Timesheet screens.
-- **Earliest Implemented Boundary**: Clamps historical navigation to active implementation periods (Aug-Sep 2026 onwards).
+### 18. Employee Photo Directory & Portrait Avatars
+- **Badge Image Mapping**: Maps official employee codes (`1004`, `1008`, `N-1003`, etc.) to high-resolution portrait photos stored in `assets/images/employees/` and `web/assets/images/employees/`.
+- **Avatar Component**: Reusable `EmployeeAvatar` rendering official photos with graceful monogram initials fallback.
+- **Identity Reconciliation**: `EmployeeDirectoryHelper` normalizes employee codes and names across legacy variations.
 
-### 21. Attendance Records Reassignment Engine
-- **Profile & Record Reassignment**: Allows administrators to reassign historical attendance logs between employee profiles during user credential updates, staff transitions, or account merges.
-- **Atomic Local & Cloud Synchronization**: Preserves original audit timestamps, GPS logs, and facial verification photos across Hive and Supabase.
-
-### 22. Midnight & Overnight Shift Continuity Engine
-- **Cross-Midnight Shift Preservation**: Shifts crossing 00:00 remain active in `getTodayAttendanceRecords(userId)` within a 24-hour rolling window, ensuring late-night and night-shift personnel are not reset mid-shift.
-- **4-Hour Cooldown Rest Window**: Prevents immediate same-day re-entry after an overnight checkout, granting field technicians an enforced rest period before initiating a new daily shift.
-- **24-Hour Auto-Resolution Daemon**: Automatically resolves unclosed shifts exceeding 24 hours (`autoResolveExpiredCheckIns`), capping regular duty hours at 8.0h and preventing corrupted timeline calculations.
-
-### 23. Offline Service Reports Management & Sequential Prefix Tracking
-- **Sequential Employee Reference Formats (`SR-E01-2001`)**: Automatically assigns each field technician a unique prefix (`currentEmployeePrefix`, e.g. `E01`, `E02`) and sequential reference counter starting from `2001` (`SR-E01-2001`, `SR-E01-2002`).
-- **Offline Hive Queue & Instant Caching**: Stores offline submissions in `pending_service_reports_json` with an in-memory hot cache (`_cachedServiceReports`) for latency-free reads and instant UI rendering.
-- **Cloud Reconciliation (`mergeCloudServiceReports`)**: Merges remote Supabase service reports while preventing duplicate entries and preserving local unsynced drafts.
-
-### 24. Offline Field Work Site Photo Submissions
-- **Offline Photo Attachment Queue**: Field technicians can capture and save site activity photos offline (`saveWorkPhotoSubmissionLocally`, `pending_work_photos_json`).
-- **GPS Metadata & Work Site Tagging**: Each photo record bundles high-accuracy GPS coordinates, physical address geocoding, timestamp, and optional remarks.
-- **In-Memory Cache & Two-Way Sync**: Caches submissions in-memory for instant UI gallery browsing and automatically synchronizes to cloud storage once network connectivity is re-established.
-
-### 25. Enterprise Master Directory & Backward-Compatible Mobile Identity Architecture
-- **100% Backward Compatibility for Deployed APKs**: Preserves authentic registered names (`'Saleem'`, `'Shabi'`) in database tables (`attendance_records`, `users`) so older mobile APKs in the field filter exact match strings without timeline disruption.
-- **Dynamic In-Memory Consolidation (`EmployeeDirectoryHelper`)**: Seamlessly maps short names to full enterprise identities (`Saleem Allapitchai Allapitchai`) on-the-fly in the Admin Web Portal, Directory search, analytics, and PDF exports without destructive database mutations.
-
-### 26. Non-Blocking Background Startup Initialization
-- **Rapid App Boot**: Initial setup and cloud health status checks are decoupled using non-blocking asynchronous execution (`unawaited(checkSetupStatusFromSupabase())`), avoiding UI freezes during app cold starts on slow or offline cellular networks.
+### 19. Office Station Deletion with Safeguard Protection
+- Admins can delete branch office stations with automatic employee fallback: any personnel assigned to a deleted branch automatically revert to the default Main Office without breaking geofence validation.
 
 ---
 
@@ -140,7 +99,7 @@ flutter run -d chrome
 ```
 
 ### Option B: Running the Standalone Web Admin Site (`web_admin`)
-A dedicated, ultra-fast web admin portal constructed with HTML5/CSS3/JS, Supabase SDK, and Leaflet Maps is located in `web_admin/`:
+A dedicated, ultra-fast web admin portal constructed with HTML5/CSS3/JS, Supabase SDK, Leaflet Maps, and Cards Manager is located in `web_admin/`:
 ```bash
 cd web_admin
 npm start
@@ -156,15 +115,16 @@ Open `http://localhost:3000` in your browser.
 ## 📁 Project Architecture & Folder Structure
 
 ```
-fusion/
+attendance_app/
 ├── backend/
-│   └── supabase_schema.sql         # Supabase PostgreSQL schema, UUID FKs, RLS Policies, Ownership Transfer RPC
+│   ├── supabase_schema.sql         # Supabase PostgreSQL 15-table schema, RLS Policies, Ownership Transfer RPC
+│   └── supabase_cron_job.sql       # Automated 8:00 AM GST card expiry compliance robot (pg_cron & pg_net)
 ├── web_admin/                      # Standalone Enterprise Web Admin Portal
-│   ├── index.html                  # HTML5 SPA Container & Leaflet Map Container
+│   ├── index.html                  # HTML5 SPA Container, Leaflet Map, & Cards Manager
 │   ├── styles.css                  # Enterprise Design System & CSS Variables
-│   ├── app.js                      # JavaScript Controller, Supabase JS SDK & Leaflet Integration
+│   ├── app.js                      # JavaScript Controller, Supabase JS SDK, Gemini OCR, Leaflet Map
 │   └── package.json                # Local web server script
-├── docs/                           # Comprehensive System & Feature Documentation (Modules 00–14)
+├── docs/                           # Comprehensive System Documentation (Modules 00–12)
 │   ├── 00_system_architecture.md
 │   ├── 01_auth_and_password_management.md
 │   ├── 02_organization_setup.md
@@ -176,29 +136,33 @@ fusion/
 │   ├── 08_reports_and_data_export.md
 │   ├── 09_timesheet_and_work_site_management.md
 │   ├── 10_security_device_binding_and_ownership_transfer.md
-│   ├── 11_google_play_store_deployment_and_publishing.md
-│   ├── 12_ai_voice_reporting_and_gemini_insights.md
-│   ├── 13_service_report_generator_and_e_signatures.md
-│   ├── 14_emergency_duty_and_salary_cycle_engine.md
+│   ├── 11_cards_management_and_ai_compliance.md
+│   ├── 12_leave_management_and_payroll_cycles.md
+│   ├── TECHNICAL_DEVELOPER_DOCUMENTATION.md
+│   ├── CODING_IMPLEMENTATION_GUIDE.md
+│   ├── ENTERPRISE_CASE_STUDY.md
 │   └── README.md                   # Documentation Index
-├── supabase_service_reports_schema.sql # Supabase PostgreSQL schema for Field Service Reports
+├── assets/
+│   └── images/employees/           # Official portrait employee badge photos
 ├── lib/
 │   ├── main.dart                   # Role-Based Router Entry Point (Web & Mobile)
-│   ├── app_config.dart             # Global environment configurations
+│   ├── app_config.dart             # Global environment configurations & Supabase keys
 │   ├── core/                       # Shared utilities, constants, & themes
-│   │   ├── constants/              # Colors, Themes, Enums (UserRole, WorkflowStep, ActivityLogAction)
-│   │   ├── theme/                  # AppThemePreset, AppThemePalette, ThemeCubit, ThemeSelectorModal
-│   │   ├── services/               # LocationService, CameraService, SupabaseService, ExportServices, AiReportService, ServiceReportPdfService
-│   │   ├── utils/                  # GeofenceCalculator, TimesheetCalculator, SalaryCycleHelper, EmployeeDirectoryHelper
-│   │   └── widgets/                # AppButton, CustomTextField, StatusBadge, OfflineBanner, AppShell, AiVoiceReportBottomSheet, ESignaturePad
-│   ├── database/                   # Hive Local Database Persistence (attendance, sync, service reports, work photos)
+│   │   ├── constants/              # Colors, Themes, Enums, EmployeePhotoData
+│   │   ├── services/               # LocationService, CameraService, SupabaseService, CardOcrService,
+│   │   │                           # CardExpiryNotificationService, PdfExportService, ExcelCsvExportService
+│   │   ├── utils/                  # GeofenceCalculator, TimesheetCalculator, SalaryCycleHelper,
+│   │   │                           # LeaveCalculator, EmployeeDirectoryHelper, PhotoAttachmentHelper
+│   │   └── widgets/                # AppButton, CustomTextField, StatusBadge, OfflineBanner, EmployeeAvatar
+│   ├── database/                   # Hive Local Database Persistence Engine
 │   └── features/                   # Clean Architecture Features
 │       ├── setup/                  # First-Time Wizard Screen & Cubit
 │       ├── auth/                   # Login Screen, Firebase/Supabase Auth & Cubit
 │       ├── attendance/             # Attendance Workflow Stepper, Camera Modal, SiteNameDialog, Cubit
-│       ├── employee/               # Employee Duty Portal, Dynamic Timeline, Service Report Generator & Directory
-│       ├── admin/                  # Dashboard, Employee & Office Management, Work Sites, Ownership Transfer & Responsive Desktop Web View
-│       ├── timesheet/              # Employee Timesheet Portal, Salary Cycle Work Hour Calculation, PDF Export
+│       ├── employee/               # Employee Duty Portal & Timeline
+│       ├── admin/                  # Dashboard, Employee & Office Management, Cards Management Screen,
+│       │                           # Work Sites, Ownership Transfer & Responsive Desktop Web View
+│       ├── timesheet/              # Employee Timesheet Portal, 25th-24th Salary Cycle, Daily Calculation, PDF Export
 │       ├── security/               # Hardware Device Binding Service
 │       └── sync/                   # Offline Sync Engine
 ├── pubspec.yaml
@@ -211,7 +175,7 @@ fusion/
 
 1. **Clone or navigate to the workspace**:
    ```bash
-   cd fusion
+   cd C:\Users\srirs\.gemini\antigravity-ide\scratch\attendance_app
    ```
 2. **Install Flutter Dependencies**:
    ```bash
@@ -221,6 +185,7 @@ fusion/
    ```bash
    flutter run -d chrome
    ```
-4. **Deploy Database**:
-   - Copy `backend/supabase_schema.sql` and `supabase_service_reports_schema.sql` into your Supabase SQL Editor and execute.
+4. **Deploy Database & Scheduled Compliance Robot**:
+   - Copy `backend/supabase_schema.sql` into your Supabase SQL Editor and execute.
+   - Copy `backend/supabase_cron_job.sql` into the SQL Editor to schedule the automated daily 8:00 AM GST compliance robot.
 

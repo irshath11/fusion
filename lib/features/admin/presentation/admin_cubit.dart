@@ -149,7 +149,20 @@ class AdminCubit extends Cubit<AdminState> {
         }
       }
 
-      // 3. If cloud is initialized and fetched, synchronize down to local database
+      // 3. Preserve any local employees not yet synced to cloud so they are never lost
+      final localEmployees = _db.getEmployees();
+      for (final le in localEmployees) {
+        final key = le.id.isNotEmpty
+            ? le.id
+            : (le.email.isNotEmpty
+                ? le.email.trim().toLowerCase()
+                : le.name.trim().toLowerCase());
+        if (!empMap.containsKey(key)) {
+          empMap[key] = le;
+        }
+      }
+
+      // 4. If cloud is initialized and fetched, synchronize down to local database
       final empList = empMap.values.toList();
       empList.sort((a, b) => a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
       if (_supabase.isInitialized) {
@@ -265,9 +278,10 @@ class AdminCubit extends Cubit<AdminState> {
     return await LocationService.getCurrentLocation();
   }
 
-  void deleteOffice(String id) {
+  Future<void> deleteOffice(String id) async {
     _db.deleteOffice(id);
-    loadDashboardData('Office removed.');
+    await _supabase.deleteOfficeFromSupabase(id);
+    await loadDashboardData('Office removed.');
   }
 
   // Save / Update Work Site
