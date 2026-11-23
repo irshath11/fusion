@@ -1992,26 +1992,33 @@ class LocalDatabaseService {
     final now = DateTime.now().toLocal();
     final today = DateTime(now.year, now.month, now.day);
 
-    if (employeeId != null && employeeId.trim().isNotEmpty) {
-      final cleanTarget = employeeId.trim().toLowerCase();
-      return _attendanceRecords.where((r) {
-        final matchesIdentity = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+    final empRecords = _attendanceRecords.where((r) {
+      if (employeeId != null && employeeId.trim().isNotEmpty) {
+        final cleanTarget = employeeId.trim();
+        if (r.employeeId == cleanTarget) {
+          return EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: r.employeeId,
+            recordEmployeeName: r.employeeName,
+            employeeId: cleanTarget,
+          );
+        }
+        return EmployeeDirectoryHelper.matchesEmployeeIdentity(
           recordEmployeeId: r.employeeId,
           recordEmployeeName: r.employeeName,
           employeeId: cleanTarget,
+          employeeCode: cleanTarget,
+        ) ||
+        EmployeeDirectoryHelper.matchesEmployeeIdentity(
+          recordEmployeeId: r.employeeId,
+          recordEmployeeName: r.employeeName,
           employeeName: cleanTarget,
         );
-        final localEv = r.eventTimestamp.toLocal();
-        final rDate = DateTime(localEv.year, localEv.month, localEv.day);
-        return matchesIdentity && rDate.isAtSameMomentAs(today);
-      }).toList();
-    }
+      }
 
-    final curUser = _currentUser;
-    if (curUser == null) return [];
+      final curUser = _currentUser;
+      if (curUser == null) return false;
 
-    return _attendanceRecords.where((r) {
-      final matchesIdentity = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+      return EmployeeDirectoryHelper.matchesEmployeeIdentity(
         recordEmployeeId: r.employeeId,
         recordEmployeeName: r.employeeName,
         employeeId: curUser.id,
@@ -2019,10 +2026,121 @@ class LocalDatabaseService {
         employeeName: curUser.fullName,
         employeeEmail: curUser.email,
       );
+    }).toList()
+      ..sort((a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
+
+    if (empRecords.isEmpty) return [];
+
+    // 1. Check if there is an active unclosed regular shift (officeCheckIn within last 24h with no subsequent officeCheckOut)
+    AttendanceRecord? activeCheckIn;
+    for (int i = empRecords.length - 1; i >= 0; i--) {
+      final rec = empRecords[i];
+      if (rec.workflowStep == WorkflowStep.officeCheckOut) {
+        break;
+      }
+      if (rec.workflowStep == WorkflowStep.officeCheckIn) {
+        final elapsed = now.difference(rec.eventTimestamp);
+        if (elapsed < const Duration(hours: 24)) {
+          activeCheckIn = rec;
+        }
+        break;
+      }
+    }
+
+    if (activeCheckIn != null) {
+      // Shift is actively in progress! Return all records from activeCheckIn onwards
+      return empRecords
+          .where((r) => !r.eventTimestamp.isBefore(activeCheckIn!.eventTimestamp))
+          .toList();
+    }
+
+    // 1b. Check if there is an active unclosed emergency duty (emergencyCheckIn within last 24h with no subsequent emergencyCheckOut)
+    AttendanceRecord? activeEmergencyCheckIn;
+    for (int i = empRecords.length - 1; i >= 0; i--) {
+      final rec = empRecords[i];
+      if (rec.workflowStep == WorkflowStep.emergencyCheckOut) {
+        break;
+      }
+      if (rec.workflowStep == WorkflowStep.emergencyCheckIn) {
+        final elapsed = now.difference(rec.eventTimestamp);
+        if (elapsed < const Duration(hours: 24)) {
+          activeEmergencyCheckIn = rec;
+        }
+        break;
+      }
+    }
+
+    if (activeEmergencyCheckIn != null) {
+      return empRecords
+          .where((r) => !r.eventTimestamp.isBefore(activeEmergencyCheckIn!.eventTimestamp))
+          .toList();
+    }
+
+    // 2. Check if an officeCheckIn occurred on today's calendar date
+    final todayCheckIns = empRecords.where((r) {
+      if (r.workflowStep != WorkflowStep.officeCheckIn) return false;
       final localEv = r.eventTimestamp.toLocal();
       final rDate = DateTime(localEv.year, localEv.month, localEv.day);
-      return matchesIdentity && rDate.isAtSameMomentAs(today);
+      return rDate.isAtSameMomentAs(today);
+    }).toList();
 
+    if (todayCheckIns.isNotEmpty) {
+      final firstCheckIn = todayCheckIns.first;
+      return empRecords
+          .where((r) => !r.eventTimestamp.isBefore(firstCheckIn.eventTimestamp))
+          .toList();
+    }
+
+    // 3. Check if an overnight shift concluded recently today (officeCheckOut on today's calendar date)
+    final recentCheckOutToday = empRecords.where((r) {
+      if (r.workflowStep != WorkflowStep.officeCheckOut) return false;
+      final localEv = r.eventTimestamp.toLocal();
+      final rDate = DateTime(localEv.year, localEv.month, localEv.day);
+      return rDate.isAtSameMomentAs(today);
+    }).toList();
+
+    if (recentCheckOutToday.isNotEmpty) {
+      final lastOut = recentCheckOutToday.last;
+      final matchingIn = empRecords.lastWhere(
+        (r) =>
+            r.workflowStep == WorkflowStep.officeCheckIn &&
+            r.eventTimestamp.isBefore(lastOut.eventTimestamp),
+        orElse: () => recentCheckOutToday.first,
+      );
+
+      final matchingInLocal = matchingIn.eventTimestamp.toLocal();
+      final matchingInDate =
+          DateTime(matchingInLocal.year, matchingInLocal.month, matchingInLocal.day);
+      final isOvernightFromPrevDay = matchingInDate.isBefore(today);
+
+      // If the checkout closed an overnight shift from a previous day:
+      // - Show completed shift summary within a 4-hour window (e.g. 2:05 AM right after shift end).
+      // - After 4+ hours (e.g. 2:00 PM next afternoon), the employee has rested and is ready to start Day 2 duty fresh!
+      final elapsedSinceCheckout = now.difference(lastOut.eventTimestamp);
+      if (!isOvernightFromPrevDay || elapsedSinceCheckout < const Duration(hours: 4)) {
+        return empRecords
+            .where((r) =>
+                !r.eventTimestamp.isBefore(matchingIn.eventTimestamp) &&
+                !r.eventTimestamp.isAfter(lastOut.eventTimestamp))
+            .toList();
+      } else {
+        // The overnight shift from previous day concluded > 4 hours ago.
+        // That shift is finished and archived to yesterday's timesheet.
+        // For today's session, only records that occurred strictly AFTER that checkout belong to today.
+        return empRecords.where((r) {
+          if (!r.eventTimestamp.isAfter(lastOut.eventTimestamp)) return false;
+          final localEv = r.eventTimestamp.toLocal();
+          final rDate = DateTime(localEv.year, localEv.month, localEv.day);
+          return rDate.isAtSameMomentAs(today);
+        }).toList();
+      }
+    }
+
+    // 4. Default: any records on today's calendar date
+    return empRecords.where((r) {
+      final localEv = r.eventTimestamp.toLocal();
+      final rDate = DateTime(localEv.year, localEv.month, localEv.day);
+      return rDate.isAtSameMomentAs(today);
     }).toList();
   }
 

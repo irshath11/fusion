@@ -238,27 +238,10 @@ class TimesheetCalculator {
     final bool isSingleEmployee = hasTarget;
 
     // Map key: "yyyy-MM-dd" for single employee, or "empKey__yyyy-MM-dd" for workforce
-    final Map<String, List<AttendanceRecord>> groupedMap = {};
-
-    for (final record in filteredRecords) {
-      final localEv = record.eventTimestamp.toLocal();
-      final dateStr =
-          "${localEv.year}-${localEv.month.toString().padLeft(2, '0')}-${localEv.day.toString().padLeft(2, '0')}";
-      final canonicalEmpId = EmployeeDirectoryHelper.getEmployeeId(
-        currentCode: record.employeeId,
-        name: record.employeeName,
-        id: record.employeeId,
-      );
-      final empKey = canonicalEmpId.isNotEmpty
-          ? canonicalEmpId
-          : (record.employeeId.isNotEmpty
-              ? record.employeeId
-              : (record.employeeName.trim().isNotEmpty
-                  ? record.employeeName.trim().toLowerCase()
-                  : 'unknown'));
-      final groupKey = isSingleEmployee ? dateStr : "${empKey}__$dateStr";
-      groupedMap.putIfAbsent(groupKey, () => []).add(record);
-    }
+    final Map<String, List<AttendanceRecord>> groupedMap = groupRecordsByShiftDate(
+      filteredRecords,
+      isSingleEmployee: isSingleEmployee,
+    );
 
     final List<DailyTimesheetEntry> entries = [];
 
