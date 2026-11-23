@@ -24,6 +24,21 @@ subprojects {
 }
 
 subprojects {
+    if (project.name == "file_picker") {
+        project.plugins.withId("com.android.library") {
+            if (!project.plugins.hasPlugin("org.jetbrains.kotlin.android")) {
+                project.plugins.apply("org.jetbrains.kotlin.android")
+            }
+        }
+    }
+    project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class.java).configureEach {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
+    }
+}
+
+subprojects {
     val configureAndroid = {
         val android = project.extensions.findByType(com.android.build.gradle.BaseExtension::class.java)
         if (android != null) {

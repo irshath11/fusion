@@ -47,3 +47,4 @@ app.*.map.json
 # Submodules & External
 wedding_invitation/
 
+android/build/
