@@ -192,21 +192,29 @@ class SyncEngine {
           // Deferred Reverse Geocoding:
           // Convert raw GPS coordinates to exact live street address now that internet is available
           if (record.latitude != 0.0 && record.longitude != 0.0) {
-            try {
-              final exactAddress =
-                  await LocationService.getAddressFromCoordinates(
-                record.latitude,
-                record.longitude,
-              ).timeout(const Duration(seconds: 4));
+            final hasRealAddress = record.address.isNotEmpty &&
+                !record.address.contains('Live Field Location') &&
+                !record.address.contains('Timeout') &&
+                !record.address.contains('Error') &&
+                !record.address.startsWith('GPS:');
 
-              if (exactAddress.isNotEmpty &&
-                  !exactAddress.contains('Live Field Location') &&
-                  !exactAddress.contains('Timeout') &&
-                  !exactAddress.contains('Error')) {
-                recordToSync = record.copyWith(address: exactAddress);
-                _db.saveAttendanceRecord(recordToSync, persist: false);
-              }
-            } catch (_) {}
+            if (!hasRealAddress) {
+              try {
+                final exactAddress =
+                    await LocationService.getAddressFromCoordinates(
+                  record.latitude,
+                  record.longitude,
+                ).timeout(const Duration(seconds: 4));
+
+                if (exactAddress.isNotEmpty &&
+                    !exactAddress.contains('Live Field Location') &&
+                    !exactAddress.contains('Timeout') &&
+                    !exactAddress.contains('Error')) {
+                  recordToSync = record.copyWith(address: exactAddress);
+                  _db.saveAttendanceRecord(recordToSync, persist: false);
+                }
+              } catch (_) {}
+            }
           }
 
           String? publicPhotoUrl;

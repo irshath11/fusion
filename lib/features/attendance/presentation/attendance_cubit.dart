@@ -349,11 +349,11 @@ class AttendanceCubit extends Cubit<AttendanceState> {
 
       _db.addAttendanceRecord(record);
 
-      // Immediately trigger background auto-sync to upload record to Supabase DB if online
-      SyncEngine().triggerAutoSync();
-
       WorkflowStep next = _db.getWorkflowStepForEmployee(emp.id);
       emit(AttendanceStepSuccess(record, next));
+
+      // Asynchronously trigger background auto-sync to upload record to Supabase DB if online
+      SyncEngine().triggerAutoSync();
     } catch (e) {
       emit(AttendanceFailure('Attendance capture failed: ${e.toString()}'));
     }
@@ -368,7 +368,13 @@ class AttendanceCubit extends Cubit<AttendanceState> {
 
   void resetState() {
     final user = _db.currentUser;
-    emit(AttendanceInitial(
-        _db.getWorkflowStepForEmployee(user?.id ?? user?.firebaseUid)));
+    final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+      id: user?.id,
+      code: user?.employeeCode,
+      name: user?.fullName,
+      email: user?.email,
+    );
+    final empId = official?.employeeId ?? user?.employeeCode ?? user?.id ?? user?.firebaseUid;
+    emit(AttendanceInitial(_db.getWorkflowStepForEmployee(empId)));
   }
 }

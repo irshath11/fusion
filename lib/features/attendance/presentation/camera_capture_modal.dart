@@ -210,8 +210,9 @@ class _CameraCaptureModalState extends State<CameraCaptureModal> {
                             borderRadius: BorderRadius.circular(12)),
                       ),
                       onPressed: () {
-                        widget.onPhotoCaptured(_capturedResult!);
+                        final result = _capturedResult!;
                         Navigator.pop(context);
+                        widget.onPhotoCaptured(result);
                       },
                       icon: const Icon(Icons.check_circle_rounded),
                       label: const FittedBox(

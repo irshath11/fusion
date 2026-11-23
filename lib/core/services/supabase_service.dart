@@ -827,16 +827,31 @@ class SupabaseService {
       final currentUser = db.currentUser;
       final bool isEmployee = currentUser != null && currentUser.role == UserRole.employee;
 
+      final official = currentUser != null
+          ? EmployeeDirectoryHelper.resolveOfficialRecord(
+              id: currentUser.id,
+              code: currentUser.employeeCode,
+              name: currentUser.fullName,
+              email: currentUser.email,
+            )
+          : null;
+
+      final targetEmpId = official?.employeeId ??
+          (isEmployee ? (currentUser.id.isNotEmpty ? currentUser.id : currentUser.firebaseUid) : null);
+
       final cloudRecords = await fetchAttendanceRecordsFromSupabase(
-        employeeId: isEmployee ? (currentUser.id.isNotEmpty ? currentUser.id : currentUser.firebaseUid) : null,
-        employeeName: isEmployee ? currentUser.fullName : null,
+        employeeId: targetEmpId,
+        employeeName: isEmployee ? (official?.fullName ?? currentUser.fullName) : null,
         since: isEmployee ? DateTime.now().subtract(const Duration(days: 90)) : null,
       );
       if (cloudRecords.isNotEmpty) {
         db.saveAttendanceRecordsBatch(cloudRecords);
       }
       if (isEmployee && currentUser.id.isNotEmpty) {
-        db.pruneAttendanceRecordsForEmployee(currentUser.id, employeeName: currentUser.fullName);
+        db.pruneAttendanceRecordsForEmployee(
+          official?.employeeId ?? currentUser.id,
+          employeeName: official?.fullName ?? currentUser.fullName,
+        );
       }
       db.refreshCurrentUser();
     } catch (e) {
@@ -2264,7 +2279,20 @@ class SupabaseService {
           query = query.gte('event_timestamp', since.toIso8601String());
         }
         if (employeeId != null && employeeId.trim().isNotEmpty) {
-          query = query.eq('employee_id', employeeId.trim());
+          final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+            id: employeeId,
+            name: employeeName,
+          );
+          final Set<String> candidateIds = {employeeId.trim()};
+          if (official != null) {
+            candidateIds.add(official.employeeId);
+            candidateIds.add('emp-${official.employeeId}');
+          }
+          if (candidateIds.length == 1) {
+            query = query.eq('employee_id', candidateIds.first);
+          } else {
+            query = query.inFilter('employee_id', candidateIds.toList());
+          }
         }
 
         final List<dynamic> response = await query

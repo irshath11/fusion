@@ -487,6 +487,7 @@ void main() {
       db.addAttendanceRecord(testRecord);
 
       final resolvedCount = db.autoResolveExpiredCheckIns(force: true);
+      expect(resolvedCount, 0);
       final allRecords = db.getAttendanceRecords();
       final autoCheckOutMatches = allRecords.where((r) =>
           r.employeeId == 'emp-test-recent-10h' &&

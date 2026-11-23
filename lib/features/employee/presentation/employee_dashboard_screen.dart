@@ -27,6 +27,7 @@ import 'work_photos_report_screen.dart';
 import '../../timesheet/domain/timesheet_entry.dart';
 import '../../../core/utils/timesheet_calculator.dart';
 import '../../../core/utils/salary_cycle_helper.dart';
+import '../../../core/utils/employee_directory_helper.dart';
 import '../../../core/constants/app_theme.dart';
 import '../../../core/theme/app_theme_preset.dart';
 import '../../../core/widgets/app_shell.dart';
@@ -284,7 +285,13 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen>
   void _handleAttendanceStep(WorkflowStep step,
       {String? activeSiteName}) async {
     final user = _db.currentUser;
-    final empId = user?.id ?? user?.firebaseUid;
+    final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+      id: user?.id,
+      code: user?.employeeCode,
+      name: user?.fullName,
+      email: user?.email,
+    );
+    final empId = official?.employeeId ?? user?.employeeCode ?? user?.id ?? user?.firebaseUid;
 
     // Fast 10ms pre-check location status before showing camera or dialogs
     final status = await LocationService.quickStatusCheck();
@@ -571,11 +578,16 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen>
   @override
   Widget build(BuildContext context) {
     final user = _db.currentUser;
-    final currentStep =
-        _db.getWorkflowStepForEmployee(user?.id ?? user?.firebaseUid);
+    final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+      id: user?.id,
+      code: user?.employeeCode,
+      name: user?.fullName,
+      email: user?.email,
+    );
+    final empId = official?.employeeId ?? user?.employeeCode ?? user?.id ?? user?.firebaseUid;
+    final currentStep = _db.getWorkflowStepForEmployee(empId);
     final now = DateTime.now();
 
-    final empId = user?.id ?? user?.firebaseUid;
     final allRecords = _db.getAttendanceRecords();
 
     // Use TimesheetCalculator to guarantee 100% exact parity with Employee Timesheet & Admin Reports
@@ -625,11 +637,9 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen>
     }
 
     String workingTime = '00h 00m';
-    final bool isOnBreak =
-        _db.isEmployeeOnBreakToday(user?.id ?? user?.firebaseUid);
-    final activeBreak = _db.getActiveBreakToday(user?.id ?? user?.firebaseUid);
-    final Duration totalBreakToday =
-        _db.getTodayBreakDuration(user?.id ?? user?.firebaseUid);
+    final bool isOnBreak = _db.isEmployeeOnBreakToday(empId);
+    final activeBreak = _db.getActiveBreakToday(empId);
+    final Duration totalBreakToday = _db.getTodayBreakDuration(empId);
     final bool isEmergencyDutyActive =
         _db.isEmergencyDutyActiveToday(empId);
     final activeEmergencyDuty =
@@ -645,7 +655,6 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen>
         workingTime = '${hrs.toString().padLeft(2, '0')}h ${mins.toString().padLeft(2, '0')}m';
       }
     } else {
-      final userTodayRecords = _db.getTodayAttendanceRecords(empId);
       if (userTodayRecords.isNotEmpty) {
         final checkInMatches = userTodayRecords
             .where((r) => r.workflowStep == WorkflowStep.officeCheckIn);
@@ -1397,7 +1406,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen>
                                               const SizedBox(width: 10),
                                               Expanded(
                                                 child: Text(
-                                                  'Currently at: ${_db.getActiveSiteNameToday(user?.id ?? user?.firebaseUid) ?? "Work Site"}',
+                                                  'Currently at: ${_db.getActiveSiteNameToday(empId) ?? "Work Site"}',
                                                   style: TextStyle(
                                                     fontSize: 17,
                                                     fontWeight: FontWeight.bold,
@@ -2350,11 +2359,17 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen>
   Widget _buildEmergencyDutyScreen(
       BuildContext context, AttendanceState state) {
     final user = _db.currentUser;
-    final empId = user?.id ?? user?.firebaseUid;
+    final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+      id: user?.id,
+      code: user?.employeeCode,
+      name: user?.fullName,
+      email: user?.email,
+    );
+    final empId = official?.employeeId ?? user?.employeeCode ?? user?.id ?? user?.firebaseUid;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final palette = AppTheme.currentColors;
 
-    final isEmergencyActive = _db.isEmergencyDutyActiveToday(user?.id);
+    final isEmergencyActive = _db.isEmergencyDutyActiveToday(empId);
     final allRecords = _db.getAttendanceRecords();
     final emergencyRecords = allRecords
         .where((r) =>
