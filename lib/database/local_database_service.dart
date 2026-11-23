@@ -1885,24 +1885,20 @@ class LocalDatabaseService {
 
       for (int i = 0; i < records.length; i++) {
         final rec = records[i];
-        if (rec.workflowStep == WorkflowStep.officeCheckIn ||
-            rec.workflowStep == WorkflowStep.siteCheckIn) {
+        if (rec.workflowStep == WorkflowStep.officeCheckIn) {
           final checkInTime = rec.eventTimestamp;
           final elapsed = now.difference(checkInTime);
 
           if (elapsed >= const Duration(hours: 24)) {
-            // Check if there is any checkout occurring after this checkIn and before any subsequent checkIn
+            // Check if there is an officeCheckOut (or final day end) occurring after this checkIn and before any subsequent officeCheckIn
             bool hasMatchingCheckOut = false;
             for (int j = i + 1; j < records.length; j++) {
               final nextRec = records[j];
-              if (nextRec.workflowStep == WorkflowStep.officeCheckOut ||
-                  nextRec.workflowStep == WorkflowStep.siteCheckOut ||
-                  nextRec.workflowStep == WorkflowStep.emergencyCheckOut) {
+              if (nextRec.workflowStep == WorkflowStep.officeCheckOut) {
                 hasMatchingCheckOut = true;
                 break;
-              } else if (nextRec.workflowStep == WorkflowStep.officeCheckIn ||
-                  nextRec.workflowStep == WorkflowStep.siteCheckIn) {
-                // Next checkIn session started
+              } else if (nextRec.workflowStep == WorkflowStep.officeCheckIn) {
+                // Next office checkIn session started without checking out the previous one
                 break;
               }
             }
@@ -1911,10 +1907,12 @@ class LocalDatabaseService {
               // Auto-generate officeCheckOut after 8 hours from check-in time
               final autoCheckOutTime = checkInTime.add(const Duration(hours: 8));
 
-              // Avoid duplicate if already exists with same timestamp
+              // Avoid duplicate if already exists with same timestamp or auto checkout address
               final duplicateExists = records.any((r) =>
                   r.workflowStep == WorkflowStep.officeCheckOut &&
-                  r.eventTimestamp.isAtSameMomentAs(autoCheckOutTime));
+                  (r.eventTimestamp.isAtSameMomentAs(autoCheckOutTime) ||
+                   (r.address.contains('Auto Check-Out') &&
+                    r.eventTimestamp.isAfter(checkInTime))));
 
               if (!duplicateExists) {
                 final autoRecord = AttendanceRecord(

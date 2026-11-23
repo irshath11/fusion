@@ -277,6 +277,144 @@ void main() {
       expect(entry.overtimeHours, 2.0);
       expect(entry.grossDuration, const Duration(hours: 12));
     });
+
+    test(
+        'Active shift with officeCheckIn and intermediate site visits under 24h remains in progress without auto check-out',
+        () {
+      final now = DateTime.now();
+      final checkInTime = now.subtract(const Duration(hours: 6));
+      final siteInTime = now.subtract(const Duration(hours: 4));
+      final siteOutTime = now.subtract(const Duration(hours: 2));
+
+      final records = [
+        AttendanceRecord(
+          id: 'rec-site-active-in',
+          employeeId: 'emp-site-active',
+          employeeName: 'Site Active Worker',
+          workflowStep: WorkflowStep.officeCheckIn,
+          eventTimestamp: checkInTime,
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'Main Office HQ',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+        ),
+        AttendanceRecord(
+          id: 'rec-site-active-site-in',
+          employeeId: 'emp-site-active',
+          employeeName: 'Site Active Worker',
+          workflowStep: WorkflowStep.siteCheckIn,
+          eventTimestamp: siteInTime,
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'Al Dhafra Site',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+          siteName: 'Al Dhafra Site',
+        ),
+        AttendanceRecord(
+          id: 'rec-site-active-site-out',
+          employeeId: 'emp-site-active',
+          employeeName: 'Site Active Worker',
+          workflowStep: WorkflowStep.siteCheckOut,
+          eventTimestamp: siteOutTime,
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'Al Dhafra Site',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+          siteName: 'Al Dhafra Site',
+        ),
+      ];
+
+      final entries = TimesheetCalculator.calculateDailyTimesheets(records);
+      expect(entries.length, 1);
+      final entry = entries.first;
+
+      // Under 24h, employee has not completed final officeCheckOut so shift is in progress
+      expect(entry.isCompleted, isFalse);
+      expect(entry.isAutoCompleted, isFalse);
+      expect(entry.checkInTime, checkInTime);
+      expect(entry.totalHours, greaterThanOrEqualTo(5.9));
+      expect(entry.totalHours, lessThanOrEqualTo(6.1));
+    });
+
+    test(
+        'Shift with officeCheckIn and intermediate site visits crossing 24h without officeCheckOut triggers auto check-out',
+        () {
+      final now = DateTime.now();
+      DateTime checkInTime = now.subtract(const Duration(hours: 30));
+      if (checkInTime.weekday == DateTime.sunday) {
+        checkInTime = now.subtract(const Duration(hours: 54));
+      }
+      final siteInTime = checkInTime.add(const Duration(hours: 2));
+      final siteOutTime = checkInTime.add(const Duration(hours: 5));
+
+      final records = [
+        AttendanceRecord(
+          id: 'rec-site-expired-in',
+          employeeId: 'emp-site-exp',
+          employeeName: 'Site Expired Worker',
+          workflowStep: WorkflowStep.officeCheckIn,
+          eventTimestamp: checkInTime,
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'Main Office HQ',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+        ),
+        AttendanceRecord(
+          id: 'rec-site-expired-site-in',
+          employeeId: 'emp-site-exp',
+          employeeName: 'Site Expired Worker',
+          workflowStep: WorkflowStep.siteCheckIn,
+          eventTimestamp: siteInTime,
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'Field Site',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+          siteName: 'Field Site',
+        ),
+        AttendanceRecord(
+          id: 'rec-site-expired-site-out',
+          employeeId: 'emp-site-exp',
+          employeeName: 'Site Expired Worker',
+          workflowStep: WorkflowStep.siteCheckOut,
+          eventTimestamp: siteOutTime,
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'Field Site',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+          siteName: 'Field Site',
+        ),
+      ];
+
+      final entries = TimesheetCalculator.calculateDailyTimesheets(records);
+      expect(entries.length, 1);
+      final entry = entries.first;
+
+      // Crossing 24 hours without final officeCheckOut: auto check-out capped at 8h
+      expect(entry.isCompleted, isTrue);
+      expect(entry.isAutoCompleted, isTrue);
+      expect(entry.regularHours, 8.0);
+      expect(entry.overtimeHours, 0.0);
+      expect(entry.totalDuration, const Duration(hours: 8));
+      expect(entry.checkOutTime, checkInTime.add(const Duration(hours: 8)));
+    });
   });
 
   group('LocalDatabaseService autoResolveExpiredCheckIns Tests', () {
@@ -304,7 +442,7 @@ void main() {
 
       db.addAttendanceRecord(testRecord);
 
-      final resolvedCount = db.autoResolveExpiredCheckIns();
+      final resolvedCount = db.autoResolveExpiredCheckIns(force: true);
       expect(resolvedCount, greaterThanOrEqualTo(1));
 
       final allRecords = db.getAttendanceRecords();
@@ -320,8 +458,96 @@ void main() {
       expect(autoRec.syncStatus, SyncStatus.pending);
 
       // Subsequent call is idempotent (no duplicate created)
-      final secondRunCount = db.autoResolveExpiredCheckIns();
+      final secondRunCount = db.autoResolveExpiredCheckIns(force: true);
       expect(secondRunCount, 0);
+    });
+
+    test(
+        'autoResolveExpiredCheckIns does NOT synthesize checkout if under 24 hours from officeCheckIn',
+        () {
+      final db = LocalDatabaseService();
+      final now = DateTime.now();
+      final recentCheckInTime = now.subtract(const Duration(hours: 10));
+
+      final testRecord = AttendanceRecord(
+        id: 'test-rec-recent-1',
+        employeeId: 'emp-test-recent-10h',
+        employeeName: 'Recent User',
+        workflowStep: WorkflowStep.officeCheckIn,
+        eventTimestamp: recentCheckInTime,
+        latitude: 24.36,
+        longitude: 54.50,
+        gpsAccuracy: 5.0,
+        address: 'Main Office HQ',
+        deviceId: 'dev-test',
+        photoBase64: '',
+        isGeofenceValid: true,
+      );
+
+      db.addAttendanceRecord(testRecord);
+
+      final resolvedCount = db.autoResolveExpiredCheckIns(force: true);
+      final allRecords = db.getAttendanceRecords();
+      final autoCheckOutMatches = allRecords.where((r) =>
+          r.employeeId == 'emp-test-recent-10h' &&
+          r.workflowStep == WorkflowStep.officeCheckOut);
+
+      // Under 24h: must NOT auto check-out
+      expect(autoCheckOutMatches.isEmpty, isTrue);
+    });
+
+    test(
+        'autoResolveExpiredCheckIns synthesizes checkout when officeCheckIn crossed 24h even if siteCheckOut occurred',
+        () {
+      final db = LocalDatabaseService();
+      final now = DateTime.now();
+      final oldCheckInTime = now.subtract(const Duration(hours: 28));
+
+      final recIn = AttendanceRecord(
+        id: 'test-rec-site-end-in',
+        employeeId: 'emp-test-site-end',
+        employeeName: 'Site End User',
+        workflowStep: WorkflowStep.officeCheckIn,
+        eventTimestamp: oldCheckInTime,
+        latitude: 24.36,
+        longitude: 54.50,
+        gpsAccuracy: 5.0,
+        address: 'Main Office HQ',
+        deviceId: 'dev-test',
+        photoBase64: '',
+        isGeofenceValid: true,
+      );
+      final recSiteOut = AttendanceRecord(
+        id: 'test-rec-site-end-out',
+        employeeId: 'emp-test-site-end',
+        employeeName: 'Site End User',
+        workflowStep: WorkflowStep.siteCheckOut,
+        eventTimestamp: oldCheckInTime.add(const Duration(hours: 4)),
+        latitude: 24.36,
+        longitude: 54.50,
+        gpsAccuracy: 5.0,
+        address: 'Field Site',
+        deviceId: 'dev-test',
+        photoBase64: '',
+        isGeofenceValid: true,
+        siteName: 'Field Site',
+      );
+
+      db.addAttendanceRecord(recIn);
+      db.addAttendanceRecord(recSiteOut);
+
+      final resolvedCount = db.autoResolveExpiredCheckIns(force: true);
+      expect(resolvedCount, greaterThanOrEqualTo(1));
+
+      final allRecords = db.getAttendanceRecords();
+      final autoCheckOutMatches = allRecords.where((r) =>
+          r.employeeId == 'emp-test-site-end' &&
+          r.workflowStep == WorkflowStep.officeCheckOut);
+
+      // Crossing 24h after office check-in with no final officeCheckOut: must synthesize auto checkout
+      expect(autoCheckOutMatches.isNotEmpty, isTrue);
+      expect(autoCheckOutMatches.first.eventTimestamp,
+          oldCheckInTime.add(const Duration(hours: 8)));
     });
   });
 }

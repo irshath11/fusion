@@ -291,9 +291,11 @@ class TimesheetCalculator {
           !r.address.contains('Auto Check-Out') &&
           (r.siteName == null || !r.siteName!.contains('Auto Completed')));
 
+      final bool hasOfficeCheckIn = checkInRecordIndex != -1;
+
       if (realOfficeOutMatches.isNotEmpty) {
         checkOutTimestamp = realOfficeOutMatches.last.eventTimestamp;
-      } else if (siteOutMatches.isNotEmpty) {
+      } else if (!hasOfficeCheckIn && siteOutMatches.isNotEmpty) {
         checkOutTimestamp = siteOutMatches.last.eventTimestamp;
       } else if (officeOutMatches.isNotEmpty) {
         checkOutTimestamp = officeOutMatches.last.eventTimestamp;
@@ -368,8 +370,8 @@ class TimesheetCalculator {
       }
 
       final DateTime? checkInTimestamp = checkInRecord.eventTimestamp;
-      final bool hasExplicitCheckOut =
-          realOfficeOutMatches.isNotEmpty || siteOutMatches.isNotEmpty;
+      final bool hasExplicitCheckOut = realOfficeOutMatches.isNotEmpty ||
+          (!hasOfficeCheckIn && siteOutMatches.isNotEmpty);
       final bool isPreviouslyAutoCompleted = officeOutMatches.any((r) =>
           r.address.contains('Auto Check-Out') ||
           (r.siteName != null && r.siteName!.contains('Auto Completed')));
