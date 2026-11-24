@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../core/constants/app_enums.dart';
 import '../core/services/supabase_service.dart';
@@ -10,6 +12,8 @@ import '../features/admin/domain/employee_entity.dart';
 import '../features/admin/domain/office_entity.dart';
 import '../features/admin/domain/work_site_entity.dart';
 import '../features/attendance/domain/attendance_record.dart';
+import '../features/salary/domain/employee_salary_config.dart';
+import '../features/salary/data/default_salary_data.dart';
 import '../core/utils/employee_directory_helper.dart';
 
 class LocalDatabaseService {
@@ -31,6 +35,7 @@ class LocalDatabaseService {
   final List<OfficeEntity> _offices = [];
   final List<WorkSiteEntity> _workSites = [];
   final List<AttendanceRecord> _attendanceRecords = [];
+  final List<EmployeeSalaryConfig> _employeeSalaries = [];
 
   // Initialize with Hive persistence & seed enterprise defaults
   Future<void> init() async {
@@ -139,6 +144,26 @@ class LocalDatabaseService {
         }
       }
 
+      final savedSalariesJson = _settingsBox?.get('salaries_json');
+      if (savedSalariesJson != null && savedSalariesJson.toString().isNotEmpty) {
+        try {
+          final List<dynamic> decoded = jsonDecode(savedSalariesJson);
+          _employeeSalaries.clear();
+          for (final item in decoded) {
+            final cfg = EmployeeSalaryConfig.fromJson(item);
+            if (!_isExcludedSalaryOwner(cfg.employeeName, cfg.employeeCode)) {
+              _employeeSalaries.add(cfg);
+            }
+          }
+        } catch (_) {}
+      }
+      if (_employeeSalaries.isEmpty) {
+        _employeeSalaries.addAll(DefaultSalaryData.defaultConfigs);
+        _persistEmployeeSalaries();
+      } else {
+        _employeeSalaries.removeWhere((s) => _isExcludedSalaryOwner(s.employeeName, s.employeeCode));
+      }
+
       // Check live setup status against Supabase table 'organizations'
       await checkSetupStatusFromSupabase();
     } catch (e) {
@@ -151,6 +176,20 @@ class LocalDatabaseService {
     _offices.removeWhere((o) => o.id == 'office-musaffah-m12-001' || o.id == 'office-main-001');
     _attendanceRecords.removeWhere((r) => r.id.startsWith('rec-001-') || r.id.startsWith('rec-002-'));
 
+    // Purge relieved personnel (e.g. Asik Saheel) completely from local database
+    _employees.removeWhere((e) => EmployeeDirectoryHelper.isRelievedEmployee(
+      id: e.id, name: e.name, email: e.email, code: e.employeeCode,
+    ));
+    _users.removeWhere((u) => EmployeeDirectoryHelper.isRelievedEmployee(
+      id: u.id, name: u.fullName, email: u.email, code: u.employeeCode,
+    ));
+    _employeeSalaries.removeWhere((s) => EmployeeDirectoryHelper.isRelievedEmployee(
+      name: s.employeeName, code: s.employeeCode,
+    ));
+    _attendanceRecords.removeWhere((r) => EmployeeDirectoryHelper.isRelievedEmployee(
+      id: r.employeeId, name: r.employeeName,
+    ));
+
     // Automatically resolve any dangling check-ins older than 24 hours
     autoResolveExpiredCheckIns();
 
@@ -159,8 +198,10 @@ class LocalDatabaseService {
 
     _persistOffices();
     _persistEmployees();
+    _persistUsers();
     _persistWorkSites();
     _persistAttendanceRecords();
+    _persistEmployeeSalaries();
   }
 
   // Setup Wizard Flag
@@ -383,7 +424,7 @@ class LocalDatabaseService {
                   ? existing.department
                   : e.department),
           photoUrl: official != null ? official.photoAsset : (existing.photoUrl ?? e.photoUrl),
-          bypassGeofence: getGeofenceOverride(userId: e.id, email: e.email, employeeCode: e.employeeCode, name: e.name) ?? existing.bypassGeofence || e.bypassGeofence,
+          bypassGeofence: getGeofenceOverride(userId: e.id, email: e.email, employeeCode: e.employeeCode, name: e.name) ?? (existing.bypassGeofence || e.bypassGeofence),
         );
       }
     }
@@ -429,11 +470,20 @@ class LocalDatabaseService {
       return u;
     }).toList();
 
-    result.sort((a, b) => a.fullName.trim().toLowerCase().compareTo(b.fullName.trim().toLowerCase()));
-    return List.unmodifiable(result);
+    final filtered = result.where((u) => !EmployeeDirectoryHelper.isRelievedEmployee(
+      id: u.id, name: u.fullName, email: u.email, code: u.employeeCode,
+    )).toList();
+    filtered.sort((a, b) => a.fullName.trim().toLowerCase().compareTo(b.fullName.trim().toLowerCase()));
+    return List.unmodifiable(filtered);
   }
 
   void saveUser(UserEntity user) {
+    if (EmployeeDirectoryHelper.isRelievedEmployee(
+      id: user.id, name: user.fullName, email: user.email, code: user.employeeCode,
+    )) {
+      deleteUser(user.id);
+      return;
+    }
     int index = _users.indexWhere((u) =>
         u.id == user.id ||
         (u.email.isNotEmpty &&
@@ -450,7 +500,15 @@ class LocalDatabaseService {
       final cur = _currentUser!;
       if (cur.id == user.id ||
           (cur.firebaseUid.isNotEmpty && cur.firebaseUid == user.firebaseUid) ||
-          (cur.email.isNotEmpty && user.email.isNotEmpty && cur.email.trim().toLowerCase() == user.email.trim().toLowerCase())) {
+          (cur.email.isNotEmpty && user.email.isNotEmpty && cur.email.trim().toLowerCase() == user.email.trim().toLowerCase()) ||
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: user.id,
+            recordEmployeeName: user.fullName,
+            employeeId: cur.id,
+            employeeCode: cur.employeeCode,
+            employeeName: cur.fullName,
+            employeeEmail: cur.email,
+          )) {
         refreshCurrentUser();
       }
     }
@@ -459,6 +517,11 @@ class LocalDatabaseService {
   void setUsers(List<UserEntity> users) {
     _users.clear();
     for (final u in users) {
+      if (EmployeeDirectoryHelper.isRelievedEmployee(
+        id: u.id, name: u.fullName, email: u.email, code: u.employeeCode,
+      )) {
+        continue;
+      }
       final override = getGeofenceOverride(
         userId: u.id,
         email: u.email,
@@ -606,7 +669,7 @@ class LocalDatabaseService {
               : ((existing.photoUrl != null && existing.photoUrl!.trim().isNotEmpty)
                   ? existing.photoUrl
                   : e.photoUrl),
-          bypassGeofence: getGeofenceOverride(userId: e.id, email: e.email, employeeCode: e.employeeCode, name: e.name) ?? existing.bypassGeofence || e.bypassGeofence,
+          bypassGeofence: getGeofenceOverride(userId: e.id, email: e.email, employeeCode: e.employeeCode, name: e.name) ?? (existing.bypassGeofence || e.bypassGeofence),
         );
       }
     }
@@ -645,8 +708,11 @@ class LocalDatabaseService {
       }
       return e;
     }).toList();
-    list.sort((a, b) => a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
-    return List.unmodifiable(list);
+    final filtered = list.where((e) => !EmployeeDirectoryHelper.isRelievedEmployee(
+      id: e.id, name: e.name, email: e.email, code: e.employeeCode,
+    )).toList();
+    filtered.sort((a, b) => a.name.trim().toLowerCase().compareTo(b.name.trim().toLowerCase()));
+    return List.unmodifiable(filtered);
   }
 
   /// No-op: prevents injecting synthetic directory employees into local database
@@ -655,6 +721,11 @@ class LocalDatabaseService {
   void setEmployees(List<EmployeeEntity> employees) {
     _employees.clear();
     for (final e in employees) {
+      if (EmployeeDirectoryHelper.isRelievedEmployee(
+        id: e.id, name: e.name, email: e.email, code: e.employeeCode,
+      )) {
+        continue;
+      }
       final override = getGeofenceOverride(
         userId: e.id,
         email: e.email,
@@ -672,6 +743,12 @@ class LocalDatabaseService {
   }
 
   void saveEmployee(EmployeeEntity employee) {
+    if (EmployeeDirectoryHelper.isRelievedEmployee(
+      id: employee.id, name: employee.name, email: employee.email, code: employee.employeeCode,
+    )) {
+      deleteEmployee(employee.id);
+      return;
+    }
     int index = _employees.indexWhere((e) =>
         e.id == employee.id ||
         (e.email.isNotEmpty &&
@@ -684,6 +761,35 @@ class LocalDatabaseService {
       _employees.add(employee);
     }
     _persistEmployees();
+
+    // Also sync matching user in _users so employee location and details immediately update
+    for (int i = 0; i < _users.length; i++) {
+      final u = _users[i];
+      if (u.id == employee.id ||
+          (u.email.isNotEmpty && employee.email.isNotEmpty && u.email.trim().toLowerCase() == employee.email.trim().toLowerCase()) ||
+          EmployeeDirectoryHelper.matchesEmployeeIdentity(
+            recordEmployeeId: employee.id,
+            recordEmployeeName: employee.name,
+            employeeId: u.id,
+            employeeCode: u.employeeCode,
+            employeeName: u.fullName,
+            employeeEmail: u.email,
+          )) {
+        _users[i] = u.copyWith(
+          employeeCode: employee.employeeCode,
+          designation: employee.designation,
+          department: employee.department,
+          phoneNumber: employee.mobileNumber,
+          useDefaultOffice: employee.useDefaultOffice,
+          clearAssignedOffice:
+              employee.useDefaultOffice || employee.assignedOfficeId == null,
+          assignedOfficeId: employee.assignedOfficeId,
+          assignedOfficeName: employee.assignedOfficeName,
+          bypassGeofence: employee.bypassGeofence,
+        );
+      }
+    }
+    _persistUsers();
 
     if (_currentUser != null) {
       final cur = _currentUser!;
@@ -713,6 +819,138 @@ class LocalDatabaseService {
     _persistEmployees();
   }
 
+  void _persistEmployeeSalaries() {
+    _settingsBox?.put(
+      'salaries_json',
+      jsonEncode(_employeeSalaries.map((s) => s.toJson()).toList()),
+    );
+  }
+
+  bool _isExcludedSalaryOwner(String name, String code) {
+    if (EmployeeDirectoryHelper.isRelievedEmployee(name: name, code: code)) return true;
+    final n = name.trim().toLowerCase();
+    final c = code.trim().toLowerCase();
+    if (c == '1058' || c == 'emp-1058') return false;
+    if (n.contains('alnaser') || n.contains('al naser') || n.contains('al-naser') || n == 'naser') return false;
+    if (n.contains('nasurudeen') ||
+        n.contains('nasrudeen') ||
+        n.contains('nasruddin') ||
+        n.contains('nasirudeen')) {
+      return true;
+    }
+    if (n.contains('siraj') || n.contains('sirajudeen') || n.contains('sirajuddin')) {
+      return true;
+    }
+    return false;
+  }
+
+  /// Returns all stored salary configurations, guaranteed to include master defaults
+  List<EmployeeSalaryConfig> getEmployeeSalaries() {
+    if (_employeeSalaries.isEmpty) {
+      _employeeSalaries.addAll(DefaultSalaryData.defaultConfigs);
+      _persistEmployeeSalaries();
+    }
+    // Ensure all master default configs (including Alnaser Samsudeen 1058) are present
+    bool addedAny = false;
+    for (final def in DefaultSalaryData.defaultConfigs) {
+      final exists = _employeeSalaries.any((s) =>
+          (s.employeeCode.isNotEmpty && s.employeeCode.toUpperCase() == def.employeeCode.toUpperCase()) ||
+          s.employeeName.trim().toLowerCase() == def.employeeName.trim().toLowerCase());
+      if (!exists && !_isExcludedSalaryOwner(def.employeeName, def.employeeCode)) {
+        _employeeSalaries.add(def);
+        addedAny = true;
+      }
+    }
+    _employeeSalaries.removeWhere((s) => _isExcludedSalaryOwner(s.employeeName, s.employeeCode));
+    if (addedAny) {
+      _persistEmployeeSalaries();
+    }
+    return List.unmodifiable(_employeeSalaries);
+  }
+
+  /// Returns a map for rapid O(1) salary configuration resolution
+  Map<String, EmployeeSalaryConfig> getEmployeeSalaryMap() {
+    final list = getEmployeeSalaries();
+    final Map<String, EmployeeSalaryConfig> map = {};
+    for (final s in list) {
+      if (s.employeeCode.isNotEmpty) {
+        map[s.employeeCode.toUpperCase()] = s;
+        map[s.employeeCode] = s;
+      }
+      if (s.employeeId != null && s.employeeId!.isNotEmpty) {
+        map[s.employeeId!] = s;
+      }
+      if (s.employeeName.isNotEmpty) {
+        map[s.employeeName.toLowerCase().trim()] = s;
+      }
+    }
+    return map;
+  }
+
+  /// Resolves the exact salary configuration for an employee by code, id, or name
+  EmployeeSalaryConfig? getEmployeeSalary({
+    String? employeeCode,
+    String? employeeId,
+    String? employeeName,
+  }) {
+    final list = getEmployeeSalaries();
+    final cleanCode = (employeeCode ?? '').trim().toUpperCase();
+    final cleanId = (employeeId ?? '').trim();
+    final cleanName = (employeeName ?? '').trim().toLowerCase();
+
+    for (final s in list) {
+      if (cleanCode.isNotEmpty && s.employeeCode.toUpperCase() == cleanCode) {
+        return s;
+      }
+      if (cleanId.isNotEmpty && s.employeeId == cleanId) {
+        return s;
+      }
+      if (cleanName.isNotEmpty && s.employeeName.toLowerCase().trim() == cleanName) {
+        return s;
+      }
+      if (EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: cleanId,
+        recordEmployeeName: cleanName,
+        employeeCode: s.employeeCode,
+        employeeName: s.employeeName,
+      )) {
+        return s;
+      }
+    }
+    return null;
+  }
+
+  /// Saves or updates an employee's fixed and variable salary configuration
+  void saveEmployeeSalary(EmployeeSalaryConfig config, {bool persist = true}) {
+    if (_isExcludedSalaryOwner(config.employeeName, config.employeeCode)) {
+      return;
+    }
+    final index = _employeeSalaries.indexWhere((s) =>
+        (s.employeeCode.isNotEmpty && s.employeeCode.toUpperCase() == config.employeeCode.toUpperCase()) ||
+        (s.employeeId != null && config.employeeId != null && s.employeeId == config.employeeId) ||
+        (s.employeeName.trim().toLowerCase() == config.employeeName.trim().toLowerCase()));
+
+    if (index >= 0) {
+      _employeeSalaries[index] = config;
+    } else {
+      _employeeSalaries.add(config);
+    }
+    if (persist) {
+      _persistEmployeeSalaries();
+    }
+  }
+
+  /// Bulk saves or updates salary configurations
+  void saveEmployeeSalariesBatch(List<EmployeeSalaryConfig> configs, {bool persist = true}) {
+    for (final c in configs) {
+      saveEmployeeSalary(c, persist: false);
+    }
+    if (persist) {
+      _persistEmployeeSalaries();
+    }
+  }
+
+  // ====================================================================
   bool? getGeofenceOverride({
     String? userId,
     String? email,
@@ -808,6 +1046,8 @@ class LocalDatabaseService {
 
     return null;
   }
+
+  Map<String, bool> get geofenceBypassOverrides => Map.unmodifiable(_geofenceBypassOverrides);
 
   void toggleEmployeeGeofenceBypass(
     String idOrEmail,
@@ -976,10 +1216,20 @@ class LocalDatabaseService {
 
   // Attendance Records & Offline Sync
   List<AttendanceRecord> getAttendanceRecords() {
-    return List.unmodifiable(_attendanceRecords);
+    final filtered = _attendanceRecords.where((r) => !EmployeeDirectoryHelper.isRelievedEmployee(
+      id: r.employeeId,
+      name: r.employeeName,
+    )).toList();
+    return List.unmodifiable(filtered);
   }
 
   void addAttendanceRecord(AttendanceRecord record) {
+    if (EmployeeDirectoryHelper.isRelievedEmployee(
+      id: record.employeeId,
+      name: record.employeeName,
+    )) {
+      return;
+    }
     _attendanceRecords.add(record);
     _persistAttendanceRecords();
   }
@@ -990,6 +1240,14 @@ class LocalDatabaseService {
   }
 
   void saveAttendanceRecord(AttendanceRecord record, {bool persist = true}) {
+    if (EmployeeDirectoryHelper.isRelievedEmployee(
+      id: record.employeeId,
+      name: record.employeeName,
+    )) {
+      _attendanceRecords.removeWhere((r) => r.id == record.id ||
+        (r.employeeId == record.employeeId && record.employeeId.isNotEmpty));
+      return;
+    }
     int index = _attendanceRecords.indexWhere((r) => r.id == record.id);
 
     // Fallback matching by employeeId/name + workflowStep + eventTimestamp if IDs differ
@@ -1009,8 +1267,12 @@ class LocalDatabaseService {
 
     if (index >= 0) {
       final existing = _attendanceRecords[index];
+      final photoToKeep = record.photoBase64.trim().isNotEmpty
+          ? record.photoBase64
+          : existing.photoBase64;
       if (existing.isEdited && record.manualOvertimeHours == null && existing.manualOvertimeHours != null) {
         _attendanceRecords[index] = record.copyWith(
+          photoBase64: photoToKeep,
           manualOvertimeHours: existing.manualOvertimeHours,
           overrideManualOvertimeHours: true,
           remarks: (existing.remarks != null && existing.remarks!.isNotEmpty) ? existing.remarks : record.remarks,
@@ -1018,7 +1280,9 @@ class LocalDatabaseService {
           editedBy: existing.editedBy,
         );
       } else {
-        _attendanceRecords[index] = record;
+        _attendanceRecords[index] = record.copyWith(
+          photoBase64: photoToKeep,
+        );
       }
     } else {
       _attendanceRecords.add(record);
@@ -1037,6 +1301,53 @@ class LocalDatabaseService {
     _persistAttendanceRecords();
   }
 
+  /// Persists office attendance calendar records locally and syncs them to Supabase cloud DB.
+  Future<bool> saveOfficeAttendanceBatch({
+    required List<AttendanceRecord> newRecords,
+    List<String> deletedRecordIds = const [],
+  }) async {
+    // 1. Remove deleted records locally
+    if (deletedRecordIds.isNotEmpty) {
+      final deleteSet = deletedRecordIds.toSet();
+      _attendanceRecords.removeWhere((r) => deleteSet.contains(r.id));
+    }
+
+    // 2. Add or update new records locally
+    for (final record in newRecords) {
+      saveAttendanceRecord(record, persist: false);
+    }
+    _persistAttendanceRecords();
+
+    // 3. Fast non-blocking cloud sync in background so UI completes instantly without delay
+    unawaited(_syncOfficeAttendanceBatchToCloud(
+      newRecords: List.unmodifiable(newRecords),
+      deletedRecordIds: List.unmodifiable(deletedRecordIds),
+    ));
+
+    return true;
+  }
+
+  Future<void> _syncOfficeAttendanceBatchToCloud({
+    required List<AttendanceRecord> newRecords,
+    required List<String> deletedRecordIds,
+  }) async {
+    if (deletedRecordIds.isNotEmpty) {
+      try {
+        await SupabaseService().deleteAttendanceRecords(deletedRecordIds);
+      } catch (e) {
+        debugPrint('Supabase delete office attendance error: $e');
+      }
+    }
+
+    if (newRecords.isNotEmpty) {
+      try {
+        await SupabaseService().saveAdminAttendanceOverride(records: newRecords);
+      } catch (e) {
+        debugPrint('Supabase save office attendance error: $e');
+      }
+    }
+  }
+
   void updateAttendanceRecord(AttendanceRecord updatedRecord) {
     saveAttendanceRecord(updatedRecord);
   }
@@ -1044,6 +1355,28 @@ class LocalDatabaseService {
   void deleteAttendanceRecord(String id) {
     _attendanceRecords.removeWhere((r) => r.id == id);
     _persistAttendanceRecords();
+    SupabaseService().deleteAttendanceRecords([id]);
+  }
+
+  /// Delete all attendance records for an employee on a given date (both locally and in Supabase)
+  Future<bool> deleteAttendanceRecordsForDate({
+    required String employeeId,
+    required String employeeName,
+    required DateTime date,
+    required List<String> recordIds,
+  }) async {
+    final idSet = recordIds.toSet();
+    _attendanceRecords.removeWhere((r) => idSet.contains(r.id));
+    _persistAttendanceRecords();
+
+    // Trigger Cloud DB deletion
+    try {
+      final cloudOk = await SupabaseService().deleteAttendanceRecords(recordIds);
+      return cloudOk;
+    } catch (e) {
+      debugPrint('Cloud sync note during attendance deletion: $e');
+      return false;
+    }
   }
 
   /// Admin method to update or insert Check-In, Check-Out, and Overtime (OT) with Remarks for an employee on a given date.
@@ -1300,9 +1633,19 @@ class LocalDatabaseService {
     return count;
   }
 
+  DateTime? _lastSanitizeTime;
+
   /// Merges previous short-name duplicate employee records into their official enterprise profile across all staff,
   /// and consolidates all historical attendance records under the employee's official full name and canonical ID.
-  Future<int> sanitizeDuplicateEmployees() async {
+  Future<int> sanitizeDuplicateEmployees({bool force = false}) async {
+    final now = DateTime.now();
+    if (!force &&
+        _lastSanitizeTime != null &&
+        now.difference(_lastSanitizeTime!).inMinutes < 15) {
+      return 0;
+    }
+    _lastSanitizeTime = now;
+
     int migratedCount = 0;
     final List<AttendanceRecord> updatedRecords = [];
 
@@ -1557,7 +1900,7 @@ class LocalDatabaseService {
           final elapsed = now.difference(checkInTime);
 
           if (elapsed >= const Duration(hours: 24)) {
-            // Check if there is an officeCheckOut occurring after this checkIn and before any subsequent officeCheckIn
+            // Check if there is an officeCheckOut (or final day end) occurring after this checkIn and before any subsequent officeCheckIn
             bool hasMatchingCheckOut = false;
             for (int j = i + 1; j < records.length; j++) {
               final nextRec = records[j];
@@ -1565,7 +1908,7 @@ class LocalDatabaseService {
                 hasMatchingCheckOut = true;
                 break;
               } else if (nextRec.workflowStep == WorkflowStep.officeCheckIn) {
-                // Next checkIn session started
+                // Next office checkIn session started without checking out the previous one
                 break;
               }
             }
@@ -1574,10 +1917,12 @@ class LocalDatabaseService {
               // Auto-generate officeCheckOut after 8 hours from check-in time
               final autoCheckOutTime = checkInTime.add(const Duration(hours: 8));
 
-              // Avoid duplicate if already exists with same timestamp
+              // Avoid duplicate if already exists with same timestamp or auto checkout address
               final duplicateExists = records.any((r) =>
                   r.workflowStep == WorkflowStep.officeCheckOut &&
-                  r.eventTimestamp.isAtSameMomentAs(autoCheckOutTime));
+                  (r.eventTimestamp.isAtSameMomentAs(autoCheckOutTime) ||
+                   (r.address.contains('Auto Check-Out') &&
+                    r.eventTimestamp.isAfter(checkInTime))));
 
               if (!duplicateExists) {
                 final autoRecord = AttendanceRecord(
@@ -1622,6 +1967,27 @@ class LocalDatabaseService {
     final cleanId = employeeId.trim().toLowerCase();
     final cleanName = employeeName?.trim().toLowerCase() ?? '';
 
+    // Resolve target identity from master directory, current user, or stored users
+    UserEntity? targetUser;
+    if (_currentUser != null &&
+        (_currentUser!.id.toLowerCase() == cleanId ||
+         _currentUser!.firebaseUid.toLowerCase() == cleanId ||
+         _currentUser!.fullName.trim().toLowerCase() == cleanName)) {
+      targetUser = _currentUser;
+    } else {
+      targetUser = _users.where((u) =>
+          u.id.toLowerCase() == cleanId ||
+          u.firebaseUid.toLowerCase() == cleanId ||
+          (cleanName.isNotEmpty && u.fullName.trim().toLowerCase() == cleanName)).firstOrNull;
+    }
+
+    final targetOfficial = EmployeeDirectoryHelper.resolveOfficialRecord(
+      id: employeeId,
+      code: targetUser?.employeeCode,
+      name: employeeName ?? targetUser?.fullName,
+      email: targetUser?.email,
+    );
+
     final initialCount = _attendanceRecords.length;
     _attendanceRecords.retainWhere((r) {
       // Always retain pending unsynced records regardless
@@ -1632,11 +1998,28 @@ class LocalDatabaseService {
 
       if (rId == cleanId || (cleanName.isNotEmpty && rName == cleanName)) return true;
 
+      if (targetOfficial != null) {
+        final recOfficial = EmployeeDirectoryHelper.resolveOfficialRecord(
+          code: r.employeeId,
+          name: r.employeeName,
+          id: r.employeeId,
+        );
+        if (recOfficial != null) {
+          return recOfficial.employeeId.toUpperCase() == targetOfficial.employeeId.toUpperCase();
+        }
+        final oCode = targetOfficial.employeeId.toLowerCase();
+        if (rId == oCode || rId == 'emp-$oCode') return true;
+        if (rName == targetOfficial.fullName.toLowerCase()) return true;
+        if (targetOfficial.aliases.any((a) => a.toLowerCase() == rName)) return true;
+      }
+
       return EmployeeDirectoryHelper.matchesEmployeeIdentity(
         recordEmployeeId: r.employeeId,
         recordEmployeeName: r.employeeName,
-        employeeId: employeeId,
-        employeeName: employeeName,
+        employeeId: targetOfficial?.employeeId ?? employeeId,
+        employeeCode: targetOfficial?.employeeId ?? targetUser?.employeeCode,
+        employeeName: targetOfficial?.fullName ?? employeeName ?? targetUser?.fullName,
+        employeeEmail: targetOfficial?.email ?? targetUser?.email,
       );
     });
 
@@ -1655,84 +2038,139 @@ class LocalDatabaseService {
     final now = DateTime.now().toLocal();
     final today = DateTime(now.year, now.month, now.day);
 
-    final targetId = employeeId?.trim() ?? _currentUser?.id ?? _currentUser?.firebaseUid;
-    if (targetId == null || targetId.isEmpty) return [];
+    final cleanTarget = employeeId?.trim();
 
-    final cleanTarget = targetId.toLowerCase();
+    // Resolve target identity metadata from current user, users list, or employees list
+    UserEntity? targetUser;
+    EmployeeEntity? targetEmp;
+    if (cleanTarget != null && cleanTarget.isNotEmpty) {
+      if (_currentUser != null &&
+          (_currentUser!.id == cleanTarget ||
+           _currentUser!.firebaseUid == cleanTarget ||
+           _currentUser!.employeeCode == cleanTarget ||
+           _currentUser!.fullName.trim().toLowerCase() == cleanTarget.toLowerCase())) {
+        targetUser = _currentUser;
+      } else {
+        targetUser = _users.where((u) =>
+            u.id == cleanTarget ||
+            u.firebaseUid == cleanTarget ||
+            (u.employeeCode != null && u.employeeCode!.trim().toLowerCase() == cleanTarget.toLowerCase()) ||
+            u.fullName.trim().toLowerCase() == cleanTarget.toLowerCase()).firstOrNull;
+      }
+
+      if (targetUser == null) {
+        targetEmp = _employees.where((e) =>
+            e.id == cleanTarget ||
+            e.employeeCode.trim().toLowerCase() == cleanTarget.toLowerCase() ||
+            e.name.trim().toLowerCase() == cleanTarget.toLowerCase()).firstOrNull;
+      }
+    } else {
+      targetUser = _currentUser;
+    }
+
+    final targetOfficial = EmployeeDirectoryHelper.resolveOfficialRecord(
+      id: cleanTarget ?? targetUser?.id,
+      code: targetUser?.employeeCode ?? targetEmp?.employeeCode ?? cleanTarget,
+      name: targetUser?.fullName ?? targetEmp?.name ?? cleanTarget,
+      email: targetUser?.email ?? targetEmp?.email,
+    );
+
+    final String? tId = targetOfficial?.employeeId ?? cleanTarget ?? targetUser?.id;
+    final String? tCode = targetOfficial?.employeeId ?? targetUser?.employeeCode ?? targetEmp?.employeeCode ?? cleanTarget;
+    final String? tName = targetOfficial?.fullName ?? targetUser?.fullName ?? targetEmp?.name ?? cleanTarget;
+    final String? tEmail = targetOfficial?.email ?? targetUser?.email ?? targetEmp?.email;
+
     final empRecords = _attendanceRecords.where((r) {
-      final matchesId = r.employeeId.trim().toLowerCase() == cleanTarget;
-      final matchesName = r.employeeName.trim().toLowerCase() == cleanTarget;
-      final matchesUser = _currentUser != null &&
-          (r.employeeId == _currentUser!.id ||
-              r.employeeId == _currentUser!.firebaseUid ||
-              r.employeeName.trim().toLowerCase() ==
-                  _currentUser!.fullName.trim().toLowerCase());
-      final matchesIdentity = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+      if (EmployeeDirectoryHelper.isRelievedEmployee(id: r.employeeId, name: r.employeeName)) {
+        return false;
+      }
+
+      // 1. If target resolves to official master directory, strictly compare official records
+      if (targetOfficial != null) {
+        final recOfficial = EmployeeDirectoryHelper.resolveOfficialRecord(
+          code: r.employeeId,
+          name: r.employeeName,
+          id: r.employeeId,
+        );
+        if (recOfficial != null) {
+          return recOfficial.employeeId.toUpperCase() == targetOfficial.employeeId.toUpperCase();
+        }
+      }
+
+      // 2. Direct exact ID match
+      if (cleanTarget != null && cleanTarget.isNotEmpty) {
+        if (r.employeeId == cleanTarget) return true;
+      }
+
+      // 3. Current user attributes & device binding match
+      if (targetUser != null) {
+        if (targetUser.id.trim().isNotEmpty && r.employeeId == targetUser.id) return true;
+        if (targetUser.firebaseUid.trim().isNotEmpty && r.employeeId == targetUser.firebaseUid) return true;
+        if (r.deviceId.isNotEmpty && r.deviceId == 'device-hw-${targetUser.id}') return true;
+      }
+
+      // 4. Exhaustive identity match via helper
+      return EmployeeDirectoryHelper.matchesEmployeeIdentity(
         recordEmployeeId: r.employeeId,
         recordEmployeeName: r.employeeName,
-        employeeId: cleanTarget,
-        employeeCode: _currentUser?.employeeCode,
-        employeeName: _currentUser?.fullName,
-        employeeEmail: _currentUser?.email,
+        employeeId: tId,
+        employeeCode: tCode,
+        employeeName: tName,
+        employeeEmail: tEmail,
       );
-      final matchesDevice = _currentUser != null &&
-          r.deviceId.isNotEmpty &&
-          r.deviceId == 'device-hw-${_currentUser!.id}';
-      return matchesId || matchesName || matchesUser || matchesIdentity || matchesDevice;
     }).toList()
       ..sort((a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
 
     if (empRecords.isEmpty) return [];
 
-    // 1. Check if there is an active unclosed regular shift (checkIn within last 24h with no subsequent officeCheckOut)
+    // 1. Check if there is an active unclosed regular shift (officeCheckIn within last 24h with no subsequent officeCheckOut)
     AttendanceRecord? activeCheckIn;
     for (int i = empRecords.length - 1; i >= 0; i--) {
       final rec = empRecords[i];
-      if (rec.workflowStep == WorkflowStep.officeCheckOut ||
-          rec.workflowStep == WorkflowStep.emergencyCheckOut) {
+      if (rec.workflowStep == WorkflowStep.officeCheckOut) {
         break;
       }
-      if (rec.workflowStep == WorkflowStep.officeCheckIn ||
-          rec.workflowStep == WorkflowStep.siteCheckIn ||
-          rec.workflowStep == WorkflowStep.emergencyCheckIn) {
+      if (rec.workflowStep == WorkflowStep.officeCheckIn) {
         final elapsed = now.difference(rec.eventTimestamp);
         if (elapsed < const Duration(hours: 24)) {
           activeCheckIn = rec;
         }
+        break;
       }
     }
 
     if (activeCheckIn != null) {
-      // Find the earliest start of this continuous open shift
-      final startIndex = empRecords.indexOf(activeCheckIn);
-      AttendanceRecord startRecord = activeCheckIn;
-      for (int i = startIndex - 1; i >= 0; i--) {
-        final prev = empRecords[i];
-        if (prev.workflowStep == WorkflowStep.officeCheckOut ||
-            prev.workflowStep == WorkflowStep.emergencyCheckOut) {
-          break;
-        }
-        if (prev.workflowStep == WorkflowStep.officeCheckIn ||
-            prev.workflowStep == WorkflowStep.siteCheckIn ||
-            prev.workflowStep == WorkflowStep.emergencyCheckIn) {
-          final elapsed = now.difference(prev.eventTimestamp);
-          if (elapsed < const Duration(hours: 24)) {
-            startRecord = prev;
-          }
-        }
-      }
+      // Shift is actively in progress! Return all records from activeCheckIn onwards
       return empRecords
-          .where((r) => !r.eventTimestamp.isBefore(startRecord.eventTimestamp))
+          .where((r) => !r.eventTimestamp.isBefore(activeCheckIn!.eventTimestamp))
+          .toList();
+    }
+
+    // 1b. Check if there is an active unclosed emergency duty (emergencyCheckIn within last 24h with no subsequent emergencyCheckOut)
+    AttendanceRecord? activeEmergencyCheckIn;
+    for (int i = empRecords.length - 1; i >= 0; i--) {
+      final rec = empRecords[i];
+      if (rec.workflowStep == WorkflowStep.emergencyCheckOut) {
+        break;
+      }
+      if (rec.workflowStep == WorkflowStep.emergencyCheckIn) {
+        final elapsed = now.difference(rec.eventTimestamp);
+        if (elapsed < const Duration(hours: 24)) {
+          activeEmergencyCheckIn = rec;
+        }
+        break;
+      }
+    }
+
+    if (activeEmergencyCheckIn != null) {
+      return empRecords
+          .where((r) => !r.eventTimestamp.isBefore(activeEmergencyCheckIn!.eventTimestamp))
           .toList();
     }
 
     // 2. Check if an officeCheckIn occurred on today's calendar date
     final todayCheckIns = empRecords.where((r) {
-      if (r.workflowStep != WorkflowStep.officeCheckIn &&
-          r.workflowStep != WorkflowStep.siteCheckIn &&
-          r.workflowStep != WorkflowStep.emergencyCheckIn) {
-        return false;
-      }
+      if (r.workflowStep != WorkflowStep.officeCheckIn) return false;
       final localEv = r.eventTimestamp.toLocal();
       final rDate = DateTime(localEv.year, localEv.month, localEv.day);
       return rDate.isAtSameMomentAs(today);
@@ -1747,10 +2185,7 @@ class LocalDatabaseService {
 
     // 3. Check if an overnight shift concluded recently today (officeCheckOut on today's calendar date)
     final recentCheckOutToday = empRecords.where((r) {
-      if (r.workflowStep != WorkflowStep.officeCheckOut &&
-          r.workflowStep != WorkflowStep.emergencyCheckOut) {
-        return false;
-      }
+      if (r.workflowStep != WorkflowStep.officeCheckOut) return false;
       final localEv = r.eventTimestamp.toLocal();
       final rDate = DateTime(localEv.year, localEv.month, localEv.day);
       return rDate.isAtSameMomentAs(today);
@@ -1760,9 +2195,7 @@ class LocalDatabaseService {
       final lastOut = recentCheckOutToday.last;
       final matchingIn = empRecords.lastWhere(
         (r) =>
-            (r.workflowStep == WorkflowStep.officeCheckIn ||
-                r.workflowStep == WorkflowStep.siteCheckIn ||
-                r.workflowStep == WorkflowStep.emergencyCheckIn) &&
+            r.workflowStep == WorkflowStep.officeCheckIn &&
             r.eventTimestamp.isBefore(lastOut.eventTimestamp),
         orElse: () => recentCheckOutToday.first,
       );
@@ -1772,6 +2205,9 @@ class LocalDatabaseService {
           DateTime(matchingInLocal.year, matchingInLocal.month, matchingInLocal.day);
       final isOvernightFromPrevDay = matchingInDate.isBefore(today);
 
+      // If the checkout closed an overnight shift from a previous day:
+      // - Show completed shift summary within a 4-hour window (e.g. 2:05 AM right after shift end).
+      // - After 4+ hours (e.g. 2:00 PM next afternoon), the employee has rested and is ready to start Day 2 duty fresh!
       final elapsedSinceCheckout = now.difference(lastOut.eventTimestamp);
       if (!isOvernightFromPrevDay || elapsedSinceCheckout < const Duration(hours: 4)) {
         return empRecords
@@ -1779,6 +2215,16 @@ class LocalDatabaseService {
                 !r.eventTimestamp.isBefore(matchingIn.eventTimestamp) &&
                 !r.eventTimestamp.isAfter(lastOut.eventTimestamp))
             .toList();
+      } else {
+        // The overnight shift from previous day concluded > 4 hours ago.
+        // That shift is finished and archived to yesterday's timesheet.
+        // For today's session, only records that occurred strictly AFTER that checkout belong to today.
+        return empRecords.where((r) {
+          if (!r.eventTimestamp.isAfter(lastOut.eventTimestamp)) return false;
+          final localEv = r.eventTimestamp.toLocal();
+          final rDate = DateTime(localEv.year, localEv.month, localEv.day);
+          return rDate.isAtSameMomentAs(today);
+        }).toList();
       }
     }
 
@@ -1786,28 +2232,7 @@ class LocalDatabaseService {
     return empRecords.where((r) {
       final localEv = r.eventTimestamp.toLocal();
       final rDate = DateTime(localEv.year, localEv.month, localEv.day);
-      if (!rDate.isAtSameMomentAs(today)) return false;
-
-      // If this checkout concluded an overnight shift that started on a previous day,
-      // it belongs to that previous day's shift and does not block today's new shift
-      if (r.workflowStep == WorkflowStep.officeCheckOut ||
-          r.workflowStep == WorkflowStep.emergencyCheckOut) {
-        final priorIn = empRecords.lastWhere(
-          (p) =>
-              p.eventTimestamp.isBefore(r.eventTimestamp) &&
-              (p.workflowStep == WorkflowStep.officeCheckIn ||
-                  p.workflowStep == WorkflowStep.siteCheckIn ||
-                  p.workflowStep == WorkflowStep.emergencyCheckIn),
-          orElse: () => r,
-        );
-        final pDate = DateTime(priorIn.eventTimestamp.year,
-            priorIn.eventTimestamp.month, priorIn.eventTimestamp.day);
-        if (pDate.isBefore(today)) {
-          return false;
-        }
-      }
-
-      return true;
+      return rDate.isAtSameMomentAs(today);
     }).toList();
   }
 
@@ -1827,25 +2252,40 @@ class LocalDatabaseService {
   WorkflowStep getWorkflowStepForEmployee([String? employeeId]) {
     autoResolveExpiredCheckIns();
 
-    if (isEmergencyDutyActiveToday(employeeId)) {
-      return WorkflowStep.emergencyCheckOut;
-    }
-
     final todayUserRecords = getTodayAttendanceRecords(employeeId);
 
     if (todayUserRecords.isEmpty) {
       return WorkflowStep.officeCheckIn;
     }
 
+    for (int i = todayUserRecords.length - 1; i >= 0; i--) {
+      final step = todayUserRecords[i].workflowStep;
+      if (step == WorkflowStep.emergencyCheckIn) return WorkflowStep.emergencyCheckOut;
+      if (step == WorkflowStep.emergencyCheckOut) break;
+    }
+
     if (todayUserRecords.any((r) => r.workflowStep == WorkflowStep.officeCheckOut)) {
       return WorkflowStep.completed;
     } else if (todayUserRecords.last.workflowStep == WorkflowStep.breakStart) {
       return WorkflowStep.breakEnd;
-    } else if (isCurrentlyAtSite(employeeId)) {
-      return WorkflowStep.siteCheckOut;
     } else {
-      // Last record was officeCheckIn, siteCheckOut, or breakEnd: user can do siteCheckIn or officeCheckOut
-      return WorkflowStep.siteCheckIn;
+      bool atSite = false;
+      for (int i = todayUserRecords.length - 1; i >= 0; i--) {
+        final step = todayUserRecords[i].workflowStep;
+        if (step == WorkflowStep.siteCheckIn) {
+          atSite = true;
+          break;
+        }
+        if (step == WorkflowStep.siteCheckOut || step == WorkflowStep.officeCheckOut) {
+          atSite = false;
+          break;
+        }
+      }
+      if (atSite) {
+        return WorkflowStep.siteCheckOut;
+      } else {
+        return WorkflowStep.siteCheckIn;
+      }
     }
   }
 
@@ -2039,6 +2479,47 @@ class LocalDatabaseService {
     } catch (e) {
       debugPrint('Error persisting attendance records to Hive: $e');
     }
+  }
+
+  // Employee Cards Persistence (Dual-layer: Hive + SharedPreferences for 100% fail-safe restart)
+  List<Map<String, dynamic>> getSavedEmployeeCards() {
+    try {
+      final str = _settingsBox?.get('employee_cards_json');
+      if (str != null && str.toString().isNotEmpty) {
+        final List<dynamic> decoded = jsonDecode(str);
+        return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<void> persistEmployeeCards(List<Map<String, dynamic>> cardsJson) async {
+    final encoded = jsonEncode(cardsJson);
+    try {
+      await _settingsBox?.put('employee_cards_json', encoded);
+    } catch (e) {
+      debugPrint('Error saving employee cards to Hive: $e');
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('employee_cards_json', encoded);
+    } catch (e) {
+      debugPrint('Error saving employee cards to SharedPreferences: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> loadSavedEmployeeCardsAsync() async {
+    final fromHive = getSavedEmployeeCards();
+    if (fromHive.isNotEmpty) return fromHive;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final str = prefs.getString('employee_cards_json');
+      if (str != null && str.isNotEmpty) {
+        final List<dynamic> decoded = jsonDecode(str);
+        return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+    } catch (_) {}
+    return [];
   }
 
   // Theme Persistence
@@ -2448,4 +2929,89 @@ class LocalDatabaseService {
       debugPrint('Error deleting work photo submission: $e');
     }
   }
+
+  // Gemini AI Vision API Key
+  String? getGeminiApiKey() {
+    return _settingsBox?.get('gemini_api_key') as String?;
+  }
+
+  Future<void> saveGeminiApiKey(String? key) async {
+    try {
+      if (key == null || key.trim().isEmpty) {
+        await _settingsBox?.delete('gemini_api_key');
+      } else {
+        await _settingsBox?.put('gemini_api_key', key.trim());
+      }
+    } catch (e) {
+      debugPrint('Error saving Gemini API key to Hive: $e');
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Automated Compliance Robot Settings (Resend + CallMeBot WhatsApp)
+  // --------------------------------------------------------------------------
+  String? getResendApiKey() {
+    return _settingsBox?.get('compliance_resend_api_key') as String?;
+  }
+
+  Future<void> saveResendApiKey(String? key) async {
+    try {
+      if (key == null || key.trim().isEmpty) {
+        await _settingsBox?.delete('compliance_resend_api_key');
+      } else {
+        await _settingsBox?.put('compliance_resend_api_key', key.trim());
+      }
+    } catch (e) {
+      debugPrint('Error saving Resend API key to Hive: $e');
+    }
+  }
+
+  String? getCallMeBotApiKey() {
+    return _settingsBox?.get('compliance_callmebot_api_key') as String?;
+  }
+
+  Future<void> saveCallMeBotApiKey(String? key) async {
+    try {
+      if (key == null || key.trim().isEmpty) {
+        await _settingsBox?.delete('compliance_callmebot_api_key');
+      } else {
+        await _settingsBox?.put('compliance_callmebot_api_key', key.trim());
+      }
+    } catch (e) {
+      debugPrint('Error saving CallMeBot API key to Hive: $e');
+    }
+  }
+
+  bool isAutoNotificationRobotEnabled() {
+    return _settingsBox?.get('compliance_robot_enabled', defaultValue: true) ?? true;
+  }
+
+  Future<void> setAutoNotificationRobotEnabled(bool enabled) async {
+    await _settingsBox?.put('compliance_robot_enabled', enabled);
+  }
+
+  String? getLastRobotDispatchDate() {
+    return _settingsBox?.get('compliance_robot_last_date') as String?;
+  }
+
+  Future<void> setLastRobotDispatchDate(String dateStr) async {
+    await _settingsBox?.put('compliance_robot_last_date', dateStr);
+  }
+
+  String getNotificationTargetEmail() {
+    return _settingsBox?.get('compliance_target_email', defaultValue: 'sr.irshath@gmail.com, nasuru@fusionmaint.com') ?? 'sr.irshath@gmail.com, nasuru@fusionmaint.com';
+  }
+
+  Future<void> saveNotificationTargetEmail(String? email) async {
+    try {
+      if (email == null || email.trim().isEmpty) {
+        await _settingsBox?.delete('compliance_target_email');
+      } else {
+        await _settingsBox?.put('compliance_target_email', email.trim());
+      }
+    } catch (e) {
+      debugPrint('Error saving compliance target email to Hive: $e');
+    }
+  }
 }
+

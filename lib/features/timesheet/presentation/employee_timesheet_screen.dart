@@ -6,6 +6,7 @@ import '../../../core/constants/app_theme.dart';
 import '../../../core/services/pdf_export_service.dart';
 import '../../../core/utils/timesheet_calculator.dart';
 import '../../../core/utils/salary_cycle_helper.dart';
+import '../../../core/utils/employee_directory_helper.dart';
 import '../../../database/local_database_service.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../admin/presentation/admin_edit_attendance_dialog.dart';
@@ -50,19 +51,17 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                     padding: const EdgeInsets.only(right: 12.0),
                     child: ElevatedButton.icon(
                       onPressed: () => _downloadPdf(context, state),
-                      icon: const Icon(Icons.picture_as_pdf_rounded, size: 14),
+                      icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
                       label: const Text('Download PDF',
                           style: TextStyle(
-                              fontSize: 11, fontWeight: FontWeight.bold)),
+                              fontSize: 12, fontWeight: FontWeight.bold)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red.shade700,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            horizontal: 24, vertical: 12),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(10),
                         ),
                       ),
                     ),
@@ -87,20 +86,22 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                   final palette = AppTheme.currentColors;
                   final activePrimary = palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
 
-                  final cycleEntries = _selectedSalaryCycle != null
-                      ? _selectedSalaryCycle!.filterTimesheets(state.entries)
-                      : state.entries;
+                  // Filter entries strictly to the selected Salary Cycle
+                  final List<DailyTimesheetEntry> cycleScopedEntries =
+                      _selectedSalaryCycle != null
+                          ? _selectedSalaryCycle!.filterTimesheets(state.entries)
+                          : state.entries;
 
                   double cycleRegHours = 0.0;
                   double cycleOtHours = 0.0;
-                  for (final e in cycleEntries) {
+                  for (final e in cycleScopedEntries) {
                     cycleRegHours += e.regularHours;
                     cycleOtHours += e.overtimeHours;
                   }
                   final double cycleCombinedHours = cycleRegHours + cycleOtHours;
-                  final int cycleDaysWorked = cycleEntries.length;
+                  final int cycleDaysWorked = cycleScopedEntries.length;
 
-                  final filteredEntries = cycleEntries.where((e) {
+                  final filteredEntries = cycleScopedEntries.where((e) {
                     if (_activeFilter == 'overtime') return e.overtimeHours > 0;
                     if (_activeFilter == 'regular') return e.regularHours > 0;
                     return true;
@@ -118,7 +119,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Salary Cycle Selector Card (25th - 24th Cutoff)
+                            // Salary Cycle Selector Card
                             Container(
                               margin: const EdgeInsets.only(bottom: 14),
                               padding: const EdgeInsets.symmetric(
@@ -164,7 +165,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                           runSpacing: 2,
                                           children: [
                                             Text(
-                                              'Salary Cycle',
+                                              'Payroll Salary Cycle',
                                               style: TextStyle(
                                                 fontSize: 11,
                                                 fontWeight: FontWeight.bold,
@@ -184,7 +185,11 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
                                                     BorderRadius.circular(4),
                                               ),
                                               child: Text(
-                                                '25th - 24th Cutoff',
+                                                _selectedSalaryCycle?.isTransition == true
+                                                    ? 'Transition'
+                                                    : (_selectedSalaryCycle?.startDate.day == 1
+                                                        ? 'Calendar Month'
+                                                        : '25th - 24th Cutoff'),
                                                 style: TextStyle(
                                                   fontSize: 9,
                                                   fontWeight: FontWeight.bold,
@@ -556,8 +561,14 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
         );
 
     final records = db.getAttendanceRecords().where((r) {
-      final isEmp = r.employeeId == emp.id ||
-          r.employeeName.toLowerCase() == emp.name.toLowerCase();
+      final isEmp = EmployeeDirectoryHelper.matchesEmployeeIdentity(
+        recordEmployeeId: r.employeeId,
+        recordEmployeeName: r.employeeName,
+        employeeId: emp.id,
+        employeeCode: emp.employeeCode,
+        employeeName: emp.name,
+        employeeEmail: emp.email,
+      );
       if (!isEmp) return false;
       if (_selectedSalaryCycle != null) {
         return _selectedSalaryCycle!.contains(r.eventTimestamp);
@@ -571,6 +582,7 @@ class _EmployeeTimesheetScreenState extends State<EmployeeTimesheetScreen> {
         employee: emp,
         records: records,
         salaryCyclePeriod: _selectedSalaryCycle?.shortPeriodLabel,
+        salaryCycle: _selectedSalaryCycle,
       );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

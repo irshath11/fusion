@@ -18,6 +18,11 @@ import '../../../core/widgets/app_animated_tab_switcher.dart';
 import '../../admin/domain/employee_entity.dart';
 import '../../attendance/domain/attendance_record.dart';
 import '../../timesheet/domain/timesheet_entry.dart';
+import '../../salary/domain/employee_salary_config.dart';
+import '../../salary/domain/daily_salary_record.dart';
+import '../../salary/utils/salary_calculator.dart';
+import '../../salary/presentation/edit_salary_dialog.dart';
+import '../../salary/presentation/put_office_attendance_dialog.dart';
 import 'admin_edit_attendance_dialog.dart';
 
 class ReportsAnalyticsScreen extends StatefulWidget {
@@ -54,6 +59,53 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   late final List<SalaryCycle> _availableSalaryCycles =
       SalaryCycle.getRecentCycles();
 
+  // Lazy-loaded photos cache for individual datewise reports
+  final Map<String, String> _lazyLoadedPhotos = {};
+  final Set<String> _loadingPhotoRecordIds = {};
+  final Set<String> _checkedPhotoRecordIds = {};
+
+  Future<void> _fetchPhotosForDateRecords(List<AttendanceRecord> records) async {
+    final missingRecords = records.where((r) {
+      final hasLocal = r.photoBase64.trim().isNotEmpty;
+      final hasLazy = _lazyLoadedPhotos[r.id]?.trim().isNotEmpty ?? false;
+      return !hasLocal && !hasLazy && !_loadingPhotoRecordIds.contains(r.id);
+    }).toList();
+
+    if (missingRecords.isEmpty) return;
+
+    for (final r in missingRecords) {
+      _loadingPhotoRecordIds.add(r.id);
+    }
+    if (mounted) setState(() {});
+
+    try {
+      final ids = missingRecords.map((r) => r.id).toList();
+      final photosMap = await SupabaseService().fetchAttendanceRecordPhotos(ids);
+
+      bool changed = false;
+      for (final r in missingRecords) {
+        final url = photosMap[r.id];
+        if (url != null && url.isNotEmpty) {
+          _lazyLoadedPhotos[r.id] = url;
+          final updated = r.copyWith(photoBase64: url);
+          _db.saveAttendanceRecord(updated, persist: true);
+          changed = true;
+        }
+        _checkedPhotoRecordIds.add(r.id);
+      }
+      if (changed && mounted) {
+        setState(() {});
+      }
+    } catch (e) {
+      debugPrint('Error fetching photos for date records: $e');
+    } finally {
+      for (final r in missingRecords) {
+        _loadingPhotoRecordIds.remove(r.id);
+      }
+      if (mounted) setState(() {});
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -66,7 +118,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       final cloudRecords =
           await SupabaseService().fetchAttendanceRecordsFromSupabase();
       if (cloudRecords.isNotEmpty) {
-        _db.clearAttendanceCache();
         _db.saveAttendanceRecordsBatch(cloudRecords);
       }
 
@@ -258,6 +309,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
     // 3. Check any attendance records that might have been logged by employee
     for (final r in allRecords) {
+      if (EmployeeDirectoryHelper.isRelievedEmployee(id: r.employeeId, name: r.employeeName)) {
+        continue;
+      }
       final nameKey = r.employeeName.trim().toLowerCase();
       final idKey = r.employeeId;
 
@@ -303,6 +357,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
 
     final list = employeeMap.values.where((e) {
+      if (EmployeeDirectoryHelper.isRelievedEmployee(
+        id: e.id,
+        name: e.name,
+        email: e.email,
+        code: e.employeeCode,
+      )) {
+        return false;
+      }
       final eName = e.name.trim().toLowerCase();
 
       // Check if e resolves to an official record
@@ -347,7 +409,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   }
 
   EmployeeEntity _resolveEmployee(String? employeeId) {
-    if (employeeId == null || employeeId.isEmpty) {
+    if (employeeId == null || employeeId.trim().isEmpty || EmployeeDirectoryHelper.isRelievedEmployee(id: employeeId, name: employeeId, code: employeeId)) {
       return EmployeeEntity(
         id: '',
         employeeCode: 'EMP',
@@ -360,8 +422,43 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
     final all = _getSynthesizedEmployees();
     final cleanId = employeeId.trim().toLowerCase();
+    final cleanIdNorm = cleanId.replaceFirst('emp-', '');
 
-    // Match by EmployeeDirectoryHelper
+    // 1. Direct exact matches by ID, code, email, or full name FIRST
+    for (final e in all) {
+      final eId = e.id.trim().toLowerCase();
+      final eIdNorm = eId.replaceFirst('emp-', '');
+      final eCode = e.employeeCode.trim().toLowerCase();
+      final eCodeNorm = eCode.replaceFirst('emp-', '');
+      final eEmail = e.email.trim().toLowerCase();
+      final eName = e.name.trim().toLowerCase();
+
+      if (eId.isNotEmpty && (eId == cleanId || eIdNorm == cleanIdNorm)) return e;
+      if (eCode.isNotEmpty && (eCode == cleanId || eCodeNorm == cleanIdNorm)) return e;
+      if (eEmail.isNotEmpty && eEmail == cleanId) return e;
+      if (eName.isNotEmpty && eName == cleanId) return e;
+    }
+
+    // 2. Resolve via Official Master Directory
+    final official = EmployeeDirectoryHelper.resolveOfficialRecord(
+      code: employeeId,
+      name: employeeId,
+      id: employeeId,
+    );
+    if (official != null) {
+      final oCode = official.employeeId.toUpperCase();
+      final oName = official.fullName.trim().toLowerCase();
+      final oEmail = official.email.trim().toLowerCase();
+      for (final e in all) {
+        if (e.employeeCode.toUpperCase() == oCode ||
+            e.name.trim().toLowerCase() == oName ||
+            (oEmail.isNotEmpty && e.email.trim().toLowerCase() == oEmail)) {
+          return e;
+        }
+      }
+    }
+
+    // 3. Fallback matching via EmployeeDirectoryHelper
     for (final e in all) {
       if (EmployeeDirectoryHelper.matchesEmployeeIdentity(
         recordEmployeeId: employeeId,
@@ -374,14 +471,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         return e;
       }
     }
-
-    // Exact matches by ID, code, name, or email
-    final exactMatch = all.where((e) =>
-        (e.id.isNotEmpty && e.id.toLowerCase() == cleanId) ||
-        (e.employeeCode.isNotEmpty && e.employeeCode.toLowerCase() == cleanId) ||
-        (e.name.isNotEmpty && e.name.toLowerCase().trim() == cleanId) ||
-        (e.email.isNotEmpty && e.email.toLowerCase().trim() == cleanId));
-    if (exactMatch.isNotEmpty) return exactMatch.first;
 
     return EmployeeEntity(
       id: employeeId,
@@ -405,10 +494,388 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
   }
 
+  void _goToPreviousMainCycle() {
+    if (_selectedSalaryCycle == null) {
+      if (_availableSalaryCycles.isNotEmpty) {
+        setState(() => _selectedSalaryCycle = _availableSalaryCycles.first);
+      }
+      return;
+    }
+    final idx = _availableSalaryCycles
+        .indexWhere((c) => c.id == _selectedSalaryCycle!.id);
+    if (idx != -1 && idx < _availableSalaryCycles.length - 1) {
+      setState(() => _selectedSalaryCycle = _availableSalaryCycles[idx + 1]);
+    }
+  }
+
+  void _goToNextMainCycle() {
+    if (_selectedSalaryCycle == null) {
+      if (_availableSalaryCycles.isNotEmpty) {
+        setState(() => _selectedSalaryCycle = _availableSalaryCycles.first);
+      }
+      return;
+    }
+    final idx = _availableSalaryCycles
+        .indexWhere((c) => c.id == _selectedSalaryCycle!.id);
+    if (idx > 0) {
+      setState(() => _selectedSalaryCycle = _availableSalaryCycles[idx - 1]);
+    }
+  }
+
+  Widget _buildMainSalaryCycleFilterCard(
+    bool isDark,
+    dynamic palette,
+    Color activePrimary,
+  ) {
+    final currentCycleId = SalaryCycle.current().id;
+    final isCur =
+        _selectedSalaryCycle != null && _selectedSalaryCycle!.id == currentCycleId;
+    final isTransition = _selectedSalaryCycle?.isTransition == true;
+    final isAllHistory = _selectedSalaryCycle == null;
+
+    final curIdx = _selectedSalaryCycle == null
+        ? -1
+        : _availableSalaryCycles
+            .indexWhere((c) => c.id == _selectedSalaryCycle!.id);
+    final bool canGoPrev = _selectedSalaryCycle == null
+        ? _availableSalaryCycles.isNotEmpty
+        : (curIdx != -1 && curIdx < _availableSalaryCycles.length - 1);
+    final bool canGoNext =
+        _selectedSalaryCycle == null ? false : (curIdx > 0);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? palette.surfaceDark : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? palette.cardBorderDark : const Color(0xFFE2E8F0),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top row: Icon + Title + Badge + Reset Button
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color:
+                          activePrimary.withValues(alpha: isDark ? 0.25 : 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.calendar_month_rounded,
+                      color: activePrimary,
+                      size: 17,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Salary Cycle Filter',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: isDark
+                          ? palette.textPrimaryDark
+                          : palette.textPrimaryLight,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isAllHistory
+                          ? (isDark
+                              ? Colors.grey.shade800
+                              : Colors.grey.shade200)
+                          : (isTransition
+                              ? Colors.amber
+                                  .withValues(alpha: isDark ? 0.25 : 0.15)
+                              : (isCur
+                                  ? Colors.green
+                                      .withValues(alpha: isDark ? 0.25 : 0.15)
+                                  : (_selectedSalaryCycle!.startDate.day == 1
+                                      ? Colors.blue.withValues(
+                                          alpha: isDark ? 0.25 : 0.15)
+                                      : Colors.purple.withValues(
+                                          alpha: isDark ? 0.25 : 0.15)))),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      isAllHistory
+                          ? 'Full History'
+                          : (isTransition
+                              ? 'Interim OT (26-31 Oct)'
+                              : (isCur
+                                  ? 'Current Cycle'
+                                  : (_selectedSalaryCycle!.startDate.day == 1
+                                      ? 'Calendar Month'
+                                      : '25th - 24th Cutoff'))),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: isAllHistory
+                            ? (isDark
+                                ? Colors.grey.shade300
+                                : Colors.grey.shade700)
+                            : (isTransition
+                                ? (isDark
+                                    ? const Color(0xFFFDE68A)
+                                    : Colors.amber.shade900)
+                                : (isCur
+                                    ? (isDark
+                                        ? Colors.greenAccent
+                                        : Colors.green.shade800)
+                                    : (_selectedSalaryCycle!.startDate.day == 1
+                                        ? (isDark
+                                            ? Colors.lightBlueAccent
+                                            : Colors.blue.shade800)
+                                        : (isDark
+                                            ? Colors.purpleAccent
+                                            : Colors.purple.shade800)))),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (!isCur)
+                InkWell(
+                  onTap: () {
+                    setState(
+                        () => _selectedSalaryCycle = SalaryCycle.current());
+                  },
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.restore_rounded,
+                            size: 13, color: activePrimary),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Current Cycle',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: activePrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Selector Row: Previous Button, Dropdown Selector, Next Button
+          Container(
+            height: 40,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color:
+                    isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+              ),
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left_rounded, size: 20),
+                  tooltip: 'Previous Salary Cycle',
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  color: canGoPrev
+                      ? (isDark ? Colors.white : Colors.black87)
+                      : (isDark ? Colors.white24 : Colors.grey.shade400),
+                  onPressed: canGoPrev ? _goToPreviousMainCycle : null,
+                ),
+                Expanded(
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedSalaryCycle?.id ?? 'all',
+                      isDense: true,
+                      isExpanded: true,
+                      dropdownColor:
+                          isDark ? const Color(0xFF1E293B) : Colors.white,
+                      icon: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 20,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                      ),
+                      items: [
+                        ..._availableSalaryCycles.map((c) {
+                          final isItemCurrent = c.id == currentCycleId;
+                          final isItemTransition = c.isTransition;
+                          return DropdownMenuItem<String>(
+                            value: c.id,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${c.salaryMonthName} (${c.shortPeriodLabel})',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: isItemCurrent
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                      color: isDark
+                                          ? Colors.white
+                                          : const Color(0xFF0F172A),
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (isItemCurrent) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 5, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.withValues(
+                                          alpha: isDark ? 0.25 : 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      'Current',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark
+                                            ? Colors.greenAccent
+                                            : Colors.green[800],
+                                      ),
+                                    ),
+                                  ),
+                                ] else if (isItemTransition) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 5, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.withValues(
+                                          alpha: isDark ? 0.25 : 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      'Interim OT',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark
+                                            ? const Color(0xFFFDE68A)
+                                            : Colors.amber[900],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        }),
+                        DropdownMenuItem<String>(
+                          value: 'all',
+                          child: Text(
+                            'All Recorded Logs (Full History)',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark
+                                  ? Colors.white
+                                  : const Color(0xFF0F172A),
+                            ),
+                          ),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        setState(() {
+                          if (val == null || val == 'all') {
+                            _selectedSalaryCycle = null;
+                          } else {
+                            _selectedSalaryCycle =
+                                _availableSalaryCycles.firstWhere(
+                              (c) => c.id == val,
+                              orElse: () => SalaryCycle.current(),
+                            );
+                          }
+                        });
+                      },
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right_rounded, size: 20),
+                  tooltip: 'Next Salary Cycle',
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  color: canGoNext
+                      ? (isDark ? Colors.white : Colors.black87)
+                      : (isDark ? Colors.white24 : Colors.grey.shade400),
+                  onPressed: canGoNext ? _goToNextMainCycle : null,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Helper info row showing the exact dates included
+          Row(
+            children: [
+              Icon(
+                Icons.info_outline_rounded,
+                size: 13,
+                color:
+                    isDark ? palette.textSecondaryDark : Colors.grey.shade600,
+              ),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  _selectedSalaryCycle != null
+                      ? 'Attendance Period: ${DateFormat("dd MMM yyyy").format(_selectedSalaryCycle!.startDate)} – ${DateFormat("dd MMM yyyy").format(_selectedSalaryCycle!.endDate)} (${_selectedSalaryCycle!.totalDays} Days)'
+                      : 'Showing attendance logs across all dates (no cycle filter applied)',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark
+                        ? palette.textSecondaryDark
+                        : Colors.grey.shade600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   // ==========================================
   // LEVEL 1: EMPLOYEE LIST VIEW
   // ==========================================
   Widget _buildLevel1EmployeeListView() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = AppTheme.currentColors;
+    final activePrimary =
+        palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
+
     final allRecords = _db.getAttendanceRecords();
     final allEmployees = _getSynthesizedEmployees();
 
@@ -420,18 +887,22 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           e.department.toLowerCase().contains(q);
     }).toList();
 
-    // Segregate filtered employees into With Records vs No Records
+    // Segregate filtered employees into With Records vs No Records scoped to salary cycle
     final employeesWithRecords = <MapEntry<EmployeeEntity, int>>[];
     final employeesWithoutRecords = <EmployeeEntity>[];
 
     for (final emp in filteredEmployees) {
       final empRecords = allRecords
-          .where((r) => _recordMatchesEmployee(r, emp));
-      final datesCount = empRecords
-          .map((r) {
-            final t = r.eventTimestamp;
-            return '${t.year}-${t.month}-${t.day}';
-          })
+          .where((r) => _recordMatchesEmployee(r, emp))
+          .toList();
+      final cycleRecords = _selectedSalaryCycle != null
+          ? empRecords
+              .where((r) => _selectedSalaryCycle!.contains(r.eventTimestamp))
+              .toList()
+          : empRecords;
+      final datesCount = cycleRecords
+          .map((r) =>
+              DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()))
           .toSet()
           .length;
 
@@ -515,6 +986,12 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             onTabChanged: (index) => setState(() => _activeTab = index),
           ),
           const SizedBox(height: 14),
+
+          if (_activeTab == 0) ...[
+            // Main Salary Cycle Filter Card (placed at top of Directory)
+            _buildMainSalaryCycleFilterCard(isDark, palette, activePrimary),
+            const SizedBox(height: 14),
+          ],
 
           // Search Bar
           Builder(
@@ -648,7 +1125,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               Text(
                                 _searchQuery.isNotEmpty
                                     ? 'No matching employees with records found for "$_searchQuery".'
-                                    : 'None of the registered employees have attendance records logged yet.',
+                                    : (_selectedSalaryCycle != null
+                                        ? 'None of the registered employees have attendance records in ${_selectedSalaryCycle!.salaryMonthName} (${_selectedSalaryCycle!.shortPeriodLabel}).'
+                                        : 'None of the registered employees have attendance records logged yet.'),
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: isDark
@@ -769,7 +1248,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      '$datesCount Attendance Date(s) Logged',
+                                      _selectedSalaryCycle != null
+                                          ? '$datesCount / ${_selectedSalaryCycle!.totalDays} Days in Cycle Logged'
+                                          : '$datesCount Total Days Logged (Full History)',
                                       style: const TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600,
@@ -840,7 +1321,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               Text(
                                 _searchQuery.isNotEmpty
                                     ? 'No pending employees found for "$_searchQuery".'
-                                    : 'Every registered employee currently has attendance logs recorded.',
+                                    : (_selectedSalaryCycle != null
+                                        ? 'Every registered employee currently has attendance logs recorded in ${_selectedSalaryCycle!.salaryMonthName}.'
+                                        : 'Every registered employee currently has attendance logs recorded.'),
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: isDark
@@ -952,18 +1435,20 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                       alpha: isDark ? 0.22 : 0.12),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
-                                child: const Row(
+                                child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(
+                                    const Icon(
                                       Icons.history_toggle_off_rounded,
                                       size: 13,
                                       color: Colors.orange,
                                     ),
-                                    SizedBox(width: 4),
+                                    const SizedBox(width: 4),
                                     Text(
-                                      'No Attendance Recorded',
-                                      style: TextStyle(
+                                      _selectedSalaryCycle != null
+                                          ? 'No Attendance in ${_selectedSalaryCycle!.salaryMonthName}'
+                                          : 'No Attendance Recorded',
+                                      style: const TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600,
                                         color: Colors.orange,
@@ -1058,239 +1543,301 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
   }
 
-  Widget _buildMisattributedLogsBanner(EmployeeEntity currentEmp, List<AttendanceRecord> records) {
-    final users = _db.getUsers();
-    final suspiciousRecords = <AttendanceRecord>[];
-    String? detectedOwnerName;
-    String? detectedOwnerId;
+  Future<void> _confirmAndDeleteDateLog(
+    EmployeeEntity emp,
+    String dateKey,
+    List<AttendanceRecord> dateRecords, {
+    bool isFromDetailView = false,
+  }) async {
+    final parsedDate = DateTime.tryParse(dateKey) ??
+        (dateRecords.isNotEmpty
+            ? dateRecords.first.eventTimestamp
+            : DateTime.now());
+    final formattedDateStr =
+        DateFormat('EEEE, dd MMMM yyyy').format(parsedDate);
 
-    for (final r in records) {
-      if (r.deviceId.startsWith('device-hw-')) {
-        final rawUid = r.deviceId.substring('device-hw-'.length);
-        final match = users.where((u) => u.id == rawUid || (u.firebaseUid.isNotEmpty && u.firebaseUid == rawUid));
-        if (match.isNotEmpty &&
-            match.first.fullName.trim().toLowerCase() != currentEmp.name.trim().toLowerCase()) {
-          suspiciousRecords.add(r);
-          detectedOwnerName ??= match.first.fullName;
-          detectedOwnerId ??= match.first.id;
-        }
-      }
-    }
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = AppTheme.currentColors;
 
-    if (suspiciousRecords.isEmpty || detectedOwnerName == null || detectedOwnerId == null) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.amber.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.amber.shade700),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 28),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Misattributed Logs Detected',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: Colors.amber.shade900,
-                  ),
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: isDark ? palette.surfaceDark : Colors.white,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.delete_forever_rounded,
+                  color: Colors.red, size: 22),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Delete Date Log?',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to permanently delete the attendance log for:',
+              style: TextStyle(
+                fontSize: 13,
+                color:
+                    isDark ? palette.textSecondaryDark : Colors.grey.shade700,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? palette.surfaceDark : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isDark ? palette.cardBorderDark : Colors.grey.shade300,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${suspiciousRecords.length} log(s) appear to have been captured from $detectedOwnerName\'s account instead of ${currentEmp.name}.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.amber.shade900,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.person_rounded,
+                          size: 14, color: Colors.grey),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${emp.name} (${emp.employeeCode})',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.calendar_today_rounded,
+                          size: 14, color: Colors.red),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          formattedDateStr,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Colors.red,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${dateRecords.length} Step Log(s) recorded on this day',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark
+                          ? palette.textSecondaryDark
+                          : Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '⚠️ Warning: This will delete all check-in/out records, location logs, and timesheet hours for this date from local database and cloud storage. This action cannot be undone.',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: Colors.red.shade700,
+                height: 1.3,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color:
+                    isDark ? palette.textSecondaryDark : Colors.grey.shade700,
+              ),
             ),
           ),
-          const SizedBox(width: 10),
           ElevatedButton.icon(
-            onPressed: () async {
-              final count = await _db.reassignEmployeeAttendanceRecords(
-                fromEmployeeId: currentEmp.id,
-                fromEmployeeName: currentEmp.name,
-                toEmployeeId: detectedOwnerId!,
-                toEmployeeName: detectedOwnerName!,
-              );
-              if (mounted) {
-                setState(() {});
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Successfully transferred $count log(s) to $detectedOwnerName!'),
-                    backgroundColor: AppColors.success,
-                  ),
-                );
-              }
-            },
-            icon: const Icon(Icons.swap_horiz_rounded, size: 16),
-            label: Text('Transfer to $detectedOwnerName'),
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            icon: const Icon(Icons.delete_forever_rounded, size: 16),
+            label: const Text('Delete Log',
+                style: TextStyle(fontWeight: FontWeight.bold)),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.amber.shade800,
+              backgroundColor: Colors.red.shade700,
               foregroundColor: Colors.white,
-              elevation: 2,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
             ),
           ),
         ],
       ),
     );
-  }
 
-  Future<void> _showReassignRecordsDialog(EmployeeEntity sourceEmp, List<AttendanceRecord> records) async {
-    final allEmployees = _getSynthesizedEmployees()
-        .where((e) => e.id != sourceEmp.id && e.name.trim().toLowerCase() != sourceEmp.name.trim().toLowerCase())
-        .toList();
+    if (confirmed != true || !mounted) return;
 
-    if (allEmployees.isEmpty) {
+    final recordIds =
+        dateRecords.map((r) => r.id).where((id) => id.isNotEmpty).toList();
+    await _db.deleteAttendanceRecordsForDate(
+      employeeId: emp.id,
+      employeeName: emp.name,
+      date: parsedDate,
+      recordIds: recordIds,
+    );
+
+    if (isFromDetailView) {
+      setState(() {
+        _selectedDate = null;
+      });
+    } else {
+      setState(() {});
+    }
+
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No other employee available to reassign records to.'),
-          backgroundColor: AppColors.error,
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_outline_rounded,
+                  color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                    'Attendance log for $formattedDateStr has been deleted.'),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
         ),
       );
-      return;
     }
+  }
 
-    String targetEmpId = allEmployees.first.id;
-    String? selectedDateStr;
-
-    final Set<String> dateStrs = {};
-    for (final r in records) {
-      dateStrs.add(DateFormat('yyyy-MM-dd').format(r.eventTimestamp.toLocal()));
-    }
-    final sortedDates = dateStrs.toList()..sort((a, b) => b.compareTo(a));
+  Future<void> _confirmAndDeleteSingleStepRecord(
+    EmployeeEntity emp,
+    AttendanceRecord record,
+  ) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = AppTheme.currentColors;
+    final timeStr =
+        DateFormat('hh:mm:ss a').format(record.eventTimestamp.toLocal());
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDlgState) {
-          final isDark = Theme.of(context).brightness == Brightness.dark;
-          final palette = AppTheme.currentColors;
-
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            backgroundColor: isDark ? palette.surfaceDark : Colors.white,
-            title: Row(
-              children: [
-                Icon(Icons.swap_horiz_rounded, color: Colors.indigo.shade700),
-                const SizedBox(width: 10),
-                const Text('Reassign Attendance Logs', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Reassign attendance logs from ${sourceEmp.name} to another employee:',
-                  style: const TextStyle(fontSize: 13),
-                ),
-                const SizedBox(height: 14),
-                const Text('Target Employee', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.grey.shade400),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: targetEmpId,
-                      isExpanded: true,
-                      items: allEmployees.map((e) {
-                        return DropdownMenuItem<String>(
-                          value: e.id,
-                          child: Text('${e.name} (${e.employeeCode})'),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) setDlgState(() => targetEmpId = val);
-                      },
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Text('Date Scope', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.grey.shade400),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String?>(
-                      value: selectedDateStr,
-                      isExpanded: true,
-                      items: [
-                        DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text('All Dates (All ${records.length} records)'),
-                        ),
-                        ...sortedDates.map((d) {
-                          DateTime parsed = DateTime.parse(d);
-                          return DropdownMenuItem<String?>(
-                            value: d,
-                            child: Text(DateFormat('dd MMM yyyy (EEEE)').format(parsed)),
-                          );
-                        }),
-                      ],
-                      onChanged: (val) => setDlgState(() => selectedDateStr = val),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel'),
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: isDark ? palette.surfaceDark : Colors.white,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
               ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo.shade700, foregroundColor: Colors.white),
-                child: const Text('Confirm & Reassign'),
+              child: const Icon(Icons.delete_outline_rounded,
+                  color: Colors.red, size: 22),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Delete Step Log?',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
-            ],
-          );
-        },
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to delete this specific log?',
+              style: TextStyle(
+                fontSize: 13,
+                color:
+                    isDark ? palette.textSecondaryDark : Colors.grey.shade700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isDark ? palette.surfaceDark : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Step: ${record.workflowStep.displayName}',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  const SizedBox(height: 2),
+                  Text('Time: $timeStr',
+                      style: const TextStyle(fontSize: 12)),
+                  if (record.siteName != null && record.siteName!.isNotEmpty)
+                    Text('Location: ${record.siteName}',
+                        style: const TextStyle(fontSize: 12)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
       ),
     );
 
-    if (confirmed == true && mounted) {
-      final targetEmp = allEmployees.firstWhere((e) => e.id == targetEmpId);
-      final count = await _db.reassignEmployeeAttendanceRecords(
-        fromEmployeeId: sourceEmp.id,
-        fromEmployeeName: sourceEmp.name,
-        toEmployeeId: targetEmp.id,
-        toEmployeeName: targetEmp.name,
-        specificDate: selectedDateStr != null ? DateTime.parse(selectedDateStr!) : null,
-      );
+    if (confirmed != true || !mounted) return;
 
-      if (mounted) {
-        setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Successfully reassigned $count record(s) to ${targetEmp.name}!'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      }
+    _db.deleteAttendanceRecord(record.id);
+    await SupabaseService().deleteAttendanceRecords([record.id]);
+    setState(() {});
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${record.workflowStep.displayName} log deleted.'),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
     }
   }
 
@@ -1323,7 +1870,19 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     final sortedDateKeys = groupedByDate.keys.toList()
       ..sort((a, b) => b.compareTo(a));
 
-    final timesheets = TimesheetCalculator.calculateDailyTimesheets(empRecords);
+    final timesheets = TimesheetCalculator.calculateDailyTimesheets(
+      empRecords,
+      targetEmployeeId: emp.id,
+      targetEmployeeName: emp.name,
+      startDate: _selectedSalaryCycle?.startDate,
+      endDate: _selectedSalaryCycle?.endDate,
+    );
+
+    final Map<String, DailyTimesheetEntry> timesheetsByDate = {};
+    for (final entry in timesheets) {
+      final key = DateFormat('yyyy-MM-dd').format(entry.date.toLocal());
+      timesheetsByDate[key] = entry;
+    }
 
     double totalRegHours = 0.0;
     double totalOtHours = 0.0;
@@ -1337,103 +1896,167 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     final palette = AppTheme.currentColors;
     final activePrimary =
         palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
+    final isMobile = MediaQuery.of(context).size.width < 700;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: () {
-                  setState(() {
-                    _selectedEmployeeId = null;
-                    _selectedDate = null;
-                  });
-                },
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      emp.name,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleLarge
-                          ?.copyWith(fontWeight: FontWeight.bold),
+          if (isMobile) ...[
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () {
+                    setState(() {
+                      _selectedEmployeeId = null;
+                      _selectedDate = null;
+                    });
+                  },
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        emp.name,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        '${emp.employeeCode} • ${emp.department} • Work Timesheet',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : AppColors.textSecondaryLight),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _addNewDateEntryLogForEmployee(emp),
+                    icon: const Icon(Icons.post_add_rounded, size: 16),
+                    label: const Text('+ Add Date Log',
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: activePrimary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
-                    Text(
-                      '${emp.employeeCode} • ${emp.department} • Work Timesheet',
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: isDark
-                              ? AppColors.textSecondaryDark
-                              : AppColors.textSecondaryLight),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _exportPdfForEmployee(emp, empRecords),
+                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
+                    label: const Text('Download PDF',
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 6),
-              ElevatedButton.icon(
-                onPressed: () => _addNewDateEntryLogForEmployee(emp),
-                icon: const Icon(Icons.post_add_rounded, size: 16),
-                label: const Text('+ Add Date Log',
-                    style:
-                        TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: activePrimary,
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-              ),
-              const SizedBox(width: 6),
-              ElevatedButton.icon(
-                onPressed: () => _exportPdfForEmployee(emp, empRecords),
-                icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
-                label: const Text('Download PDF',
-                    style:
-                        TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red.shade700,
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+              ],
+            ),
+          ] else ...[
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () {
+                    setState(() {
+                      _selectedEmployeeId = null;
+                      _selectedDate = null;
+                    });
+                  },
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        emp.name,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        '${emp.employeeCode} • ${emp.department} • Work Timesheet',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : AppColors.textSecondaryLight),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-              const SizedBox(width: 6),
-              ElevatedButton.icon(
-                onPressed: () => _showReassignRecordsDialog(emp, empRecords),
-                icon: const Icon(Icons.swap_horiz_rounded, size: 16),
-                label: const Text('Reassign Logs',
-                    style:
-                        TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.indigo.shade700,
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                const SizedBox(width: 6),
+                ElevatedButton.icon(
+                  onPressed: () => _addNewDateEntryLogForEmployee(emp),
+                  icon: const Icon(Icons.post_add_rounded, size: 16),
+                  label: const Text('+ Add Date Log',
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: activePrimary,
+                    foregroundColor: Colors.white,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 6),
+                ElevatedButton.icon(
+                  onPressed: () => _exportPdfForEmployee(emp, empRecords),
+                  icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
+                  label: const Text('Download PDF',
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red.shade700,
+                    foregroundColor: Colors.white,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
-
-          // Misattributed logs detection banner
-          _buildMisattributedLogsBanner(emp, empRecords),
 
           // Salary Cycle Filter Selector for Employee Timesheet (25th - 24th)
           Container(
@@ -1557,170 +2180,194 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           ),
 
           // Executive Timesheet Summary Cards
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? palette.surfaceDark
-                        : activePrimary.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isDark
-                          ? palette.cardBorderDark
-                          : activePrimary.withValues(alpha: 0.2),
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Text('Regular',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: activePrimary,
-                              fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 2),
-                      Text('${totalRegHours.toStringAsFixed(1)} hrs',
-                          style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: activePrimary)),
-                      Text('Max 8.0h/day',
-                          style: TextStyle(
-                              fontSize: 10,
-                              color: isDark
-                                  ? palette.textSecondaryDark
-                                  : palette.textSecondaryLight)),
-                    ],
-                  ),
+          () {
+            final regularCard = Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? palette.surfaceDark
+                    : activePrimary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark
+                      ? palette.cardBorderDark
+                      : activePrimary.withValues(alpha: 0.2),
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? AppColors.surfaceDark
-                        : Colors.orange.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isDark
-                          ? Colors.orange.shade800
-                          : Colors.orange.shade300,
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Text('Overtime (OT)',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: isDark
-                                  ? Colors.orange.shade300
-                                  : Colors.orange.shade900,
-                              fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 2),
-                      Text('${totalOtHours.toStringAsFixed(1)} hrs',
-                          style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: isDark
-                                  ? Colors.orange.shade300
-                                  : Colors.orange.shade900)),
-                      Text('Beyond 10.0h/day',
-                          style: TextStyle(
-                              fontSize: 10,
-                              color: isDark
-                                  ? AppColors.textSecondaryDark
-                                  : AppColors.textSecondaryLight)),
-                    ],
-                  ),
+              child: Column(
+                children: [
+                  Text('Regular',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: activePrimary,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 2),
+                  Text('${totalRegHours.toStringAsFixed(1)} hrs',
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: activePrimary)),
+                  Text('Max 8.0h/day',
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: isDark
+                              ? palette.textSecondaryDark
+                              : palette.textSecondaryLight)),
+                ],
+              ),
+            );
+
+            final otCard = Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppColors.surfaceDark
+                    : Colors.orange.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.orange.shade800
+                      : Colors.orange.shade300,
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? AppColors.surfaceDark
-                        : AppColors.success.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isDark
-                          ? AppColors.cardBorderDark
-                          : AppColors.success.withValues(alpha: 0.2),
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      const Text('Combined',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.success,
-                              fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 2),
-                      Text(
-                          '${(totalRegHours + totalOtHours).toStringAsFixed(1)} hrs',
-                          style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.success)),
-                      Text('${sortedDateKeys.length} Days Worked',
-                          style: TextStyle(
-                              fontSize: 10,
-                              color: isDark
-                                  ? AppColors.textSecondaryDark
-                                  : AppColors.textSecondaryLight)),
-                    ],
-                  ),
+              child: Column(
+                children: [
+                  Text('Overtime (OT)',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: isDark
+                              ? Colors.orange.shade300
+                              : Colors.orange.shade900,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 2),
+                  Text('${totalOtHours.toStringAsFixed(1)} hrs',
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: isDark
+                              ? Colors.orange.shade300
+                              : Colors.orange.shade900)),
+                  Text('Beyond 10.0h/day',
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight)),
+                ],
+              ),
+            );
+
+            final combinedCard = Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppColors.surfaceDark
+                    : AppColors.success.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark
+                      ? AppColors.cardBorderDark
+                      : AppColors.success.withValues(alpha: 0.2),
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? palette.surfaceDark
-                        : Colors.purple.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isDark
-                          ? Colors.purple.shade800
-                          : Colors.purple.shade200,
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Text('Leaves & Offs',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: isDark
-                                  ? Colors.purple.shade300
-                                  : Colors.purple.shade900,
-                              fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 2),
-                      Text('${empLeaveSummary.leaveDays} Leaves',
-                          style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: isDark
-                                  ? Colors.purple.shade300
-                                  : Colors.purple.shade900)),
-                      Text('${empLeaveSummary.sundayWeeklyOffs} Sundays Off',
-                          style: TextStyle(
-                              fontSize: 10,
-                              color: isDark
-                                  ? palette.textSecondaryDark
-                                  : palette.textSecondaryLight)),
-                    ],
-                  ),
+              child: Column(
+                children: [
+                  const Text('Combined',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.success,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 2),
+                  Text(
+                      '${(totalRegHours + totalOtHours).toStringAsFixed(1)} hrs',
+                      style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.success)),
+                  Text('${empLeaveSummary.daysWorked} Days Worked',
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight)),
+                ],
+              ),
+            );
+
+            final leavesCard = Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? palette.surfaceDark
+                    : Colors.purple.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.purple.shade800
+                      : Colors.purple.shade200,
                 ),
               ),
-            ],
-          ),
+              child: Column(
+                children: [
+                  Text('Leaves & Offs',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: isDark
+                              ? Colors.purple.shade300
+                              : Colors.purple.shade900,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 2),
+                  Text('${empLeaveSummary.leaveDays} Leaves',
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: isDark
+                              ? Colors.purple.shade300
+                              : Colors.purple.shade900)),
+                  Text('${empLeaveSummary.sundayWeeklyOffs} Sundays Off',
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: isDark
+                              ? palette.textSecondaryDark
+                              : palette.textSecondaryLight)),
+                ],
+              ),
+            );
+
+            if (isMobile) {
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: regularCard),
+                      const SizedBox(width: 8),
+                      Expanded(child: otCard),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(child: combinedCard),
+                      const SizedBox(width: 8),
+                      Expanded(child: leavesCard),
+                    ],
+                  ),
+                ],
+              );
+            }
+
+            return Row(
+              children: [
+                Expanded(child: regularCard),
+                const SizedBox(width: 8),
+                Expanded(child: otCard),
+                const SizedBox(width: 8),
+                Expanded(child: combinedCard),
+                const SizedBox(width: 8),
+                Expanded(child: leavesCard),
+              ],
+            );
+          }(),
           const SizedBox(height: 12),
 
           // Individual Employee Site Breakdown Card
@@ -1884,23 +2531,46 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           const Divider(height: 20),
 
           const SizedBox(height: 4),
-          // Sub-Tab Navigation Bar: Attendance & Timesheet Logs vs Emergency Duty Details vs Leave Records
+          // Sub-Tab Navigation Bar: Attendance & Timesheet Logs vs Emergency Duty Details vs Leave Records vs Salary Calc
           AppAnimatedTabSwitcher(
             selectedIndex: _empDetailSubTab,
-            tabs: const [
-              TabItemData(
-                label: 'Attendance & Timesheet Logs',
-                icon: Icons.calendar_month_rounded,
-              ),
-              TabItemData(
-                label: 'Emergency Duty Details',
-                icon: Icons.warning_amber_rounded,
-              ),
-              TabItemData(
-                label: 'Leave Records',
-                icon: Icons.event_busy_rounded,
-              ),
-            ],
+            tabs: isMobile
+                ? const [
+                    TabItemData(
+                      label: 'Timesheet',
+                      icon: Icons.calendar_month_rounded,
+                    ),
+                    TabItemData(
+                      label: 'Emergency',
+                      icon: Icons.warning_amber_rounded,
+                    ),
+                    TabItemData(
+                      label: 'Leaves',
+                      icon: Icons.event_busy_rounded,
+                    ),
+                    TabItemData(
+                      label: 'Salary',
+                      icon: Icons.payments_rounded,
+                    ),
+                  ]
+                : const [
+                    TabItemData(
+                      label: 'Attendance & Timesheet Logs',
+                      icon: Icons.calendar_month_rounded,
+                    ),
+                    TabItemData(
+                      label: 'Emergency Duty Details',
+                      icon: Icons.warning_amber_rounded,
+                    ),
+                    TabItemData(
+                      label: 'Leave Records',
+                      icon: Icons.event_busy_rounded,
+                    ),
+                    TabItemData(
+                      label: 'Salary & Daily Calc',
+                      icon: Icons.payments_rounded,
+                    ),
+                  ],
             onTabChanged: (index) {
               setState(() {
                 _empDetailSubTab = index;
@@ -1923,6 +2593,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             _buildEmployeeLeaveRecordsSubTab(
               emp,
               empLeaveSummary,
+              isDark,
+              palette,
+              activePrimary,
+            )
+          else if (_empDetailSubTab == 3)
+            _buildEmployeeSalarySubTab(
+              emp,
+              empRecords,
+              _selectedSalaryCycle ?? SalaryCycle.current(),
               isDark,
               palette,
               activePrimary,
@@ -2007,13 +2686,24 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                           .join(', ')
                       : null;
 
-                  final dayTimesheets =
-                      TimesheetCalculator.calculateDailyTimesheets(dateRecords);
-                  final dayEntry =
-                      dayTimesheets.isNotEmpty ? dayTimesheets.first : null;
+                  final dayEntry = timesheetsByDate[dateKey] ??
+                      (TimesheetCalculator.calculateDailyTimesheets(
+                        dateRecords,
+                        targetEmployeeId: emp.id,
+                        targetEmployeeName: emp.name,
+                      ).isNotEmpty
+                          ? TimesheetCalculator.calculateDailyTimesheets(
+                              dateRecords,
+                              targetEmployeeId: emp.id,
+                              targetEmployeeName: emp.name,
+                            ).first
+                          : null);
                   final dayReg = dayEntry?.regularHours ?? 0.0;
                   final dayOt = dayEntry?.overtimeHours ?? 0.0;
                   final dayBreakMin = dayEntry?.breakDuration.inMinutes ?? 0;
+                  final dayTravelTolMin =
+                      dayEntry?.travelToleranceDuration.inMinutes ?? 0;
+                  final dayIsAutoCompleted = dayEntry?.isAutoCompleted ?? false;
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -2033,90 +2723,264 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         child: Icon(Icons.calendar_month_rounded,
                             color: activePrimary),
                       ),
-                      title: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              formattedDateStr,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 15),
-                              overflow: TextOverflow.ellipsis,
+                      title: isMobile
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  formattedDateStr,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold, fontSize: 14.5),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 4,
+                                  runSpacing: 4,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: activePrimary.withValues(
+                                            alpha: isDark ? 0.2 : 0.12),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '${dayReg.toStringAsFixed(1)}h Reg',
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: activePrimary),
+                                      ),
+                                    ),
+                                    if (dayOt > 0)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: isDark
+                                              ? Colors.orange.withValues(alpha: 0.2)
+                                              : Colors.orange.shade100,
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: isDark
+                                              ? Border.all(
+                                                  color: Colors.orange.shade800)
+                                              : null,
+                                        ),
+                                        child: Text(
+                                          '+${dayOt.toStringAsFixed(1)}h OT',
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark
+                                                  ? Colors.orange.shade300
+                                                  : Colors.orange.shade900),
+                                        ),
+                                      ),
+                                    if (dayBreakMin > 0)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: isDark
+                                              ? Colors.amber.withValues(alpha: 0.2)
+                                              : Colors.amber.shade100,
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: isDark
+                                              ? Border.all(color: Colors.amber.shade800)
+                                              : null,
+                                        ),
+                                        child: Text(
+                                          '☕ ${dayBreakMin}m Break',
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark
+                                                  ? Colors.amber.shade300
+                                                  : Colors.amber.shade900),
+                                        ),
+                                      ),
+                                    if (dayTravelTolMin > 0)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: isDark
+                                              ? Colors.blue.withValues(alpha: 0.2)
+                                              : Colors.blue.shade100,
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: isDark
+                                              ? Border.all(color: Colors.blue.shade800)
+                                              : null,
+                                        ),
+                                        child: Text(
+                                          '🚗 ${dayTravelTolMin}m Tol.',
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark
+                                                  ? Colors.blue.shade300
+                                                  : Colors.blue.shade900),
+                                        ),
+                                      ),
+                                    if (dayIsAutoCompleted)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.red.withValues(
+                                              alpha: isDark ? 0.2 : 0.12),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(
+                                              color: Colors.red.shade400),
+                                        ),
+                                        child: Text(
+                                          'Auto (8h)',
+                                          style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark
+                                                  ? Colors.red.shade300
+                                                  : Colors.red.shade700),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    formattedDateStr,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold, fontSize: 15),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: activePrimary.withValues(
+                                            alpha: isDark ? 0.2 : 0.12),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '${dayReg.toStringAsFixed(1)}h Reg',
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: activePrimary),
+                                      ),
+                                    ),
+                                    if (dayOt > 0) ...[
+                                      const SizedBox(width: 4),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: isDark
+                                              ? Colors.orange.withValues(alpha: 0.2)
+                                              : Colors.orange.shade100,
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: isDark
+                                              ? Border.all(
+                                                  color: Colors.orange.shade800)
+                                              : null,
+                                        ),
+                                        child: Text(
+                                          '+${dayOt.toStringAsFixed(1)}h OT',
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark
+                                                  ? Colors.orange.shade300
+                                                  : Colors.orange.shade900),
+                                        ),
+                                      ),
+                                    ],
+                                    if (dayBreakMin > 0) ...[
+                                      const SizedBox(width: 4),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: isDark
+                                              ? Colors.amber.withValues(alpha: 0.2)
+                                              : Colors.amber.shade100,
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: isDark
+                                              ? Border.all(color: Colors.amber.shade800)
+                                              : null,
+                                        ),
+                                        child: Text(
+                                          '☕ ${dayBreakMin}m Break',
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark
+                                                  ? Colors.amber.shade300
+                                                  : Colors.amber.shade900),
+                                        ),
+                                      ),
+                                    ],
+                                    if (dayTravelTolMin > 0) ...[
+                                      const SizedBox(width: 4),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: isDark
+                                              ? Colors.blue.withValues(alpha: 0.2)
+                                              : Colors.blue.shade100,
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: isDark
+                                              ? Border.all(color: Colors.blue.shade800)
+                                              : null,
+                                        ),
+                                        child: Text(
+                                          '🚗 ${dayTravelTolMin}m Tol.',
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark
+                                                  ? Colors.blue.shade300
+                                                  : Colors.blue.shade900),
+                                        ),
+                                      ),
+                                    ],
+                                    if (dayIsAutoCompleted) ...[
+                                      const SizedBox(width: 4),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.red.withValues(
+                                              alpha: isDark ? 0.2 : 0.12),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(
+                                              color: Colors.red.shade400),
+                                        ),
+                                        child: Text(
+                                          'Auto (8h)',
+                                          style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark
+                                                  ? Colors.red.shade300
+                                                  : Colors.red.shade700),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                )
+                              ],
                             ),
-                          ),
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: activePrimary.withValues(
-                                      alpha: isDark ? 0.2 : 0.12),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  '${dayReg.toStringAsFixed(1)}h Reg',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: activePrimary),
-                                ),
-                              ),
-                              if (dayOt > 0) ...[
-                                const SizedBox(width: 4),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? Colors.orange.withValues(alpha: 0.2)
-                                        : Colors.orange.shade100,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: isDark
-                                        ? Border.all(
-                                            color: Colors.orange.shade800)
-                                        : null,
-                                  ),
-                                  child: Text(
-                                    '+${dayOt.toStringAsFixed(1)}h OT',
-                                    style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: isDark
-                                            ? Colors.orange.shade300
-                                            : Colors.orange.shade900),
-                                  ),
-                                ),
-                              ],
-                              if (dayBreakMin > 0) ...[
-                                const SizedBox(width: 4),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? Colors.amber.withValues(alpha: 0.2)
-                                        : Colors.amber.shade100,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: isDark
-                                        ? Border.all(color: Colors.amber.shade800)
-                                        : null,
-                                  ),
-                                  child: Text(
-                                    '☕ ${dayBreakMin}m Break',
-                                    style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: isDark
-                                            ? Colors.amber.shade300
-                                            : Colors.amber.shade900),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          )
-                        ],
-                      ),
                       subtitle: Padding(
                         padding: const EdgeInsets.only(top: 6.0),
                         child: Column(
@@ -2130,13 +2994,18 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                         ? AppColors.textSecondaryDark
                                         : Colors.grey.shade600),
                                 const SizedBox(width: 4),
-                                Text(
-                                  '$firstTime - $lastTime (${dateRecords.length} Step Logs)',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isDark
-                                        ? AppColors.textSecondaryDark
-                                        : Colors.grey.shade700,
+                                Expanded(
+                                  child: Text(
+                                    dayIsAutoCompleted
+                                        ? '$firstTime - $lastTime (Auto Check-Out - 8h Regular Shift)'
+                                        : '$firstTime - $lastTime (${dateRecords.length} Step Logs)',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDark
+                                          ? AppColors.textSecondaryDark
+                                          : Colors.grey.shade700,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ],
@@ -2224,7 +3093,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                               );
                             }(),
                             const SizedBox(height: 4),
-                            Row(
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 Container(
                                   padding: const EdgeInsets.symmetric(
@@ -2249,8 +3121,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                     ),
                                   ),
                                 ),
-                                if (dayEntry != null && dayEntry.isEdited) ...[
-                                  const SizedBox(width: 6),
+                                if (dayEntry != null && dayEntry.isEdited)
                                   Container(
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 6, vertical: 2),
@@ -2269,16 +3140,37 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                       ),
                                     ),
                                   ),
-                                ],
-                                const SizedBox(width: 8),
-                                Text(
-                                  '${dateRecords.where((r) => r.photoBase64.isNotEmpty).length} Photo(s)',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: isDark
-                                          ? AppColors.textSecondaryDark
-                                          : Colors.grey),
-                                )
+                                () {
+                                  final count = dateRecords.where((r) {
+                                    final p = r.photoBase64.trim().isNotEmpty
+                                        ? r.photoBase64
+                                        : (_lazyLoadedPhotos[r.id] ?? '');
+                                    return p.trim().isNotEmpty;
+                                  }).length;
+                                  return Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.camera_alt_outlined,
+                                        size: 13,
+                                        color: count > 0
+                                            ? (isDark ? Colors.blue.shade300 : Colors.blue.shade700)
+                                            : (isDark ? AppColors.textSecondaryDark : Colors.grey),
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        '$count Photo(s)',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: count > 0 ? FontWeight.w600 : FontWeight.normal,
+                                          color: count > 0
+                                              ? (isDark ? Colors.blue.shade300 : Colors.blue.shade700)
+                                              : (isDark ? AppColors.textSecondaryDark : Colors.grey),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }(),
                               ],
                             ),
                             if (dayEntry != null &&
@@ -2310,11 +3202,28 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                           ],
                         ),
                       ),
-                      trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline_rounded,
+                                color: Colors.redAccent, size: 21),
+                            tooltip: 'Delete Date Log',
+                            onPressed: () => _confirmAndDeleteDateLog(
+                              emp,
+                              dateKey,
+                              dateRecords,
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right_rounded,
+                              color: Colors.grey),
+                        ],
+                      ),
                       onTap: () {
                         setState(() {
                           _selectedDate = parsedDate;
                         });
+                        _fetchPhotosForDateRecords(dateRecords);
                       },
                     ),
                   );
@@ -2716,88 +3625,90 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.withValues(alpha: 0.12),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(Icons.warning_amber_rounded,
-                                    color: Colors.red, size: 18),
-                              ),
-                              const SizedBox(width: 8),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text(
-                                        formattedInTime,
-                                        style: const TextStyle(
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withValues(alpha: 0.12),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.warning_amber_rounded,
+                                color: Colors.red, size: 18),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    Text(
+                                      formattedInTime,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13),
+                                    ),
+                                    if (isSessionEdited)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.purple
+                                              .withValues(alpha: 0.15),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                          border: Border.all(
+                                              color: Colors.purple
+                                                  .withValues(alpha: 0.3)),
+                                        ),
+                                        child: const Text(
+                                          'ADMIN MODIFIED',
+                                          style: TextStyle(
+                                            fontSize: 9,
                                             fontWeight: FontWeight.bold,
-                                            fontSize: 13),
-                                      ),
-                                      if (isSessionEdited) ...[
-                                        const SizedBox(width: 6),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: Colors.purple
-                                                .withValues(alpha: 0.15),
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                            border: Border.all(
-                                                color: Colors.purple
-                                                    .withValues(alpha: 0.3)),
-                                          ),
-                                          child: const Text(
-                                            'ADMIN MODIFIED',
-                                            style: TextStyle(
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.purple,
-                                            ),
+                                            color: Colors.purple,
                                           ),
                                         ),
-                                      ],
-                                    ],
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  outRec != null
+                                      ? 'Completed Session ($formattedOutTime)'
+                                      : 'Active Emergency Callout',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: outRec != null
+                                        ? Colors.green.shade700
+                                        : Colors.orange.shade800,
+                                    fontWeight: FontWeight.w500,
                                   ),
-                                  Text(
-                                    outRec != null
-                                        ? 'Completed Session ($formattedOutTime)'
-                                        : 'Active Emergency Callout',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: outRec != null
-                                          ? Colors.green.shade700
-                                          : Colors.orange.shade800,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                                ),
+                              ],
+                            ),
                           ),
+                          const SizedBox(width: 6),
                           Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 4),
+                                    horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
                                   color: Colors.red.shade700,
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
                                   outRec != null
-                                      ? '${durationHrs.toStringAsFixed(1)}h 100% OT'
+                                      ? '${durationHrs.toStringAsFixed(1)}h OT'
                                       : 'ACTIVE OT',
                                   style: const TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 10.5,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.white,
                                   ),
@@ -2807,6 +3718,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 icon: const Icon(Icons.edit_outlined,
                                     size: 18, color: Colors.blueAccent),
                                 tooltip: 'Edit Emergency Log',
+                                constraints: const BoxConstraints(),
+                                padding: const EdgeInsets.all(4),
                                 onPressed: () => _showEditEmergencyLogDialog(
                                     emp, inRec, outRec),
                               ),
@@ -2814,6 +3727,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 icon: const Icon(Icons.delete_outline,
                                     size: 18, color: Colors.redAccent),
                                 tooltip: 'Delete Session',
+                                constraints: const BoxConstraints(),
+                                padding: const EdgeInsets.all(4),
                                 onPressed: () =>
                                     _deleteEmergencySession(inRec, outRec),
                               ),
@@ -2822,46 +3737,60 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      if (inRec.photoBase64.isNotEmpty ||
-                          (outRec != null && outRec.photoBase64.isNotEmpty)) ...[
-                        Row(
+                      () {
+                        final inPhoto = inRec.photoBase64.trim().isNotEmpty
+                            ? inRec.photoBase64
+                            : (_lazyLoadedPhotos[inRec.id] ?? '');
+                        final outPhoto = (outRec != null && outRec.photoBase64.trim().isNotEmpty)
+                            ? outRec.photoBase64
+                            : (outRec != null ? (_lazyLoadedPhotos[outRec.id] ?? '') : '');
+
+                        if (inPhoto.isEmpty && outPhoto.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+
+                        return Column(
                           children: [
-                            if (inRec.photoBase64.isNotEmpty)
-                              GestureDetector(
-                                onTap: () => _showFullImageDialog(inRec),
-                                child: Container(
-                                  height: 60,
-                                  width: 60,
-                                  clipBehavior: Clip.antiAlias,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.red.shade300),
+                            Row(
+                              children: [
+                                if (inPhoto.isNotEmpty)
+                                  GestureDetector(
+                                    onTap: () => _showFullImageDialog(
+                                        inRec.copyWith(photoBase64: inPhoto)),
+                                    child: Container(
+                                      height: 60,
+                                      width: 60,
+                                      clipBehavior: Clip.antiAlias,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: Colors.red.shade300),
+                                      ),
+                                      child: _buildPhotoWidget(inPhoto),
+                                    ),
                                   ),
-                                  child: _buildPhotoWidget(inRec.photoBase64),
-                                ),
-                              ),
-                            if (inRec.photoBase64.isNotEmpty &&
-                                outRec != null &&
-                                outRec.photoBase64.isNotEmpty)
-                              const SizedBox(width: 10),
-                            if (outRec != null && outRec.photoBase64.isNotEmpty)
-                              GestureDetector(
-                                onTap: () => _showFullImageDialog(outRec),
-                                child: Container(
-                                  height: 60,
-                                  width: 60,
-                                  clipBehavior: Clip.antiAlias,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.green.shade300),
+                                if (inPhoto.isNotEmpty && outPhoto.isNotEmpty)
+                                  const SizedBox(width: 10),
+                                if (outPhoto.isNotEmpty)
+                                  GestureDetector(
+                                    onTap: () => _showFullImageDialog(
+                                        outRec!.copyWith(photoBase64: outPhoto)),
+                                    child: Container(
+                                      height: 60,
+                                      width: 60,
+                                      clipBehavior: Clip.antiAlias,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: Colors.green.shade300),
+                                      ),
+                                      child: _buildPhotoWidget(outPhoto),
+                                    ),
                                   ),
-                                  child: _buildPhotoWidget(outRec.photoBase64),
-                                ),
-                              ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
                           ],
-                        ),
-                        const SizedBox(height: 8),
-                      ],
+                        );
+                      }(),
                       if (inRec.address.isNotEmpty) ...[
                         Row(
                           children: [
@@ -3407,6 +4336,705 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildEmployeeSalarySubTab(
+    EmployeeEntity emp,
+    List<AttendanceRecord> empRecords,
+    SalaryCycle cycle,
+    bool isDark,
+    dynamic palette,
+    Color activePrimary,
+  ) {
+    final isMobile = MediaQuery.of(context).size.width < 700;
+    final salaryConfig = _db.getEmployeeSalary(
+          employeeCode: emp.employeeCode,
+          employeeId: emp.id,
+          employeeName: emp.name,
+        ) ??
+        EmployeeSalaryConfig(
+          employeeCode: emp.employeeCode,
+          employeeId: emp.id,
+          employeeName: emp.name,
+          department: emp.department.isNotEmpty ? emp.department : 'General',
+          fixedSalary: 1200.0,
+          variableSalary: 600.0,
+        );
+
+    final summary = SalaryCalculator.calculateEmployeeSalary(
+      config: salaryConfig,
+      employee: emp,
+      records: empRecords,
+      cycle: cycle,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. Policy & Calculation Rule Banner
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: activePrimary.withValues(alpha: isDark ? 0.15 : 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: activePrimary.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.info_outline_rounded, color: activePrimary, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Day-Wise Salary & In-Between Sunday Weekly Off Rule',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: activePrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Fixed and Variable rates are calculated daily (Base / Days in Month). In-between Sundays between worked days are credited as Paid Weekly Offs (e.g. 8 days worked + 1 in-between Sunday = 9 credited days). Overtime is strictly credited from Basic Salary only: (Basic Salary / Days in Month) / 8.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? palette.textSecondaryDark : Colors.grey.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // 2. Base Configuration & Edit Bar
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isDark ? palette.surfaceDark : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark ? palette.cardBorderDark : Colors.grey.shade200,
+            ),
+          ),
+          child: isMobile
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Basic Salary', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                              Text(
+                                'AED ${salaryConfig.basicSalary.toStringAsFixed(0)}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              Text(
+                                'AED ${summary.dailyRecords.isNotEmpty ? summary.dailyRecords.first.dailyFixedCredit.toStringAsFixed(2) : salaryConfig.dailyFixedRate.toStringAsFixed(2)}/d',
+                                style: TextStyle(fontSize: 10, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Variable / Allow.', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                              Text(
+                                'AED ${salaryConfig.variableSalary.toStringAsFixed(0)}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              Text(
+                                'AED ${summary.dailyRecords.isNotEmpty ? summary.dailyRecords.first.dailyVariableCredit.toStringAsFixed(2) : salaryConfig.dailyVariableRate.toStringAsFixed(2)}/d',
+                                style: TextStyle(fontSize: 10, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Hourly OT Rate', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                              Text(
+                                salaryConfig.otIncludedInVariable
+                                    ? 'AED 0.00'
+                                    : 'AED ${summary.hourlyOtRate.toStringAsFixed(2)}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              Text(
+                                salaryConfig.otIncludedInVariable ? 'Fixed in Var' : '(Basic / Days) / 8',
+                                style: const TextStyle(fontSize: 10, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Monthly Base', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                              Text(
+                                'AED ${salaryConfig.monthlyBaseTotal.toStringAsFixed(0)}',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: activePrimary),
+                              ),
+                              const Text('Fixed + Var', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: summary.daysWorked == 0 ? Colors.amber[700] : activePrimary,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            ),
+                            icon: const Icon(Icons.post_add_rounded, size: 15),
+                            label: Text(
+                              summary.daysWorked == 0 ? 'Put Attendance' : 'Attendance',
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: () {
+                              PutOfficeAttendanceDialog.show(
+                                context,
+                                summary: summary,
+                                onAttendanceSaved: () => setState(() {}),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: activePrimary,
+                              side: BorderSide(color: activePrimary),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            ),
+                            icon: const Icon(Icons.edit_rounded, size: 15),
+                            label: const Text('Edit', style: TextStyle(fontSize: 11)),
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (ctx) => EditSalaryDialog(
+                                  employee: emp,
+                                  existingConfig: salaryConfig,
+                                  onSaved: () => setState(() {}),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Basic Salary', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                              Text(
+                                'AED ${salaryConfig.basicSalary.toStringAsFixed(0)}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              Text(
+                                'AED ${summary.dailyRecords.isNotEmpty ? summary.dailyRecords.first.dailyFixedCredit.toStringAsFixed(2) : salaryConfig.dailyFixedRate.toStringAsFixed(2)}/d',
+                                style: TextStyle(fontSize: 10, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                              ),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Variable / Allow.', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                              Text(
+                                'AED ${salaryConfig.variableSalary.toStringAsFixed(0)}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              Text(
+                                'AED ${summary.dailyRecords.isNotEmpty ? summary.dailyRecords.first.dailyVariableCredit.toStringAsFixed(2) : salaryConfig.dailyVariableRate.toStringAsFixed(2)}/d',
+                                style: TextStyle(fontSize: 10, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                              ),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Hourly OT Rate', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                              Text(
+                                salaryConfig.otIncludedInVariable
+                                    ? 'AED 0.00'
+                                    : 'AED ${summary.hourlyOtRate.toStringAsFixed(2)}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              Text(
+                                salaryConfig.otIncludedInVariable ? 'Fixed in Var' : '(Basic / Days) / 8',
+                                style: const TextStyle(fontSize: 10, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Monthly Base', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                              Text(
+                                'AED ${salaryConfig.monthlyBaseTotal.toStringAsFixed(0)}',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: activePrimary),
+                              ),
+                              const Text('Fixed + Var', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: summary.daysWorked == 0 ? Colors.amber[700] : activePrimary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      ),
+                      icon: const Icon(Icons.post_add_rounded, size: 15),
+                      label: Text(
+                        summary.daysWorked == 0 ? 'Put Attendance' : 'Attendance',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () {
+                        PutOfficeAttendanceDialog.show(
+                          context,
+                          summary: summary,
+                          onAttendanceSaved: () => setState(() {}),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 6),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: activePrimary,
+                        side: BorderSide(color: activePrimary),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      ),
+                      icon: const Icon(Icons.edit_rounded, size: 15),
+                      label: const Text('Edit', style: TextStyle(fontSize: 11)),
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => EditSalaryDialog(
+                            employee: emp,
+                            existingConfig: salaryConfig,
+                            onSaved: () => setState(() {}),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+        ),
+        const SizedBox(height: 10),
+
+        // 2.5 Quick Toggle for Fixed OT in Variable (Zero OT)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: salaryConfig.otIncludedInVariable
+                ? activePrimary.withValues(alpha: isDark ? 0.2 : 0.08)
+                : (isDark ? palette.surfaceDark : Colors.white),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: salaryConfig.otIncludedInVariable
+                  ? activePrimary.withValues(alpha: 0.4)
+                  : (isDark ? palette.cardBorderDark : Colors.grey.shade200),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(
+                      salaryConfig.otIncludedInVariable
+                          ? Icons.check_circle_rounded
+                          : Icons.schedule_rounded,
+                      size: 16,
+                      color: salaryConfig.otIncludedInVariable
+                          ? activePrimary
+                          : Colors.grey,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Fixed OT Included in Variable Salary',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: salaryConfig.otIncludedInVariable
+                                  ? activePrimary
+                                  : (isDark ? Colors.white70 : Colors.black87),
+                            ),
+                          ),
+                          Text(
+                            salaryConfig.otIncludedInVariable
+                                ? 'Overtime is set to AED 0.00 (already included in variable allowance)'
+                                : 'Overtime is calculated strictly from Basic Salary',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isDark ? palette.textSecondaryDark : palette.textSecondaryLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch.adaptive(
+                value: salaryConfig.otIncludedInVariable,
+                activeTrackColor: activePrimary,
+                onChanged: (val) {
+                  final updated = salaryConfig.copyWith(otIncludedInVariable: val);
+                  _db.saveEmployeeSalary(updated, persist: true);
+                  setState(() {});
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Office Staff Attendance Prompt (if 0 days logged)
+        if (summary.daysWorked == 0) ...[
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: isDark ? 0.16 : 0.1),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '0 Days Logged (Office Staff Attendance Needed)',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.amber),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${emp.name} has 0 days of attendance recorded for ${cycle.shortPeriodLabel}. '
+                        'Office staff do not clock in via the mobile application. '
+                        'Use "Put Office Attendance" to bulk mark worked days (e.g., 26 days) or record specific dates to calculate salary automatically.',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          height: 1.3,
+                          color: isDark ? Colors.grey[300] : Colors.grey[800],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          PutOfficeAttendanceDialog.show(
+                            context,
+                            summary: summary,
+                            onAttendanceSaved: () => setState(() {}),
+                          );
+                        },
+                        icon: const Icon(Icons.post_add_rounded, size: 16),
+                        label: const Text(
+                          'Put Office Attendance Now',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.amber[700],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        // 3. Cycle Earned Salary Metric Card
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: isDark
+                  ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
+                  : [const Color(0xFF1E3A8A), const Color(0xFF1D4ED8)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'CYCLE EARNED SALARY',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${summary.totalPayableDays} Payable Days (${summary.daysWorked}d worked + ${summary.paidSundays}d Sun)',
+                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'AED ${summary.grossTotalSalary.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  runSpacing: 4,
+                  spacing: 8,
+                  children: [
+                    Text(
+                      'Fixed: AED ${summary.earnedFixedSalary.toStringAsFixed(2)}',
+                      style: const TextStyle(color: Colors.white, fontSize: 11),
+                    ),
+                    Text(
+                      'Var: AED ${summary.earnedVariableSalary.toStringAsFixed(2)}',
+                      style: const TextStyle(color: Colors.white, fontSize: 11),
+                    ),
+                    Text(
+                      'OT: +AED ${summary.earnedOtSalary.toStringAsFixed(2)} (${summary.totalOvertimeHours.toStringAsFixed(1)}h)',
+                      style: const TextStyle(color: Color(0xFFFDE047), fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // 4. Day-by-Day Salary Ledger
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Day-by-Day Salary Ledger (${cycle.shortPeriodLabel})',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: isDark ? palette.textPrimaryDark : palette.textPrimaryLight,
+              ),
+            ),
+            Text(
+              '${summary.totalPayableDays} Credited Days',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: activePrimary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        ...summary.dailyRecords.map((r) {
+          final isSunday = r.isSunday;
+          final isPayable = r.isPayable;
+          final dateStr = DateFormat('dd MMM (EEE)').format(r.date);
+
+          Color statusColor;
+          String statusLabel;
+          switch (r.status) {
+            case DailySalaryStatus.present:
+              statusColor = Colors.green;
+              statusLabel = 'Present (${r.regularHours.toStringAsFixed(1)}h)';
+              if (r.overtimeHours > 0) statusLabel += ' + ${r.overtimeHours.toStringAsFixed(1)}h OT';
+              break;
+            case DailySalaryStatus.paidSundayOff:
+              statusColor = Colors.blue;
+              statusLabel = r.remarks?.isNotEmpty == true ? r.remarks! : 'Paid Sunday Off';
+              break;
+            case DailySalaryStatus.sundayDuty:
+              statusColor = Colors.orange;
+              statusLabel = 'Sunday Duty (${r.overtimeHours.toStringAsFixed(1)}h OT)';
+              break;
+            case DailySalaryStatus.absent:
+              statusColor = Colors.red;
+              statusLabel = 'Absent / Leave';
+              break;
+            case DailySalaryStatus.unpaidSundayOff:
+              statusColor = Colors.grey;
+              statusLabel = 'Unpaid Sunday';
+              break;
+            case DailySalaryStatus.futureDay:
+              statusColor = Colors.grey.shade400;
+              statusLabel = 'Upcoming';
+              break;
+          }
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: isDark ? palette.surfaceDark : Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: r.status == DailySalaryStatus.paidSundayOff
+                    ? activePrimary.withValues(alpha: 0.3)
+                    : (isDark ? palette.cardBorderDark : Colors.grey.shade200),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isSunday ? Colors.amber.withValues(alpha: 0.15) : (isDark ? Colors.grey.shade800 : Colors.grey.shade100),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    dateStr,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: isSunday ? Colors.amber.shade900 : (isDark ? Colors.white70 : Colors.black87),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              r.status.label,
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                                color: statusColor,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              statusLabel,
+                              style: TextStyle(fontSize: 10.5, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (isPayable) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Fixed: +${r.dailyFixedCredit.toStringAsFixed(1)} | Var: +${r.dailyVariableCredit.toStringAsFixed(1)}${r.dailyOtCredit > 0 ? " | OT: +${r.dailyOtCredit.toStringAsFixed(1)}" : ""}',
+                          style: TextStyle(fontSize: 9.5, color: isDark ? Colors.grey[500] : Colors.grey[500]),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      isPayable ? '+AED ${r.dailyTotalSalary.toStringAsFixed(2)}' : 'AED 0.00',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: isPayable ? Colors.green.shade700 : Colors.grey,
+                      ),
+                    ),
+                    if (isPayable)
+                      Text(
+                        'Total: AED ${r.cumulativeSalary.toStringAsFixed(0)} (${r.cumulativePayableDays}d)',
+                        style: TextStyle(fontSize: 9.5, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
     );
   }
 
@@ -4287,101 +5915,268 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
     dateRecords.sort((a, b) => a.eventTimestamp.compareTo(b.eventTimestamp));
 
+    // Automatically fetch verified photos from cloud if missing locally
+    final needsPhotos = dateRecords.any((r) =>
+        r.photoBase64.trim().isEmpty &&
+        !(_lazyLoadedPhotos[r.id]?.trim().isNotEmpty ?? false) &&
+        !_checkedPhotoRecordIds.contains(r.id) &&
+        !_loadingPhotoRecordIds.contains(r.id));
+    if (needsPhotos) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _fetchPhotosForDateRecords(dateRecords);
+      });
+    }
+
     final formattedDateTitle =
         DateFormat('EEEE, dd MMMM yyyy').format(_selectedDate!);
 
-    final dayTimesheets =
-        TimesheetCalculator.calculateDailyTimesheets(dateRecords);
+    final allEmpRecords = _db
+        .getAttendanceRecords()
+        .where((r) => _recordMatchesEmployee(r, emp))
+        .toList();
+    final allEmpTimesheets = TimesheetCalculator.calculateDailyTimesheets(
+      allEmpRecords,
+      targetEmployeeId: emp.id,
+      targetEmployeeName: emp.name,
+    );
+
+    DailyTimesheetEntry? tEntry;
+    for (final t in allEmpTimesheets) {
+      if (DateFormat('yyyy-MM-dd').format(t.date.toLocal()) == selectedDateStr) {
+        tEntry = t;
+        break;
+      }
+    }
+    if (tEntry == null) {
+      final dayTimesheets = TimesheetCalculator.calculateDailyTimesheets(
+        dateRecords,
+        targetEmployeeId: emp.id,
+        targetEmployeeName: emp.name,
+      );
+      if (dayTimesheets.isNotEmpty) tEntry = dayTimesheets.first;
+    }
+
     double totalHrs = 0.0;
     double regHrs = 0.0;
     double otHrs = 0.0;
     int breakMin = 0;
+    int travelTolMin = 0;
+    bool isAutoCompleted = false;
 
-    if (dayTimesheets.isNotEmpty) {
-      final tEntry = dayTimesheets.first;
+    if (tEntry != null) {
       regHrs = tEntry.regularHours;
       otHrs = tEntry.overtimeHours;
       totalHrs = tEntry.totalHours;
       breakMin = tEntry.breakDuration.inMinutes;
+      travelTolMin = tEntry.travelToleranceDuration.inMinutes;
+      isAutoCompleted = tEntry.isAutoCompleted;
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final palette = AppTheme.currentColors;
     final activePrimary =
         palette.primaryFor(isDark ? Brightness.dark : Brightness.light);
+    final isMobile = MediaQuery.of(context).size.width < 700;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: () {
-                  setState(() {
-                    _selectedDate = null;
-                  });
-                },
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      emp.name,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
+          if (isMobile) ...[
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () {
+                    setState(() {
+                      _selectedDate = null;
+                    });
+                  },
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        emp.name,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        formattedDateTitle,
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? palette.textSecondaryDark
+                                : palette.textSecondaryLight),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      final ok = await AdminEditAttendanceDialog.show(
+                        context,
+                        employeeId: emp.id,
+                        employeeName: emp.name,
+                        date: _selectedDate!,
+                        initialCheckIn: tEntry?.checkInTime,
+                        initialCheckOut: tEntry?.checkOutTime,
+                        initialOtHours: tEntry?.manualOvertimeHours ?? tEntry?.overtimeHours,
+                        initialRemarks: tEntry?.remarks,
+                      );
+                      if (ok == true && mounted) {
+                        setState(() {});
+                      }
+                    },
+                    icon: const Icon(Icons.edit_calendar_rounded, size: 16),
+                    label: const Text('Adjust Shift & OT',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: activePrimary,
+                      foregroundColor: Colors.white,
+                      elevation: 2,
+                      shadowColor: activePrimary.withValues(alpha: 0.4),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
-                    Text(
-                      formattedDateTitle,
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: isDark
-                              ? palette.textSecondaryDark
-                              : palette.textSecondaryLight),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _confirmAndDeleteDateLog(
+                      emp,
+                      selectedDateStr,
+                      dateRecords,
+                      isFromDetailView: true,
+                    ),
+                    icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                    label: const Text('Delete Date Log',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                      foregroundColor: Colors.white,
+                      elevation: 2,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ] else ...[
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () {
+                    setState(() {
+                      _selectedDate = null;
+                    });
+                  },
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        emp.name,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        formattedDateTitle,
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? palette.textSecondaryDark
+                                : palette.textSecondaryLight),
+                      ),
+                    ],
+                  ),
+                ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final ok = await AdminEditAttendanceDialog.show(
+                          context,
+                          employeeId: emp.id,
+                          employeeName: emp.name,
+                          date: _selectedDate!,
+                          initialCheckIn: tEntry?.checkInTime,
+                          initialCheckOut: tEntry?.checkOutTime,
+                          initialOtHours: tEntry?.manualOvertimeHours ?? tEntry?.overtimeHours,
+                          initialRemarks: tEntry?.remarks,
+                        );
+                        if (ok == true && mounted) {
+                          setState(() {});
+                        }
+                      },
+                      icon: const Icon(Icons.edit_calendar_rounded, size: 16),
+                      label: const Text('Adjust Shift & OT',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: activePrimary,
+                        foregroundColor: Colors.white,
+                        elevation: 2,
+                        shadowColor: activePrimary.withValues(alpha: 0.4),
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () => _confirmAndDeleteDateLog(
+                        emp,
+                        selectedDateStr,
+                        dateRecords,
+                        isFromDetailView: true,
+                      ),
+                      icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                      label: const Text('Delete Date Log',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade700,
+                        foregroundColor: Colors.white,
+                        elevation: 2,
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
                     ),
                   ],
                 ),
-              ),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final tEntry = dayTimesheets.isNotEmpty ? dayTimesheets.first : null;
-                  final ok = await AdminEditAttendanceDialog.show(
-                    context,
-                    employeeId: emp.id,
-                    employeeName: emp.name,
-                    date: _selectedDate!,
-                    initialCheckIn: tEntry?.checkInTime,
-                    initialCheckOut: tEntry?.checkOutTime,
-                    initialOtHours: tEntry?.manualOvertimeHours ?? tEntry?.overtimeHours,
-                    initialRemarks: tEntry?.remarks,
-                  );
-                  if (ok == true && mounted) {
-                    setState(() {});
-                  }
-                },
-                icon: const Icon(Icons.edit_calendar_rounded, size: 18),
-                label: const Text('Adjust Shift & OT',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: activePrimary,
-                  foregroundColor: Colors.white,
-                  elevation: 3,
-                  shadowColor: activePrimary.withValues(alpha: 0.4),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
           const Divider(height: 20),
 
           // Daily Timesheet Breakdown Card (Regular, OT, Break, Combined)
@@ -4403,190 +6198,313 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Icon(Icons.timer_rounded, color: activePrimary, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Daily Timesheet Hours Summary',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: activePrimary),
+                    Row(
+                      children: [
+                        Icon(Icons.timer_rounded, color: activePrimary, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Daily Timesheet Hours Summary',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: activePrimary),
+                        ),
+                      ],
                     ),
+                    if (isAutoCompleted)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: isDark ? 0.2 : 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.red.shade400),
+                        ),
+                        child: Text(
+                          'Auto Check-Out (8h)',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.red.shade300 : Colors.red.shade700,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: activePrimary.withValues(
-                              alpha: isDark ? 0.2 : 0.12),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Regular',
-                                style: TextStyle(
-                                    fontSize: 10,
-                                    color: activePrimary,
-                                    fontWeight: FontWeight.w600)),
-                            const SizedBox(height: 2),
-                            Text('${regHrs.toStringAsFixed(1)}h',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    color: activePrimary)),
-                            Text('Max 8.0h',
-                                style: TextStyle(
-                                    fontSize: 8.5,
-                                    color: isDark
-                                        ? palette.textSecondaryDark
-                                        : Colors.grey)),
-                          ],
-                        ),
-                      ),
+                () {
+                  final regCard = Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: activePrimary.withValues(
+                          alpha: isDark ? 0.2 : 0.12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: otHrs > 0
-                              ? (isDark
-                                  ? Colors.orange.withValues(alpha: 0.2)
-                                  : Colors.orange.shade100)
-                              : (isDark
-                                  ? AppColors.backgroundDark
-                                  : Colors.grey.shade100),
-                          borderRadius: BorderRadius.circular(10),
-                          border: otHrs > 0 && isDark
-                              ? Border.all(color: Colors.orange.shade800)
-                              : null,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Overtime',
-                                style: TextStyle(
-                                    fontSize: 10,
-                                    color: otHrs > 0
-                                        ? (isDark
-                                            ? Colors.orange.shade300
-                                            : Colors.orange.shade900)
-                                        : (isDark
-                                            ? AppColors.textSecondaryDark
-                                            : Colors.grey.shade700),
-                                    fontWeight: FontWeight.w600)),
-                            const SizedBox(height: 2),
-                            Text('+${otHrs.toStringAsFixed(1)}h',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    color: otHrs > 0
-                                        ? (isDark
-                                            ? Colors.orange.shade300
-                                            : Colors.orange.shade900)
-                                        : (isDark
-                                            ? AppColors.textSecondaryDark
-                                            : Colors.grey.shade700))),
-                            Text('Beyond 10.0h',
-                                style: TextStyle(
-                                    fontSize: 8.5,
-                                    color: isDark
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Regular',
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: activePrimary,
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 2),
+                        Text('${regHrs.toStringAsFixed(1)}h',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: activePrimary)),
+                        Text('Max 8.0h',
+                            style: TextStyle(
+                                fontSize: 8.5,
+                                color: isDark
+                                    ? palette.textSecondaryDark
+                                    : Colors.grey)),
+                      ],
+                    ),
+                  );
+
+                  final otCard = Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: otHrs > 0
+                          ? (isDark
+                              ? Colors.orange.withValues(alpha: 0.2)
+                              : Colors.orange.shade100)
+                          : (isDark
+                              ? AppColors.backgroundDark
+                              : Colors.grey.shade100),
+                      borderRadius: BorderRadius.circular(10),
+                      border: otHrs > 0 && isDark
+                          ? Border.all(color: Colors.orange.shade800)
+                          : null,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Overtime',
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: otHrs > 0
+                                    ? (isDark
+                                        ? Colors.orange.shade300
+                                        : Colors.orange.shade900)
+                                    : (isDark
                                         ? AppColors.textSecondaryDark
-                                        : Colors.grey)),
-                          ],
-                        ),
+                                        : Colors.grey.shade700),
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 2),
+                        Text('+${otHrs.toStringAsFixed(1)}h',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: otHrs > 0
+                                    ? (isDark
+                                        ? Colors.orange.shade300
+                                        : Colors.orange.shade900)
+                                    : (isDark
+                                        ? AppColors.textSecondaryDark
+                                        : Colors.grey.shade700))),
+                        Text('Beyond 10.0h',
+                            style: TextStyle(
+                                fontSize: 8.5,
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : Colors.grey)),
+                      ],
+                    ),
+                  );
+
+                  final breakCard = Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.amber.withValues(alpha: 0.2)
+                          : Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.amber.shade800
+                            : Colors.amber.shade200,
                       ),
                     ),
-                    if (breakMin > 0) ...[
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.amber.withValues(alpha: 0.2)
-                                : Colors.amber.shade50,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: isDark
-                                  ? Colors.amber.shade800
-                                  : Colors.amber.shade200,
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Food Break',
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: isDark
+                                    ? Colors.amber.shade300
+                                    : Colors.amber.shade900,
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 2),
+                        Text('${breakMin}m',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: isDark
+                                    ? Colors.amber.shade300
+                                    : Colors.amber.shade900)),
+                        Text('Default 1.0h',
+                            style: TextStyle(
+                                fontSize: 8.5,
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : Colors.grey)),
+                      ],
+                    ),
+                  );
+
+                  final travelTolCard = Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.blue.withValues(alpha: 0.2)
+                          : Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.blue.shade800
+                            : Colors.blue.shade200,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Travel Tol.',
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: isDark
+                                    ? Colors.blue.shade300
+                                    : Colors.blue.shade900,
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 2),
+                        Text('${travelTolMin}m',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: isDark
+                                    ? Colors.blue.shade300
+                                    : Colors.blue.shade900)),
+                        Text('Max 1.0h',
+                            style: TextStyle(
+                                fontSize: 8.5,
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : Colors.grey)),
+                      ],
+                    ),
+                  );
+
+                  final netTimeCard = Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.success
+                          .withValues(alpha: isDark ? 0.2 : 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Net Time',
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: AppColors.success,
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 2),
+                        Text('${totalHrs.toStringAsFixed(1)}h',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: AppColors.success)),
+                        Text('Reg + OT',
+                            style: TextStyle(
+                                fontSize: 8.5,
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : Colors.grey)),
+                      ],
+                    ),
+                  );
+
+                  if (isMobile) {
+                    return Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(child: regCard),
+                            const SizedBox(width: 6),
+                            Expanded(child: otCard),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        if (breakMin > 0 && travelTolMin > 0) ...[
+                          Row(
                             children: [
-                              Text('Break',
-                                  style: TextStyle(
-                                      fontSize: 10,
-                                      color: isDark
-                                          ? Colors.amber.shade300
-                                          : Colors.amber.shade900,
-                                      fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 2),
-                              Text('${breakMin}m',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                      color: isDark
-                                          ? Colors.amber.shade300
-                                          : Colors.amber.shade900)),
-                              Text('Excluded',
-                                  style: TextStyle(
-                                      fontSize: 8.5,
-                                      color: isDark
-                                          ? AppColors.textSecondaryDark
-                                          : Colors.grey)),
+                              Expanded(child: breakCard),
+                              const SizedBox(width: 6),
+                              Expanded(child: travelTolCard),
                             ],
                           ),
-                        ),
-                      ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Expanded(child: netTimeCard),
+                            ],
+                          ),
+                        ] else if (breakMin > 0) ...[
+                          Row(
+                            children: [
+                              Expanded(child: breakCard),
+                              const SizedBox(width: 6),
+                              Expanded(child: netTimeCard),
+                            ],
+                          ),
+                        ] else if (travelTolMin > 0) ...[
+                          Row(
+                            children: [
+                              Expanded(child: travelTolCard),
+                              const SizedBox(width: 6),
+                              Expanded(child: netTimeCard),
+                            ],
+                          ),
+                        ] else ...[
+                          Row(
+                            children: [
+                              Expanded(child: netTimeCard),
+                            ],
+                          ),
+                        ],
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(child: regCard),
+                      const SizedBox(width: 6),
+                      Expanded(child: otCard),
+                      if (breakMin > 0) ...[
+                        const SizedBox(width: 6),
+                        Expanded(child: breakCard),
+                      ],
+                      if (travelTolMin > 0) ...[
+                        const SizedBox(width: 6),
+                        Expanded(child: travelTolCard),
+                      ],
+                      const SizedBox(width: 6),
+                      Expanded(child: netTimeCard),
                     ],
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: AppColors.success
-                              .withValues(alpha: isDark ? 0.2 : 0.1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Net Time',
-                                style: TextStyle(
-                                    fontSize: 10,
-                                    color: AppColors.success,
-                                    fontWeight: FontWeight.w600)),
-                            const SizedBox(height: 2),
-                            Text('${totalHrs.toStringAsFixed(1)}h',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    color: AppColors.success)),
-                            Text('Reg + OT',
-                                style: TextStyle(
-                                    fontSize: 8.5,
-                                    color: isDark
-                                        ? AppColors.textSecondaryDark
-                                        : Colors.grey)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  );
+                }(),
               ],
             ),
           ),
@@ -4893,27 +6811,42 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 ),
                               ],
                             ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: (r.isGeofenceValid
-                                        ? AppColors.success
-                                        : AppColors.error)
-                                    .withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                r.isGeofenceValid ? 'VALID' : 'VIOLATION',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: r.isGeofenceValid
-                                      ? AppColors.success
-                                      : AppColors.error,
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: (r.isGeofenceValid
+                                            ? AppColors.success
+                                            : AppColors.error)
+                                        .withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    r.isGeofenceValid ? 'VALID' : 'VIOLATION',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: r.isGeofenceValid
+                                          ? AppColors.success
+                                          : AppColors.error,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            )
+                                const SizedBox(width: 4),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline_rounded,
+                                      color: Colors.redAccent, size: 20),
+                                  tooltip: 'Delete this log entry',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () =>
+                                      _confirmAndDeleteSingleStepRecord(emp, r),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                         const Divider(height: 20),
@@ -4973,7 +6906,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                           final String siteNameText =
                               TimesheetCalculator.resolveSiteName(r);
 
-                          final hasPhoto = r.photoBase64.trim().isNotEmpty;
+                          final effectivePhoto = (r.photoBase64.trim().isNotEmpty
+                              ? r.photoBase64
+                              : (_lazyLoadedPhotos[r.id] ?? '')).trim();
+                          final hasPhoto = effectivePhoto.isNotEmpty;
+                          final isPhotoLoading = _loadingPhotoRecordIds.contains(r.id);
 
                           if (hasPhoto) {
                             return Container(
@@ -4998,14 +6935,17 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                       Icon(Icons.camera_alt_rounded,
                                           size: 16, color: activePrimary),
                                       const SizedBox(width: 6),
-                                      Text(
-                                        'Verified Live Camera Snapshot',
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: activePrimary),
+                                      Expanded(
+                                        child: Text(
+                                          'Verified Live Camera Snapshot',
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                              color: activePrimary),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
-                                      const Spacer(),
+                                      const SizedBox(width: 6),
                                       Container(
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 8, vertical: 2),
@@ -5021,12 +6961,16 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                             Icon(Icons.place_rounded,
                                                 size: 12, color: activePrimary),
                                             const SizedBox(width: 3),
-                                            Text(
-                                              siteNameText,
-                                              style: TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: activePrimary),
+                                            ConstrainedBox(
+                                              constraints: const BoxConstraints(maxWidth: 120),
+                                              child: Text(
+                                                siteNameText,
+                                                style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: activePrimary),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -5036,7 +6980,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                   const SizedBox(height: 10),
                                   Center(
                                     child: GestureDetector(
-                                      onTap: () => _showFullImageDialog(r),
+                                      onTap: () => _showFullImageDialog(
+                                          r.copyWith(photoBase64: effectivePhoto)),
                                       child: Container(
                                         height: 140,
                                         width: 140,
@@ -5048,14 +6993,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                           border:
                                               Border.all(color: activePrimary),
                                         ),
-                                        child: _buildPhotoWidget(r.photoBase64),
+                                        child: _buildPhotoWidget(effectivePhoto),
                                       ),
                                     ),
                                   ),
                                   const SizedBox(height: 8),
                                   Center(
                                     child: TextButton.icon(
-                                      onPressed: () => _showFullImageDialog(r),
+                                      onPressed: () => _showFullImageDialog(
+                                          r.copyWith(photoBase64: effectivePhoto)),
                                       icon: const Icon(Icons.fullscreen_rounded,
                                           size: 16),
                                       label: const Text(
@@ -5067,8 +7013,49 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                 ],
                               ),
                             );
+                          } else if (isPhotoLoading) {
+                            return Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppColors.backgroundDark
+                                    : Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isDark
+                                      ? AppColors.cardBorderDark
+                                      : Colors.grey.shade300,
+                                ),
+                              ),
+                              child: Center(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: activePrimary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      'Loading verified photo from cloud...',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isDark
+                                            ? AppColors.textSecondaryDark
+                                            : Colors.grey.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
                           } else {
-                            // Where image is not required: Display Site Name & Location Card
+                            // Where image is not required or yet to be fetched
                             return Container(
                               width: double.infinity,
                               decoration: BoxDecoration(
@@ -5139,6 +7126,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                                         ],
                                       ],
                                     ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.sync_rounded, size: 20),
+                                    tooltip: 'Check Cloud for Photo',
+                                    onPressed: () => _fetchPhotosForDateRecords([r]),
                                   ),
                                 ],
                               ),
@@ -5236,6 +7228,38 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
         return Image.file(File(cleanPhoto), fit: BoxFit.cover);
       }
 
+      // Check if it's a Supabase storage path or filename
+      if (!cleanPhoto.startsWith('data:') &&
+          (cleanPhoto.startsWith('photos/') ||
+              cleanPhoto.contains('attendance_') ||
+              cleanPhoto.endsWith('.jpg') ||
+              cleanPhoto.endsWith('.png') ||
+              cleanPhoto.endsWith('.jpeg'))) {
+        final storagePath = cleanPhoto.startsWith('photos/')
+            ? cleanPhoto
+            : 'photos/$cleanPhoto';
+        final resolvedUrl = SupabaseService()
+            .client
+            ?.storage
+            .from('attendance_photos')
+            .getPublicUrl(storagePath);
+        if (resolvedUrl != null && resolvedUrl.startsWith('http')) {
+          return Image.network(
+            resolvedUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                color: Colors.blueGrey.shade800,
+                child: const Center(
+                  child: Icon(Icons.broken_image_rounded,
+                      size: 50, color: Colors.white70),
+                ),
+              );
+            },
+          );
+        }
+      }
+
       String base64Str = cleanPhoto;
       if (base64Str.contains(',')) {
         base64Str = base64Str.split(',').last;
@@ -5256,6 +7280,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
   void _showFullImageDialog(AttendanceRecord record) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final photo = record.photoBase64.trim().isNotEmpty
+        ? record.photoBase64
+        : (_lazyLoadedPhotos[record.id] ?? '');
+
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
@@ -5283,14 +7311,19 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               ),
               const Divider(),
               Container(
-                height: 280,
+                height: 320,
                 width: double.infinity,
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
                   color: Colors.black,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: _buildPhotoWidget(record.photoBase64),
+                child: InteractiveViewer(
+                  panEnabled: true,
+                  minScale: 0.8,
+                  maxScale: 4.0,
+                  child: _buildPhotoWidget(photo),
+                ),
               ),
               const SizedBox(height: 12),
               Text(
@@ -5365,12 +7398,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   Future<void> _exportPdfForEmployee(
       EmployeeEntity emp, List<AttendanceRecord> records) async {
     try {
+      final cycleToUse = _selectedSalaryCycle ?? SalaryCycle.current();
+      final recordsToExport = cycleToUse.filterRecords(records);
+
       await PdfExportService.downloadEmployeeAttendancePdfFile(
         organizationName: _db.organization?.name ?? 'Fusion Enterprise',
         employee: emp,
-        records: records,
-        salaryCyclePeriod: _selectedSalaryCycle?.shortPeriodLabel,
-        salaryCycle: _selectedSalaryCycle,
+        records: recordsToExport,
+        salaryCyclePeriod: cycleToUse.shortPeriodLabel,
+        salaryCycle: cycleToUse,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -5396,16 +7432,15 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   Future<void> _exportCumulativePdf(
       List<EmployeeEntity> employees, List<AttendanceRecord> records) async {
     try {
-      final recordsToExport = _cumulativeSalaryCycle != null
-          ? _cumulativeSalaryCycle!.filterRecords(records)
-          : records;
+      final cycleToUse = _cumulativeSalaryCycle ?? SalaryCycle.current();
+      final recordsToExport = cycleToUse.filterRecords(records);
 
       await PdfExportService.downloadCumulativePdfFile(
         organizationName: _db.organization?.name ?? 'Fusion Enterprise',
         employees: employees,
         records: recordsToExport,
-        salaryCyclePeriod: _cumulativeSalaryCycle?.shortPeriodLabel,
-        salaryCycle: _cumulativeSalaryCycle,
+        salaryCyclePeriod: cycleToUse.shortPeriodLabel,
+        salaryCycle: cycleToUse,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -5437,9 +7472,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     double grandReg = 0.0;
     double grandOt = 0.0;
 
-    final recordsToUse = _cumulativeSalaryCycle != null
-        ? _cumulativeSalaryCycle!.filterRecords(allRecords)
-        : allRecords;
+    final cycleToUse = _cumulativeSalaryCycle ?? SalaryCycle.current();
+    final recordsToUse = cycleToUse.filterRecords(allRecords);
 
     for (final emp in employees) {
       final empRecords = recordsToUse
@@ -5447,7 +7481,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           .toList();
 
       final timesheets =
-          TimesheetCalculator.calculateDailyTimesheets(empRecords);
+          TimesheetCalculator.calculateDailyTimesheets(
+            empRecords,
+            targetEmployeeId: emp.id,
+            targetEmployeeName: emp.name,
+            startDate: cycleToUse.startDate,
+            endDate: cycleToUse.endDate,
+          );
 
       double regHours = 0.0;
       double otHours = 0.0;
@@ -5464,9 +7504,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
       final empLeave = LeaveCalculator.calculateEmployeeLeave(
         emp,
-        recordsToUse,
-        _cumulativeSalaryCycle ?? SalaryCycle.current(),
+        empRecords,
+        cycleToUse,
       );
+
+      final int daysWorked = empLeave.daysWorked;
 
       summaries.add(
         _EmpCumulativeData(
@@ -5475,7 +7517,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           overtimeHours: otHours,
           emergencyDutyHours: emgHours,
           combinedHours: regHours + otHours,
-          daysWorked: timesheets.length,
+          daysWorked: daysWorked,
           leaveDays: empLeave.leaveDays,
           sundayOffs: empLeave.sundayWeeklyOffs,
           sundayDuties: empLeave.sundayDutyDays,

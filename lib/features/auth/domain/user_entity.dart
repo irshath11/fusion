@@ -107,6 +107,7 @@ class UserEntity {
     bool? useDefaultOffice,
     String? assignedOfficeId,
     String? assignedOfficeName,
+    bool clearAssignedOffice = false,
     String? photoUrl,
     bool? bypassGeofence,
   }) {
@@ -125,8 +126,12 @@ class UserEntity {
       designation: designation ?? this.designation,
       department: department ?? this.department,
       useDefaultOffice: useDefaultOffice ?? this.useDefaultOffice,
-      assignedOfficeId: assignedOfficeId ?? this.assignedOfficeId,
-      assignedOfficeName: assignedOfficeName ?? this.assignedOfficeName,
+      assignedOfficeId: clearAssignedOffice
+          ? null
+          : (assignedOfficeId ?? this.assignedOfficeId),
+      assignedOfficeName: clearAssignedOffice
+          ? null
+          : (assignedOfficeName ?? this.assignedOfficeName),
       photoUrl: photoUrl ?? this.photoUrl,
       bypassGeofence: bypassGeofence ?? this.bypassGeofence,
     );
