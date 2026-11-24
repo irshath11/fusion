@@ -415,6 +415,85 @@ void main() {
       expect(entry.totalDuration, const Duration(hours: 8));
       expect(entry.checkOutTime, checkInTime.add(const Duration(hours: 8)));
     });
+
+    test(
+        'Shift without officeCheckIn (siteCheckIn only) does NOT trigger auto check-out even after 24 hours',
+        () {
+      final now = DateTime.now();
+      final checkInTime = now.subtract(const Duration(hours: 30));
+
+      final records = [
+        AttendanceRecord(
+          id: 'rec-site-only-in',
+          employeeId: 'emp-site-only',
+          employeeName: 'Site Only Worker',
+          workflowStep: WorkflowStep.siteCheckIn,
+          eventTimestamp: checkInTime,
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'Direct Client Site',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+          siteName: 'Direct Client Site',
+        ),
+      ];
+
+      final entries = TimesheetCalculator.calculateDailyTimesheets(records);
+      expect(entries.length, 1);
+      final entry = entries.first;
+
+      // Because there was NO officeCheckIn, auto check-out must NOT occur
+      expect(entry.isAutoCompleted, isFalse);
+    });
+
+    test(
+        'Under 24 hours after officeCheckIn, synthetic Auto Check-Out record is ignored and shift remains in progress',
+        () {
+      final now = DateTime.now();
+      final checkInTime = now.subtract(const Duration(hours: 5));
+
+      final records = [
+        AttendanceRecord(
+          id: 'rec-premature-office-in',
+          employeeId: 'emp-premature',
+          employeeName: 'Premature Worker',
+          workflowStep: WorkflowStep.officeCheckIn,
+          eventTimestamp: checkInTime,
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'Main Office HQ',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+        ),
+        AttendanceRecord(
+          id: 'rec-premature-auto-out',
+          employeeId: 'emp-premature',
+          employeeName: 'Premature Worker',
+          workflowStep: WorkflowStep.officeCheckOut,
+          eventTimestamp: checkInTime.add(const Duration(hours: 2)),
+          latitude: 24.36,
+          longitude: 54.50,
+          gpsAccuracy: 5.0,
+          address: 'Auto Check-Out (Premature)',
+          deviceId: 'dev-1',
+          photoBase64: '',
+          isGeofenceValid: true,
+        ),
+      ];
+
+      final entries = TimesheetCalculator.calculateDailyTimesheets(records);
+      expect(entries.length, 1);
+      final entry = entries.first;
+
+      // Under 24h, shift must remain actively in progress, not auto-completed
+      expect(entry.isAutoCompleted, isFalse);
+      expect(entry.isCompleted, isFalse);
+      expect(entry.checkOutTime, isNull);
+    });
   });
 
   group('LocalDatabaseService autoResolveExpiredCheckIns Tests', () {
@@ -549,6 +628,55 @@ void main() {
       expect(autoCheckOutMatches.isNotEmpty, isTrue);
       expect(autoCheckOutMatches.first.eventTimestamp,
           oldCheckInTime.add(const Duration(hours: 8)));
+    });
+
+    test(
+        'autoResolveExpiredCheckIns purges premature synthetic auto checkouts if officeCheckIn has not crossed 24 hours',
+        () {
+      final db = LocalDatabaseService();
+      final now = DateTime.now();
+      final recentCheckInTime = now.subtract(const Duration(hours: 4));
+
+      final recIn = AttendanceRecord(
+        id: 'test-rec-recent-in',
+        employeeId: 'emp-test-premature-purge',
+        employeeName: 'Purge Test User',
+        workflowStep: WorkflowStep.officeCheckIn,
+        eventTimestamp: recentCheckInTime,
+        latitude: 24.36,
+        longitude: 54.50,
+        gpsAccuracy: 5.0,
+        address: 'Main Office HQ',
+        deviceId: 'dev-test',
+        photoBase64: '',
+        isGeofenceValid: true,
+      );
+      final recPrematureAutoOut = AttendanceRecord(
+        id: 'test-rec-premature-auto-out',
+        employeeId: 'emp-test-premature-purge',
+        employeeName: 'Purge Test User',
+        workflowStep: WorkflowStep.officeCheckOut,
+        eventTimestamp: recentCheckInTime.add(const Duration(hours: 2)),
+        latitude: 24.36,
+        longitude: 54.50,
+        gpsAccuracy: 5.0,
+        address: 'Auto Check-Out (Premature Bug)',
+        deviceId: 'dev-test',
+        photoBase64: '',
+        isGeofenceValid: true,
+      );
+
+      db.addAttendanceRecord(recIn);
+      db.addAttendanceRecord(recPrematureAutoOut);
+
+      // Running autoResolveExpiredCheckIns must purge the premature synthetic checkout
+      db.autoResolveExpiredCheckIns(force: true);
+
+      final allRecords = db.getAttendanceRecords();
+      final prematureOutMatches = allRecords.where((r) =>
+          r.id == 'test-rec-premature-auto-out');
+
+      expect(prematureOutMatches.isEmpty, isTrue);
     });
   });
 }

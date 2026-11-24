@@ -1875,6 +1875,31 @@ class LocalDatabaseService {
 
     int resolvedCount = 0;
 
+    // Purge any premature synthetic Auto Check-Out records if the office check-in has not crossed 24 hours
+    final initialRecordsLength = _attendanceRecords.length;
+    _attendanceRecords.removeWhere((r) {
+      if (r.workflowStep != WorkflowStep.officeCheckOut) return false;
+      if (!r.address.contains('Auto Check-Out')) return false;
+
+      final matchingCheckIns = _attendanceRecords.where((ci) =>
+          ci.workflowStep == WorkflowStep.officeCheckIn &&
+          ci.employeeId == r.employeeId &&
+          ci.eventTimestamp.isBefore(r.eventTimestamp)).toList()
+        ..sort((a, b) => b.eventTimestamp.compareTo(a.eventTimestamp));
+
+      if (matchingCheckIns.isNotEmpty) {
+        final lastCheckIn = matchingCheckIns.first;
+        final elapsed = now.difference(lastCheckIn.eventTimestamp);
+        if (elapsed < const Duration(hours: 24)) {
+          return true; // Purge premature synthetic checkout
+        }
+      }
+      return false;
+    });
+    if (_attendanceRecords.length != initialRecordsLength) {
+      _persistAttendanceRecords();
+    }
+
     // Group records by canonical employeeId
     final Map<String, List<AttendanceRecord>> employeeRecordsMap = {};
     for (final record in _attendanceRecords) {
@@ -2128,7 +2153,9 @@ class LocalDatabaseService {
     for (int i = empRecords.length - 1; i >= 0; i--) {
       final rec = empRecords[i];
       if (rec.workflowStep == WorkflowStep.officeCheckOut) {
-        break;
+        if (!rec.address.contains('Auto Check-Out')) {
+          break;
+        }
       }
       if (rec.workflowStep == WorkflowStep.officeCheckIn) {
         final elapsed = now.difference(rec.eventTimestamp);

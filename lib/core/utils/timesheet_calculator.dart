@@ -297,8 +297,8 @@ class TimesheetCalculator {
         checkOutTimestamp = realOfficeOutMatches.last.eventTimestamp;
       } else if (!hasOfficeCheckIn && siteOutMatches.isNotEmpty) {
         checkOutTimestamp = siteOutMatches.last.eventTimestamp;
-      } else if (officeOutMatches.isNotEmpty) {
-        checkOutTimestamp = officeOutMatches.last.eventTimestamp;
+      } else {
+        checkOutTimestamp = null;
       }
 
       // 3. Calculate Total Break Duration for this day
@@ -370,14 +370,35 @@ class TimesheetCalculator {
       }
 
       final DateTime? checkInTimestamp = checkInRecord.eventTimestamp;
-      final bool hasExplicitCheckOut = realOfficeOutMatches.isNotEmpty ||
-          (!hasOfficeCheckIn && siteOutMatches.isNotEmpty);
-      final bool isPreviouslyAutoCompleted = officeOutMatches.any((r) =>
-          r.address.contains('Auto Check-Out') ||
-          (r.siteName != null && r.siteName!.contains('Auto Completed')));
+      final now = DateTime.now();
+      final Duration elapsedSinceCheckIn = checkInTimestamp != null
+          ? now.difference(checkInTimestamp)
+          : Duration.zero;
 
-      bool isAutoCompleted = isPreviouslyAutoCompleted && !hasExplicitCheckOut;
-      bool isCompleted = hasExplicitCheckOut || isPreviouslyAutoCompleted;
+      final bool hasExplicitOfficeCheckOut = realOfficeOutMatches.isNotEmpty;
+      final bool hasExplicitCheckOut = hasExplicitOfficeCheckOut ||
+          (!hasOfficeCheckIn && siteOutMatches.isNotEmpty);
+
+      // STRICT RULE: Auto check-out occurs ONLY when:
+      // 1. Employee checked in at the office (hasOfficeCheckIn == true)
+      // 2. Employee failed to perform office check-out (or final day ends without checkout: !hasExplicitOfficeCheckOut)
+      // 3. Time has crossed 24 hours after the office check-in (elapsedSinceCheckIn >= 24h)
+      final bool crossed24HoursAfterOfficeCheckIn = hasOfficeCheckIn &&
+          checkInTimestamp != null &&
+          elapsedSinceCheckIn >= const Duration(hours: 24);
+
+      final bool shouldAutoCheckOut = hasOfficeCheckIn &&
+          !hasExplicitOfficeCheckOut &&
+          crossed24HoursAfterOfficeCheckIn;
+
+      final bool hasValidSyntheticAutoCheckOut = crossed24HoursAfterOfficeCheckIn &&
+          !hasExplicitCheckOut &&
+          officeOutMatches.any((r) =>
+              r.address.contains('Auto Check-Out') ||
+              (r.siteName != null && r.siteName!.contains('Auto Completed')));
+
+      bool isAutoCompleted = shouldAutoCheckOut || hasValidSyntheticAutoCheckOut;
+      bool isCompleted = hasExplicitCheckOut || isAutoCompleted;
       if (!hasRegularCheckIn && dayRecords.any((r) => r.workflowStep == WorkflowStep.emergencyCheckOut)) {
         isCompleted = true;
         checkOutTimestamp = dayRecords
@@ -392,34 +413,23 @@ class TimesheetCalculator {
       double overtimeHours = 0.0;
 
       if (hasRegularCheckIn && checkInTimestamp != null) {
-        final now = DateTime.now();
-        final elapsedSinceCheckIn = now.difference(checkInTimestamp);
-
-        // Auto check out automatically ONLY when the employee forgot to checkout AND after 24 hrs of check in:
-        if (!hasExplicitCheckOut &&
-            elapsedSinceCheckIn >= const Duration(hours: 24)) {
-          checkOutTimestamp = checkInTimestamp.add(const Duration(hours: 8));
+        // Auto check out automatically ONLY when the employee forgot to checkout AND after 24 hrs of office check in:
+        if (isAutoCompleted) {
+          checkOutTimestamp = (crossed24HoursAfterOfficeCheckIn && officeOutMatches.isNotEmpty)
+              ? officeOutMatches.last.eventTimestamp
+              : checkInTimestamp.add(const Duration(hours: 8));
           netWorkedDuration = const Duration(hours: 8);
           finalBreakDuration = Duration.zero;
           travelToleranceDuration = Duration.zero;
           regularHours = standardRegularHoursPerDay;
           overtimeHours = 0.0;
           isCompleted = true;
-          isAutoCompleted = true;
         } else {
           final DateTime effectiveEnd = checkOutTimestamp ?? now;
           Duration grossDuration = Duration.zero;
           if (effectiveEnd.isAfter(checkInTimestamp)) {
             grossDuration = effectiveEnd.difference(checkInTimestamp);
           }
-
-          if (isPreviouslyAutoCompleted && !hasExplicitCheckOut) {
-            netWorkedDuration = const Duration(hours: 8);
-            finalBreakDuration = Duration.zero;
-            travelToleranceDuration = Duration.zero;
-            regularHours = standardRegularHoursPerDay;
-            overtimeHours = 0.0;
-          } else {
             final int grossMins = grossDuration.inMinutes;
             final int loggedBreakMins = totalBreakDuration.inMinutes;
 
@@ -468,7 +478,6 @@ class TimesheetCalculator {
             }
           }
         }
-      }
 
       // Calculate Emergency Duty Hours (100% OT)
       double emergencyDutyHours = 0.0;
