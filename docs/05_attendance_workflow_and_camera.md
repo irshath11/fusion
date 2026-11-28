@@ -7,12 +7,14 @@ The **Attendance Workflow & Camera Verification** feature enforces a strict sequ
 
 ## 1. Key Functionalities
 
-1. **Strict 4-Step Sequential Daily Workflow (`WorkflowStep`)**:
-   - **Step 1**: `1. Office Check-In` (`OFFICE_CHECK_IN`) – Recorded at the starting office station.
+1. **Strict 4-Step Sequential Daily Workflow (`WorkflowStep`) + Break & Emergency Steps**:
+   - **Step 1**: `1. Office Check-In` (`OFFICE_CHECK_IN`) – Recorded at the starting office station (subject to Haversine geofence check unless `bypassGeofence` is enabled for the employee).
    - **Step 2**: `2. Site Check-In` (`SITE_CHECK_IN`) – Recorded upon arrival at the client work site / project location.
    - **Step 3**: `3. Site Check-Out (Leaving Site)` (`SITE_CHECK_OUT`) – Recorded upon completing field work and leaving the site.
    - **Step 4**: `4. Office Check-Out (Reach Office)` (`OFFICE_CHECK_OUT`) – Recorded upon returning to the office station to complete the shift.
    - **Shift Completed**: `Shift Completed` (`COMPLETED`) – Final state lock once all 4 steps are completed.
+   - **Break Tracking (`BREAK_START` / `BREAK_END`)**: Employees can log break periods via [`BreakTypeDialog`](../lib/features/attendance/presentation/break_type_dialog.dart) with optional break notes.
+   - **Emergency Duty (`EMERGENCY_CHECK_IN` / `EMERGENCY_CHECK_OUT`)**: Tracks off-hours or emergency callout duty, credited at 100% overtime.
    - State locks prevent skipping steps or altering step execution order.
 
 2. **Site Selection Dropdown (`SiteNameDialog`)**:
@@ -53,8 +55,12 @@ enum WorkflowStep {
   officeCheckIn,
   siteCheckIn,
   siteCheckOut,
+  breakStart,
+  breakEnd,
   officeCheckOut,
   completed,
+  emergencyCheckIn,
+  emergencyCheckOut,
 }
 
 extension WorkflowStepExtension on WorkflowStep {
@@ -66,10 +72,18 @@ extension WorkflowStepExtension on WorkflowStep {
         return '2. Site Check-In';
       case WorkflowStep.siteCheckOut:
         return '3. Site Check-Out (Leaving Site)';
+      case WorkflowStep.breakStart:
+        return 'Break Started';
+      case WorkflowStep.breakEnd:
+        return 'Break Ended';
       case WorkflowStep.officeCheckOut:
         return '4. Office Check-Out (Reach Office)';
       case WorkflowStep.completed:
         return 'Shift Completed';
+      case WorkflowStep.emergencyCheckIn:
+        return 'Emergency Duty Check-In';
+      case WorkflowStep.emergencyCheckOut:
+        return 'Emergency Duty Check-Out';
     }
   }
 
@@ -81,10 +95,18 @@ extension WorkflowStepExtension on WorkflowStep {
         return 'SITE_CHECK_IN';
       case WorkflowStep.siteCheckOut:
         return 'SITE_CHECK_OUT';
+      case WorkflowStep.breakStart:
+        return 'BREAK_START';
+      case WorkflowStep.breakEnd:
+        return 'BREAK_END';
       case WorkflowStep.officeCheckOut:
         return 'OFFICE_CHECK_OUT';
       case WorkflowStep.completed:
         return 'COMPLETED';
+      case WorkflowStep.emergencyCheckIn:
+        return 'EMERGENCY_CHECK_IN';
+      case WorkflowStep.emergencyCheckOut:
+        return 'EMERGENCY_CHECK_OUT';
     }
   }
 }
@@ -137,5 +159,6 @@ class AttendanceRecord {
 | [`lib/features/attendance/presentation/attendance_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/presentation/attendance_cubit.dart) | Cubit executing workflow step validation, geofence checks, record creation, and sync queuing. |
 | [`lib/features/employee/presentation/employee_dashboard_screen.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/employee/presentation/employee_dashboard_screen.dart) | Employee dashboard UI with workflow timeline, capture button, and time badge displays. |
 | [`lib/features/attendance/presentation/site_name_dialog.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/presentation/site_name_dialog.dart) | Modal dialog for site selection dropdown (`RELAAM (AMC)`, `RELAAM (WO)`, `CARRIER`, `MOPA`, `MPM`, `ELV`, `OTHERS (AMC)`, `OTHERS (WO)`). |
-| [`lib/features/attendance/presentation/camera_capture_modal.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/presentation/camera_capture_modal.dart) | Camera modal dialog handling camera preview, capture, retake, and confirmation. |
+| [`lib/features/attendance/presentation/break_type_dialog.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/presentation/break_type_dialog.dart) | Modal dialog for recording break start with optional break note. |
+| [`lib/features/attendance/presentation/camera_capture_modal.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/attendance/presentation/camera_capture_modal.dart) | Camera modal dialog handling camera preview, capture, retake, and confirmation (with `camera_web: ^0.3.6` override for Flutter Web). |
 | [`lib/core/services/camera_service.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/services/camera_service.dart) | Image downscaling and JPEG quality compression service. |

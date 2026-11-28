@@ -23,21 +23,22 @@ The **Employee Management** feature empowers Super Admins and Administrators to 
    - Creates an employee detail record in Supabase `employees` linked by `user_id`.
    - Saves record locally in Hive `employeesBox` and `usersBox` for instant local UI rendering.
 
-4. **Employee Lifecycle & Custom Office Assignment**:
+4. **Employee Lifecycle, Geofence Bypass & Custom Office Assignment**:
    - **Edit Employee**: Updates Designation, Department, Phone, & Assigned Office.
    - **Custom Office Override**: Supports `useDefaultOffice: false` to bind specific field personnel to custom client branch stations or depots.
+   - **Per-Employee Geofence Enable / Disable Toggle (`bypassGeofence`)**: Admins can toggle whether an individual employee can check in from anywhere (`bypassGeofence: true`) or must be within the assigned office geofence (`bypassGeofence: false`). Available in `EmployeeManagementScreen` (with `Geofence Enabled` / `Disabled` filter tabs), `UserFormDialog`, and `web_admin/app.js`, persisted via `geofence_bypass_overrides` locally and `bypass_geofence` columns in Supabase (`backend/add_bypass_geofence_columns.sql`).
    - **Active/Inactive Toggle**: Toggles `isActive`. Inactive employees are blocked from logging into the mobile application.
    - **Password Reset**: Admin can trigger password resets for staff members.
    - **Audit Activity Logging**: Records `EMPLOYEE_CREATED`, `EMPLOYEE_UPDATED`, `EMPLOYEE_DISABLED`, `EMPLOYEE_ACTIVATED`, and `EMPLOYEE_DELETED` in `activity_logs`.
 
 5. **Official Portrait Photo Directory & Avatars**:
    - Every employee badge is mapped to high-resolution official portrait photos stored in `assets/images/employees/` (mirrored in `web/assets/images/employees/` for web admin).
-   - Supported badges include `1004`, `1008`, `1012`, `1021`, `1024`, `1031`, `1036`, `1038`, `1047`, `1048`, `1049`, `1054`, `1056`, `1057`, `1058`, `1059`, `1060`, and North branch codes `N-1003` through `N-1013`.
+   - Supported badges include `1004`, `1008`, `1012`, `1021`, `1024`, `1031`, `1036`, `1038`, `1047`, `1048`, `1049`, `1054`, `1056`, `1057`, `1058`, `1059`, `1060`, and Neo division codes `N-1003` through `N-1014`.
    - The [`EmployeeAvatar`](../lib/core/widgets/employee_avatar.dart) widget automatically resolves image assets by employee code, with seamless fallback to stylized monogram initials.
 
-6. **Identity Reconciliation Helper (`EmployeeDirectoryHelper`)**:
-   - Normalizes employee names, badge numbers, and department codes.
-   - Reconciles historical attendance and timesheet entries across variant formats (`1004` vs `N-1004`, case-insensitive names, stripped whitespace).
+6. **Strict Identity Reconciliation & Relieved Staff Exclusion (`EmployeeDirectoryHelper`)**:
+   - **Strict Identity Isolation (`matchesEmployeeIdentity`)**: Normalizes employee codes, emails, and aliases while enforcing strict cross-employee isolation — conflicting human names or distinct resolved official IDs never merge, even if a legacy database record shared a UUID.
+   - **Relieved Employee Exclusion (`isRelievedEmployee`)**: Completely excludes relieved personnel (e.g., Asik Saheel) across `LocalDatabaseService`, `EmployeeManagementScreen`, `CardsManagementScreen`, `ReportsAnalyticsScreen`, `SalaryCalculator`, `SupabaseService`, and `web_admin/app.js`.
 
 7. **Employee Statutory Cards & Passes Linkage**:
    - Each employee profile is directly linked to their active statutory documents (Emirates ID, Visa, Passport, Insurance, MOPA, CISPA, Custom passes) in the `employee_cards` table.
@@ -61,6 +62,7 @@ class EmployeeEntity {
   final String? assignedOfficeId;
   final String? assignedOfficeName;
   final bool isActive;
+  final bool bypassGeofence;
 
   EmployeeEntity({
     required this.id,
@@ -74,6 +76,7 @@ class EmployeeEntity {
     this.assignedOfficeId,
     this.assignedOfficeName,
     this.isActive = true,
+    this.bypassGeofence = false,
   });
 }
 ```

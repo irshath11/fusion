@@ -46,10 +46,10 @@ Fusion was architected as a Clean Architecture cross-platform Flutter applicatio
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                           SYSTEM CAPABILITIES                                          │
 ├───────────────────────┬────────────────────────┬─────────────────────────────────┬─────────────────────┤
-│  OFFLINE WORKFORCE    │  GPS GEOFENCE CONTROL  │   TIMESHEET & SALARY ENGINE     │  AI COMPLIANCE ROBOT│
-│  • Hive Offline DB    │  • Haversine Formula   │   • 25th-to-24th Salary Cycle   │  • Gemini AI Vision │
-│  • 99% Compression    │  • Office & Work Sites │   • Sunday 100% OT Conversion   │  • WhatsApp & Email │
-│  • Auto Sync Queue    │  • Live Tracking Map   │   • 24h Auto-Checkout Safeguard │  • Daily pg_cron    │
+│  OFFLINE WORKFORCE    │  GPS GEOFENCE CONTROL  │   TIMESHEET & WPS PAYROLL       │  AI COMPLIANCE ROBOT│
+│  • Hive Offline DB    │  • Haversine Formula   │   • Calendar & Transition Cycles│  • Gemini AI Vision │
+│  • 99% Compression    │  • Per-Staff Bypass    │   • Break & Travel Tolerance    │  • WhatsApp & Email │
+│  • 15m Auto Sync Queue│  • Live Tracking Map   │   • Division WPS Excel & PDFs   │  • Daily pg_cron    │
 └───────────────────────┴────────────────────────┴─────────────────────────────────┴─────────────────────┘
 
 ```
@@ -90,10 +90,10 @@ Fusion was architected as a Clean Architecture cross-platform Flutter applicatio
 - **Attendance Management**: Enforces strict 4-step daily workflow stepper (`1. Office Check-In`, `2. Site Check-In`, `3. Site Check-Out`, `4. Office Check-Out`, `Shift Completed`).
 - **Workforce Tracking**: Live OpenStreetMap and Leaflet.js interactive tracking maps with geofence radius overlays and avatar markers.
 - **Site Management**: Work site registry (`work_sites` table) allowing custom client names, addresses, and geofence radii setup.
-- **Timesheet Processing**: Daily shift aggregation, regular vs. overtime hours breakdown, site visit timelines, and PDF export.
-- **Reporting & Analytics**: Multi-criteria date, employee, office, and compliance filtering with PDF, Excel (.xlsx), and CSV data downloads.
-- **Admin Dashboard**: Real-time KPI summary cards (Active Employees, Present Today, On Duty, Shift Completed, Pending Sync).
-- **Security Controls**: 3-tier Role-Based Access Control (`SUPER_ADMIN`, `ADMIN`, `EMPLOYEE`), hardware device fingerprinting (`DeviceBindingService`), and atomic organization ownership transfer.
+- **Timesheet & Payroll Processing**: Daily shift aggregation with 1h food break & 1h travel tolerance, emergency duty 100% OT, division-aware UAE WPS payroll (`Fusion Electro` MOL `803095` & `Fusion Neo` MOL `2846014`), manual office calendar attendance, and payslip/WPS Excel exports.
+- **Reporting & Analytics**: Multi-criteria date, Salary Cycle, employee, office, and compliance filtering with PDF, Excel (.xlsx), and CSV data downloads.
+- **Admin Dashboard**: Real-time KPI summary cards, 8-tab desktop/mobile suite (`Salary & Payroll`, `Cards & Passes`, `Live Map`, `Reports`, etc.), and 5 customizable UI theme presets.
+- **Security Controls**: 3-tier Role-Based Access Control (`SUPER_ADMIN`, `ADMIN`, `EMPLOYEE`), per-employee geofence bypass toggles, strict employee log isolation, hardware device fingerprinting (`DeviceBindingService`), and atomic organization ownership transfer.
 
 ---
 
@@ -116,7 +116,7 @@ Fusion was architected as a Clean Architecture cross-platform Flutter applicatio
 - **Solution**: Engineered an internal `CameraService` that downscales captured selfie snapshots to 480px max dimension and encodes them at 65% JPEG quality. This reduced raw 3.0MB–5.0MB camera files to ~25KB–45KB (**99% reduction**), allowing instant upload even on weak 2G/3G connections.
 
 ### Challenge 2: Total Connectivity Blackout in Remote Construction Depots
-- **Solution**: Designed an offline-first data layer with 8 isolated Hive local key-value storage boxes. All check-ins and timestamps are persisted locally first with a `pending` status, allowing field personnel to complete full shifts without internet. Once connection is re-established, `SyncEngine` flushes the queue while preserving exact hardware timestamps.
+- **Solution**: Designed an offline-first data layer in Hive (`app_settings`) with JSON persistence and instant local caching. All check-ins and manual calendar attendance entries persist locally first, allowing field personnel and admins to operate without internet. Once connection is re-established, `SyncEngine` flushes the queue while preserving exact hardware timestamps.
 
 ### Challenge 3: Secure & Atomic Organization Ownership Transfer
 - **Solution**: Implemented a PL/pgSQL database stored procedure (`transfer_organization_ownership`) triggered via `OwnershipTransferCubit`. This procedure requires mandatory Super Admin password re-authentication and atomically promotes the target Admin to Super Admin while demoting the previous owner within a single database transaction, backed by automated audit logging (`OWNERSHIP_TRANSFERRED`).
@@ -124,18 +124,18 @@ Fusion was architected as a Clean Architecture cross-platform Flutter applicatio
 ### Challenge 4: Statutory Document Expirations Leading to Site Access Bans & Heavy Fines
 - **Solution**: Built an autonomous statutory document intelligence engine. Integrated Google Gemini Multimodal Vision AI (`CardOcrService`) to auto-extract expiry dates from card photos, and deployed a Supabase `pg_cron` / `pg_net` compliance robot that triggers automated morning WhatsApp and Resend Email alerts to operations leaders for any document within 3 days of expiration.
 
-### Challenge 5: Regional Payroll Billing Calendar Misalignment & Stale Unclosed Shifts
-- **Solution**: Implemented a custom 25th-to-24th salary cycle helper (`SalaryCycleHelper`), an automated Sunday 100% overtime conversion rule (Sunday as mandatory weekly off), a 5-state daily leave ledger (`LeaveCalculator`), and a 24-hour auto-checkout safety guard that caps forgotten check-outs at 8.0 regular hours and 0.0 overtime.
+### Challenge 5: Payroll Cycle Transition, Overtime Rules & UAE WPS Compliance
+- **Solution**: Implemented a configurable salary cycle engine (`SalaryCycleHelper`) supporting legacy 25th-to-24th cycles, a 6-day **October Transition Interim OT Cycle (`26–31 Oct 2026`)**, and **Calendar-Month cycles (Nov 2026+)** with automatic November Interim OT rollover. Combined with `TimesheetCalculator` (1h food break, 1h travel tolerance, Sunday 100% OT, 24h auto-checkout cap) and `SalaryCalculator` / `WpsMasterRegistry`, admins export MOL-compliant UAE WPS Excel files and individual payslip PDFs in one click.
 
 ---
 
 ## Business Impact
 
-- **Zero Attendance Fraud**: Verified photo capture and Haversine geofence validation eliminated buddy-punching and remote check-ins.
+- **Zero Attendance Fraud**: Verified photo capture and Haversine geofence validation (with admin-controlled per-employee bypass when needed) eliminated buddy-punching and unauthorized check-ins.
 - **Zero Document Compliance Penalties**: Automated morning WhatsApp and email compliance notifications prevented expired Emirates IDs and site security passes from halting field projects.
 - **100% Operational Uptime**: Offline-first storage enabled uninterrupted field workforce logging in remote regions.
-- **100% Payroll Cycle Alignment**: Automated 25th-to-24th monthly calculations and Sunday 100% OT conversion eliminated manual payroll reconciliation.
-- **90% Faster Timesheet Processing**: Automated regular vs. overtime hour aggregation eliminated manual paper processing.
+- **100% Payroll & WPS Alignment**: Automated calendar-month calculations, Interim OT rollovers, Paid Sunday Off rules, and division WPS Excel generation eliminated manual payroll reconciliation.
+- **90% Faster Timesheet & Payroll Processing**: Automated regular vs. overtime hour aggregation and calendar-based office attendance eliminated manual spreadsheet processing.
 - **99% Reduced Bandwidth Overhead**: Native JPEG compression dramatically reduced cellular data usage for field workers.
 - **Complete Operational Transparency**: Live tracking maps provided dispatchers with real-time field visibility.
 

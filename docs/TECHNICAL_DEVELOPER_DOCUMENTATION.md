@@ -1,8 +1,8 @@
 # Complete Technical Code Documentation (Developer Documentation)
 
-**Application Title**: Fusion Enterprise Offline-First Attendance, Field Workforce Tracking & Timesheet Management System  
+**Application Title**: Fusion Enterprise Offline-First Attendance, Field Workforce Tracking, Timesheet & Payroll Management System  
 **Target Audience**: Senior Software Engineers, Solution Architects, Backend Developers, and DevOps Maintenance Teams  
-**Document Version**: 2.0.0  
+**Document Version**: 2.1.0  
 **Repository Location**: `attendance_app/`  
 
 ---
@@ -36,21 +36,23 @@ The **Fusion Field Workforce Tracking & Timesheet Management Platform** is an en
                  │
                  ├─► Role = 'SUPER_ADMIN' / 'ADMIN' ──► Admin Web/Mobile Suite (`AdminDashboardScreen`)
                  │                                        ├─► Executive KPI Cards & Activity Feed
-                 │                                        ├─► Employee & User Management (3-Tier RBAC)
+                 │                                        ├─► Employee & User Management (3-Tier RBAC + Geofence Toggle)
+                 │                                        ├─► Cards & Passes Compliance (`CardsManagementScreen`)
                  │                                        ├─► Office & Work Site Registry
                  │                                        ├─► Live GPS Tracking Map (`LiveTrackingMapScreen`)
                  │                                        ├─► Timesheet & Reports Engine (`ReportsAnalyticsScreen`)
+                 │                                        ├─► Salary, Payroll & WPS Module (`SalaryPayrollScreen`)
                  │                                        └─► Organization Ownership Transfer Dialog
                  │
                  └─► Role = 'EMPLOYEE' ───────────────► Employee Duty Portal (`EmployeeDashboardScreen`)
-                                                         ├─► 4-Step Attendance Stepper:
+                                                         ├─► 4-Step Attendance Stepper (+ Break & Emergency Duty)
                                                          │    1. Office Check-In (`OFFICE_CHECK_IN`)
                                                          │    2. Site Check-In (`SITE_CHECK_IN` + `SiteNameDialog`)
                                                          │    3. Site Check-Out (`SITE_CHECK_OUT`)
                                                          │    4. Office Check-Out (`OFFICE_CHECK_OUT`)
                                                          │    5. Shift Completed (`COMPLETED`)
                                                          ├─► Live Camera Capture & 480px JPEG Compression Engine
-                                                         ├─► Haversine Distance Geofence Validation
+                                                         ├─► Haversine Distance Geofence Validation (with Bypass Check)
                                                          ├─► Personal Daily Work Timesheet & PDF Export
                                                          └─► Background Offline Sync Queue Indicator (`OfflineBanner`)
 ```
@@ -87,9 +89,9 @@ The **Fusion Field Workforce Tracking & Timesheet Management Platform** is an en
                                             ▼
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │                                      DATA LAYER                                        │
-│  [Local Persistence: LocalDatabaseService (Hive Engine - 8 Isolated Boxes)]            │
+│  [Local Persistence: LocalDatabaseService (Hive `app_settings` + JSON Persistence)]    │
 │  [Cloud Integration: SupabaseService (PostgreSQL, Storage, RLS, Stored Procedures)]     │
-│  [Sync Engine: SyncEngine (Background Queue, Connectivity Listener)]                   │
+│  [Sync Engine: SyncEngine (15-Min Periodic Timer, Connectivity Listener)]              │
 │  [Hardware Services: LocationService, CameraService, DeviceBindingService]             │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -109,11 +111,11 @@ The **Fusion Field Workforce Tracking & Timesheet Management Platform** is an en
   - `google_generative_ai`: Gemini Multimodal AI Vision API for automated card document extraction and OCR.
   - `http` & `url_launcher`: Automated API notification dispatch and direct WhatsApp/Email actions.
   - `geolocator` (`^12.0.0`) & `permission_handler`: Hardware GPS location & permissions.
-  - `camera` (`^0.11.0`): Direct hardware selfie camera capture.
+  - `camera` (`^0.10.5+9`) with `dependency_overrides: camera_web: ^0.3.6`: Direct hardware selfie camera capture (fixing `@JS` extension constructor errors on Flutter Web builds).
   - `image` (`^4.2.0`): Pure Dart image downscaling and quality compression.
-  - `flutter_map` (`^7.0.2`) & `latlong2`: OpenStreetMap rendering for live tracking.
+  - `flutter_map` (`^8.3.1`) & `latlong2`: OpenStreetMap rendering for live tracking.
   - `device_info_plus` (`^10.1.0`): Hardware fingerprinting across platforms.
-  - `pdf`, `printing`, `excel`, `csv`: Reporting, timesheet PDF rendering, and spreadsheet generation.
+  - `pdf`, `printing`, `excel`, `csv`: Reporting, timesheet & payslip PDF rendering, division WPS Excel, Master Payroll Excel, and Interim OT exports.
 
 ### State Management Approach (BLoC / Cubit)
 The architecture strictly employs `flutter_bloc` using `Cubit` controllers to enforce unidirectional data flow:
@@ -122,7 +124,8 @@ The architecture strictly employs `flutter_bloc` using `Cubit` controllers to en
 - **`AdminCubit`** ([`admin_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/admin_cubit.dart)): Handles executive stats aggregation, office/site CRUD, and live tracking map updates.
 - **`UserManagementCubit`** ([`user_management_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/user_management_cubit.dart)): Manages 3-tier user accounts, secondary Firebase auth instances, and status toggles.
 - **`OwnershipTransferCubit`** ([`ownership_transfer_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/admin/presentation/ownership_transfer_cubit.dart)): Executes Super Admin re-authentication and atomic RPC ownership transfer.
-- **`TimesheetCubit`** ([`timesheet_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/timesheet/presentation/timesheet_cubit.dart)): Controls daily shift aggregation, 25th–24th salary cycle metrics, regular/overtime hours calculation, and PDF downloading.
+- **`TimesheetCubit`** ([`timesheet_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/timesheet/presentation/timesheet_cubit.dart)): Controls daily shift aggregation, calendar-month & Oct transition salary cycle metrics, regular/overtime hours calculation, and PDF downloading.
+- **`ThemeCubit`** ([`theme_cubit.dart`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/theme/theme_cubit.dart)): Manages active theme preset selection (`Slate Indigo`, `Emerald Mint`, `Midnight Amber`, `Royal Amethyst`, `Ocean Cobalt`) and Light/Dark brightness mode.
 
 ---
 
@@ -138,38 +141,46 @@ lib/
 │   │   ├── app_colors.dart         # Color palette & branding tokens
 │   │   ├── app_enums.dart          # UserRole, WorkflowStep, ActivityLogAction, SyncStatus
 │   │   ├── app_theme.dart          # ThemeData configuration (Light/Dark themes)
-│   │   └── employee_photo_data.dart# Registry mapping employee badge codes to portrait images
+│   │   ├── employee_photo_data.dart# Registry mapping employee badge codes to portrait images
+│   │   └── wps_registry.dart       # WpsMasterRegistry (MOL numbers, Work Permits, Bank Accounts)
+│   ├── theme/
+│   │   ├── app_theme_preset.dart   # 5 curated theme palettes (AppThemePalettes)
+│   │   ├── theme_cubit.dart        # Active palette & light/dark persistence
+│   │   └── theme_selector_modal.dart # Theme switcher dialog
 │   ├── services/
 │   │   ├── camera_service.dart     # Image downscaling (480px) & 65% JPEG compression engine
 │   │   ├── location_service.dart   # Hardware GPS location fetching & Haversine distance calculations
 │   │   ├── supabase_service.dart   # Supabase cloud database CRUD, optimized date filtering, & RPC
 │   │   ├── card_ocr_service.dart   # Gemini Multimodal AI Vision OCR extraction service
 │   │   ├── card_expiry_notification_service.dart # Multi-channel WhatsApp & Email notification service
-│   │   ├── pdf_export_service.dart # Multi-page PDF generation for attendance & timesheets
-│   │   └── excel_csv_export_service.dart # Excel (.xlsx) & CSV export generation
+│   │   ├── pdf_export_service.dart # Multi-page PDF generation (attendance, timesheets, payroll, payslips, interim OT)
+│   │   └── excel_csv_export_service.dart # Division WPS Excel, Master Payroll Excel, Interim OT, Cards Excel & CSV
 │   ├── utils/
 │   │   ├── geofence_calculator.dart # Spherical trigonometry math (Haversine formula)
-│   │   ├── timesheet_calculator.dart# Daily shift aggregation, 24h auto check-out, Sunday 100% OT
-│   │   ├── salary_cycle_helper.dart # 25th-to-24th monthly salary cycle resolution & metrics
+│   │   ├── timesheet_calculator.dart# Daily shift aggregation, break/travel tolerance, 24h auto check-out, Sunday 100% OT
+│   │   ├── salary_cycle_helper.dart # Calendar-month, Oct transition Interim OT, & legacy 25th–24th cycle resolution
 │   │   ├── leave_calculator.dart   # Daily 5-state leave ledger (Present, Leave, Sunday Off, Sun Duty)
-│   │   ├── employee_directory_helper.dart # Identity matching and badge normalization
+│   │   ├── employee_directory_helper.dart # Strict identity matching, relieved staff exclusion, badge normalization
 │   │   └── photo_attachment_helper.dart # Image attachment resolution
 │   └── widgets/
 │       ├── app_button.dart         # Standardized elevated button with loading indicators
 │       ├── custom_text_field.dart  # Form text input widget with built-in password visibility toggles
 │       ├── status_badge.dart       # Color-coded badge for SyncStatus and workflow steps
 │       ├── offline_banner.dart     # Persistent offline warning bar & manual sync trigger
+│       ├── app_shell.dart          # Responsive desktop sidebar / mobile navigation shell
 │       └── employee_avatar.dart    # Portrait avatar component with monogram fallback
 ├── database/
-│   └── local_database_service.dart # Hive local database service managing isolated storage boxes
+│   └── local_database_service.dart # Hive local database service (`app_settings` box + JSON persistence)
 └── features/
     ├── setup/                      # First-time onboarding wizard & organization setup
     ├── auth/                       # Login screen, AuthCubit, password management
-    ├── attendance/                 # 4-step stepper, camera capture modal, site selection dialog
+    ├── attendance/                 # 4-step stepper, camera capture modal, break/site dialogs, bypass check
     ├── employee/                   # Employee duty dashboard, daily timeline, selfie displays
-    ├── admin/                      # Executive dashboard, employee management, office/site management,
-    │                               # cards management (`cards_management_screen.dart`), ownership transfer
-    ├── timesheet/                  # Employee timesheet screen, shift filter tabs, timesheet PDF export
+    ├── admin/                      # Executive dashboard (8 tabs), employee management, office/site management,
+    │                               # cards management, reports, attendance editing, ownership transfer
+    ├── salary/                     # Salary & Payroll screen, SalaryCalculator, WPS/Master exports,
+    │                               # PutOfficeAttendanceDialog, InterimOtBreakdownDialog, EditSalaryDialog
+    ├── timesheet/                  # Employee timesheet screen, cycle filter, shift filter tabs, PDF export
     ├── security/                   # Hardware device fingerprinting service (`DeviceBindingService`)
     └── sync/                       # Offline sync engine with connectivity listener (`SyncEngine`)
 ```
@@ -247,15 +258,16 @@ enum UserRole { superAdmin, admin, employee }
 ## 6. Offline-First Architecture
 
 ### Hive Local Storage Design
-The application initializes 8 isolated Hive key-value boxes in `LocalDatabaseService`:
-1. `organizationBox`: Local copy of root organization profile.
-2. `currentUserBox`: Active authenticated user entity.
-3. `employeesBox`: Local directory of all organization employees.
-4. `usersBox`: System user profiles and assigned roles.
-5. `officesBox`: Geofenced office stations.
-6. `workSitesBox`: Client project locations and geofence radii.
-7. `attendanceRecordsBox`: Complete historical attendance logs.
-8. `pendingSyncBox`: Queue of un-synced offline records awaiting cloud transmission.
+`LocalDatabaseService` opens the Hive `app_settings` box (`Hive.openBox('app_settings')`) and persists JSON-serialized collections alongside fast in-memory lists:
+1. `organization_json` & `is_setup_completed`: Root organization profile and onboarding flag.
+2. `current_user_json`: Active authenticated user entity.
+3. `employees_json`: Local directory of active organization employees (relieved personnel purged on init).
+4. `users_json`: System user profiles, assigned roles, and `bypass_geofence` flags.
+5. `offices_json`: Geofenced office stations.
+6. `worksites_json`: Client project locations and geofence radii.
+7. `attendance_records_json`: Historical and pending (`SyncStatus.pending`) attendance logs.
+8. `salaries_json`: Employee salary configurations (`DefaultSalaryData` seeded if empty).
+9. `geofence_bypass_overrides`: Per-employee geofence bypass overrides map.
 
 ### Synchronization Scenarios
 
@@ -306,26 +318,22 @@ If $d \le \text{geofence\_radius}$, check-in is **APPROVED**. Otherwise, check-i
 
 ---
 
-## 9. Timesheet Engine
-
-### Timesheet Calculation Logic (`TimesheetCalculator`)
-- **Daily Shift Duration**: Calculated between `1. Office Check-In` timestamp and `4. Office Check-Out` timestamp.
-- **Regular Hours Cap**: Standard regular working hours are capped at **8.0 hours per day**.
-- **Overtime Calculation**: If total shift duration $> 8.0$ hours, $\text{Regular Hours} = 8.0$ and $\text{Overtime Hours} = \text{Total Hours} - 8.0$.
-- **Site Visit Summary (`SiteVisitSummary`)**: Tracks time elapsed between `2. Site Check-In` and `3. Site Check-Out` for each site visit during the shift.
-
----
-
-## 9. Timesheet Engine & Salary Cycles
+## 9. Timesheet Engine, Salary Cycles & Payroll
 
 ### Timesheet Calculation Logic (`TimesheetCalculator`)
 - **Daily Shift Duration**: Calculated between `1. Office Check-In` timestamp and `4. Office Check-Out` timestamp (or last site checkout).
 - **Regular Hours Cap**: Standard regular working hours are capped at **8.0 hours per day** (`standardRegularHoursPerDay = 8.0`) on Monday through Saturday.
-- **Overtime Calculation**: If total shift duration $> 8.0$ hours on regular days, $\text{Regular Hours} = 8.0$ and $\text{Overtime Hours} = \text{Total Hours} - 8.0$.
+- **Food Break & Travel Tolerance Rule**: For shifts exceeding 8.0 gross hours, deducts **1 hour (60 mins) default food break** (or logged break if greater) and allocates **1 hour (60 mins) travel tolerance** — Overtime accrues after 10 gross hours.
+- **Emergency Duty**: `EMERGENCY_CHECK_IN` to `EMERGENCY_CHECK_OUT` durations are credited as **100% Overtime**.
 - **Sunday 100% Overtime Rule**: Sunday is designated as the mandatory weekly off day in Gulf operations. **100% of all hours worked on Sunday are automatically converted into Overtime Hours** ($\text{Regular Hours} = 0.0\text{h}$, $\text{Overtime} = \text{Total Hours}$).
 - **24-Hour Auto-Checkout Safety Guard**: Any unclosed shift exceeding 24 hours without an official check-out is automatically capped at **8.0 standard regular hours and 0.0 overtime hours** (`isAutoCompleted: true`).
-- **Company Salary Cycle (25th to 24th)**: Aggregates duty records over payroll cycles starting on the 25th of the start month and concluding on the 24th of the target month via `SalaryCycleHelper`.
-- **Site Visit Summary (`SiteVisitSummary`)**: Tracks time elapsed between `2. Site Check-In` and `3. Site Check-Out` for each site visit during the shift.
+- **Configurable Salary Cycle (`SalaryCycleHelper`)**:
+  - **Nov 2026+**: Calendar-month cycles (`1st` to last day of month).
+  - **26–31 Oct 2026**: Dedicated 6-day **Interim OT Cycle** (`2026-10-transition`), rolled into November 2026's Variable Salary component.
+  - **Prior to 26 Oct 2026**: Legacy 25th-to-24th cycles.
+- **Salary & UAE WPS Engine (`SalaryCalculator` & `WpsMasterRegistry`)**: Computes day-wise Fixed, Variable, and Basic-only Overtime earnings (`(Basic / Days in Month) / 8`), Paid Sunday Off credits, manual office calendar attendance (`PutOfficeAttendanceDialog`), and exports division WPS Excel workbooks (`Neo` MOL `2846014`, `Fusion` MOL `803095`), Master Payroll Excel, Interim OT Excel/PDF, and individual Payslip PDFs.
+- **Strict Identity Isolation (`EmployeeDirectoryHelper.matchesEmployeeIdentity`)**: Prevents cross-employee log merging and excludes relieved staff (`isRelievedEmployee`).
+- **Site Visit Summary (`SiteVisitSummary`) & Site Man-Hours (`calculateSiteManHours`)**: Tracks individual site visit durations and client-grouped man-hours.
 - **Site Name & Address Resolution**: Resolves location names through an intelligent fallback hierarchy (`siteName` ➔ `work_sites` ➔ `offices` ➔ `assignedOfficeName`).
 
 ---
@@ -363,7 +371,7 @@ If $d \le \text{geofence\_radius}$, check-in is **APPROVED**. Otherwise, check-i
 ## 10. Database Documentation (Supabase PostgreSQL)
 
 ### Database Schema Overview
-The database schema ([`backend/supabase_schema.sql`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/backend/supabase_schema.sql) and [`backend/supabase_cron_job.sql`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/backend/supabase_cron_job.sql)) consists of **15 relational tables** with Row-Level Security (RLS) enabled across all entities:
+The database schema ([`backend/supabase_schema.sql`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/backend/supabase_schema.sql), [`backend/create_employee_salaries_table.sql`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/backend/create_employee_salaries_table.sql), [`backend/add_bypass_geofence_columns.sql`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/backend/add_bypass_geofence_columns.sql), [`backend/add_custom_monthly_ot_amount_column.sql`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/backend/add_custom_monthly_ot_amount_column.sql), and [`backend/supabase_cron_job.sql`](file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/backend/supabase_cron_job.sql)) consists of **16 relational tables** with Row-Level Security (RLS) enabled across all entities:
 
 ```
 [organizations] ───< [users] ───< [user_role_assignments] >─── [roles]
@@ -372,6 +380,7 @@ The database schema ([`backend/supabase_schema.sql`](file:///c:/Users/srirs/.gem
        │                       │                     │
        ├─► [work_sites] ───────┼─────────────────────┘
        │                       ├─► [employee_cards]
+       │                       ├─► [employee_salaries]
        │                       ├─► [devices]
        │                       ├─► [gps_logs]
        │                       └─► [activity_logs]
@@ -450,12 +459,14 @@ cd web_admin
 npx serve -s . -l 3000
 ```
 
-### Database & Background Robot Deployment
-1. **Core Relational Schema**:
+### Database, Background Robot & CI/CD Web Deployment
+1. **Core Relational Schema & Migrations**:
    - Open Supabase Console -> SQL Editor.
-   - Copy contents of `backend/supabase_schema.sql` and click **Run**.
+   - Run `backend/supabase_schema.sql`, followed by `backend/add_bypass_geofence_columns.sql`, `backend/create_employee_salaries_table.sql`, and `backend/add_custom_monthly_ot_amount_column.sql`.
 2. **Automated Compliance Robot (`pg_cron` & `pg_net`)**:
    - Copy contents of `backend/supabase_cron_job.sql` into the Supabase SQL Editor.
    - Configure your Resend API key and CallMeBot API key in `compliance_notification_settings`.
    - Click **Run** to schedule the daily 08:00 AM GST cron robot.
+3. **GitHub Pages CI/CD (`.github/workflows/deploy.yml`)**:
+   - Pushes to `main`, `master`, or `admin_web` run `flutter build web --release --base-href "/" --no-wasm-dry-run` with `CNAME` (`fusionmaint.org`), `.nojekyll`, and `404.html` SPA routing, while `web/index.html` automatically unregisters stale service workers.
 

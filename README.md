@@ -7,8 +7,8 @@ Enterprise-grade, offline-first mobile and web application built using **Flutter
 ## 🌟 Key Application Features & Specifications
 
 ### 1. Dual-Role Architecture & Dedicated Admin Web Application
-- **Super Admin & Admin Web & Mobile Suite**: Standalone Web Admin Portal (`web_admin`) and Flutter Web/Mobile Admin Dashboard for total operational oversight, employee directory management, 3-tier RBAC (`SUPER_ADMIN`, `ADMIN`, `EMPLOYEE`), office geofence configuration, work site registry, real-time GPS map tracking, timesheet auditing, and analytics reporting.
-- **Employee Mobile Portal**: Enforced 4-step daily attendance workflow stepper, live selfie photo capture, geofence verification, personal work timesheet summary, and pending offline sync monitor.
+- **Super Admin & Admin Web & Mobile Suite**: Standalone Web Admin Portal (`web_admin`) and Flutter Web/Mobile Admin Dashboard (8 navigation tabs: Overview, Employees, Cards & Passes, Offices, Work Sites, Live Map, Reports, and **Salary & Payroll**) with 3-tier RBAC (`SUPER_ADMIN`, `ADMIN`, `EMPLOYEE`), multi-theme selector (5 curated palettes with Light & Dark modes), and real-time GPS tracking.
+- **Employee Mobile Portal**: Enforced 4-step daily attendance workflow stepper (plus Break Start/End and Emergency Duty Check-In/Out), live selfie photo capture, geofence verification, personal work timesheet summary, and pending offline sync monitor.
 
 ### 2. First-Time Setup Wizard
 - When opened for the very first time, prompts for **Organization Name**, **Address**, **Super Admin Credentials**, and automatically provisions the organization, default office, and root Super Admin account (`role = 'SUPER_ADMIN'`).
@@ -24,9 +24,9 @@ Enterprise-grade, offline-first mobile and web application built using **Flutter
 - `SiteNameDialog` dropdown prompts selection from pre-configured work sites (`RELAAM (AMC)`, `RELAAM (WO)`, `CARRIER`, `MOPA`, `MPM`, `ELV`, `OTHERS (AMC)`, `OTHERS (WO)`) or custom location inputs.
 
 ### 5. Employee Work Timesheet Engine
-- **Automatic Hour Calculation**: Calculates total daily work duration between `1. Office Check-In` and `4. Office Check-Out`.
-- **Regular vs. Overtime Hours**: Automatically caps regular working hours at **8.0 hours per day** and allocates any excess duration as **Overtime Hours**.
-- **Site Visit Breakdown**: Captures detailed site visit durations (`SiteVisitSummary`) for each field location visited during the shift.
+- **Automatic Hour Calculation**: Calculates total daily work duration between `1. Office Check-In` and `4. Office Check-Out` (with Admin attendance editing & manual OT override support via `AdminEditAttendanceDialog`).
+- **Regular, Break, Travel Tolerance & Overtime Hours**: Caps regular working hours at **8.0 hours per day** (Mon–Sat). For shifts exceeding 8.0 gross hours, deducts **1 hour food break** (or logged break if greater) and applies **1 hour travel tolerance** — Overtime accrues after 10 gross hours. Emergency Duty logs (`emergencyCheckIn` / `emergencyCheckOut`) are credited at **100% Overtime**.
+- **Site Visit Breakdown**: Captures detailed site visit durations (`SiteVisitSummary`) and client man-hour summaries (`calculateSiteManHours`) for each field location visited during the shift.
 - **Timesheet PDF Export**: Generates and downloads individual and master timesheet reports in PDF format directly from the app.
 
 ### 6. Work Site & Construction Project Registry
@@ -45,9 +45,10 @@ Enterprise-grade, offline-first mobile and web application built using **Flutter
 - **Gallery uploads & file pickers are strictly disabled**.
 - Images are automatically downscaled to **480px** and compressed to **65% JPEG quality** (~25KB–45KB payload, **99% payload reduction**) before storage/sync.
 
-### 10. Haversine Geofence Validation
-- Validates real-time GPS location against assigned office or site coordinates using the Haversine spherical distance formula.
+### 10. Haversine Geofence Validation & Per-Employee Bypass Controls
+- Validates real-time GPS location against assigned office or site coordinates using the Haversine spherical distance formula during `1. Office Check-In`.
 - Displays immediate warning modal: `"You are outside the permitted attendance area."` if user is outside allowed radius (default 200m).
+- **Per-Employee Geofence Enable / Disable Toggle (`bypassGeofence`)**: Admins can enable or disable geofence enforcement per employee in Flutter (`EmployeeManagementScreen`, `UserFormDialog`) and Web Admin (`web_admin`), synced via Supabase (`bypass_geofence` columns) and Hive local overrides (`geofence_bypass_overrides`).
 
 ### 11. Employee Office Override Support
 - Allows assigning custom client offices or branch stations to specific employees (`useDefaultOffice: false`).
@@ -58,7 +59,8 @@ Enterprise-grade, offline-first mobile and web application built using **Flutter
 - Sync engine automatically flushes queue upon connectivity restoration while preserving original `event_timestamp`.
 
 ### 13. Analytics & Multi-Format Report Export
-- Generates downloadable compliance reports in **PDF**, **Excel (.xlsx)**, and **CSV** formats with customizable filters.
+- Generates downloadable compliance reports in **PDF**, **Excel (.xlsx)**, and **CSV** formats with customizable filters and a **Salary Cycle selector** directly on the main attendance reports screen (`ReportsAnalyticsScreen`).
+- **WPS & Payroll Exports**: Generates division-specific UAE WPS Excel files (`Neo_employees-WPS_MM-YYYY.xlsx`, `Fusion-electro-employees-WPS_MM-YYYY.xlsx`), Master Estimated Payroll Details Excel, Interim OT Excel/PDF (`26–31 Oct 2026`), Workforce Payroll PDF, and individual employee Payslip PDFs.
 
 ### 14. Statutory Cards Management & Gemini Multimodal AI Vision OCR
 - **Compliance Document Tracking**: Centrally tracks employee statutory cards and field access passes (`EMIRATES_ID`, `VISA`, `PASSPORT`, `INSURANCE`, `MOPA_PASS`, `CISPA_PASS`, and `CUSTOM_PASS`).
@@ -71,21 +73,33 @@ Enterprise-grade, offline-first mobile and web application built using **Flutter
 - **Client-Side Quick Triggers**: 1-click WhatsApp (`https://wa.me/...`) and pre-composed email drafting directly from the Flutter app and Web Admin Portal.
 - **Dedicated Documentation**: See [Cards Management & Expiry Notification Module Manual](docs/CARD_AND_EXPIRY_NOTIFICATION_MODULE.md) for full operational, architectural, and setup runbooks.
 
-### 16. Company Salary Cycle Engine (25th to 24th) & Leave Records Ledger
-- **25th-to-24th Monthly Salary Cycles**: Aligns shift aggregation and timesheets with Gulf payroll billing periods (`SalaryCycleHelper`), dynamically resolving cycles based on selected reference dates.
+### 16. Configurable Salary Cycle Engine & Leave Records Ledger
+- **Calendar-Month & Transition Salary Cycles (`SalaryCycleHelper`)**:
+  - **Nov 2026 Onwards**: Full calendar-month cycles (`1st` to last day of month, e.g. `01 Nov – 30 Nov 2026`).
+  - **26–31 Oct 2026 Transition Window**: Dedicated 6-day **Interim OT Cycle** (`2026-10-transition`) tracking transition overtime, automatically rolled into November 2026's variable payroll component.
+  - **Prior to 26 Oct 2026**: Legacy 25th-to-24th payroll cycles (`25 Aug – 24 Sep`, `25 Sep – 25 Oct 2026`).
 - **Daily Leave Records Ledger**: Categorizes every calendar day into 5 definitive states: `Present`, `Leave / Absent`, `Sunday (Weekly Off)`, `Sunday Duty (Worked)`, and `Upcoming` (`LeaveCalculator`).
 
 ### 17. 24-Hour Auto-Checkout Safety Guard & Sunday 100% OT Rule
 - **24-Hour Auto-Checkout**: Any unclosed shift exceeding 24 hours without an official check-out is automatically capped at **8.0 standard regular hours** and **0.0 overtime hours** (`isAutoCompleted: true`), protecting timesheet calculations from runaway shift lengths.
 - **Sunday 100% Overtime Rule**: Sunday is designated as the mandatory weekly off day; **100% of all hours worked on Sunday are automatically converted to Overtime Hours**.
 
-### 18. Employee Photo Directory & Portrait Avatars
-- **Badge Image Mapping**: Maps official employee codes (`1004`, `1008`, `N-1003`, etc.) to high-resolution portrait photos stored in `assets/images/employees/` and `web/assets/images/employees/`.
+### 18. Employee Photo Directory, Strict Log Isolation & Relieved Staff Exclusion
+- **Badge Image Mapping**: Maps official employee codes (`1004`, `1008`, `1058`, `N-1003`–`N-1014`, etc.) to high-resolution portrait photos stored in `assets/images/employees/` and `web/assets/images/employees/`.
 - **Avatar Component**: Reusable `EmployeeAvatar` rendering official photos with graceful monogram initials fallback.
-- **Identity Reconciliation**: `EmployeeDirectoryHelper` normalizes employee codes and names across legacy variations.
+- **Strict Identity Isolation (`EmployeeDirectoryHelper.matchesEmployeeIdentity`)**: Strictly isolates individual employee attendance logs, preventing cross-employee contamination across timesheets, payroll, and daily reports, and excludes relieved personnel (`isRelievedEmployee`) across all modules.
 
 ### 19. Office Station Deletion with Safeguard Protection
 - Admins can delete branch office stations with automatic employee fallback: any personnel assigned to a deleted branch automatically revert to the default Main Office without breaking geofence validation.
+
+### 20. Division-Aware Salary, Payroll & UAE WPS Module
+- **Automated Payroll Engine (`SalaryPayrollScreen`, `SalaryCalculator`)**: Computes day-wise fixed, variable, and overtime earnings across **Fusion Electro-Mechanical Maintenance LLC (MOL: `803095`)** and **Fusion Neo Building Contracting LLC (MOL: `2846014`)** using `WpsMasterRegistry` and `employee_salaries`.
+- **Basic-Only OT & Paid Sunday Rules**: Derives hourly OT rate strictly from Basic Salary (`(Basic / Days in Month) / 8`), supports fixed-in-variable OT (`otIncludedInVariable`), custom hourly/monthly OT overrides, and Paid Sunday Off credit when working the following Monday or both before and after the Sunday.
+- **Manual Office Attendance Calendar (`PutOfficeAttendanceDialog`)**: Interactive calendar dialog for marking office staff attendance (`OFFICE_CALENDAR_ENTRY`) and cycle OT hours with instant local persistence and non-blocking cloud sync.
+- **Dedicated Documentation**: See [Salary, Payroll & WPS Export Module](docs/13_salary_payroll_and_wps_module.md).
+
+### 21. Multi-Theme UI System (`AppThemePreset` & `ThemeCubit`)
+- Supports **5 curated theme palettes** (`Slate Indigo`, `Emerald Mint`, `Midnight Amber`, `Royal Amethyst`, `Ocean Cobalt`) with full Light & Dark mode contrast support (`ThemeSelectorModal`).
 
 ---
 
@@ -116,15 +130,20 @@ Open `http://localhost:3000` in your browser.
 
 ```
 attendance_app/
+├── .github/workflows/
+│   └── deploy.yml                  # GitHub Actions CI/CD deploying Flutter Web to fusionmaint.org
 ├── backend/
-│   ├── supabase_schema.sql         # Supabase PostgreSQL 15-table schema, RLS Policies, Ownership Transfer RPC
+│   ├── supabase_schema.sql         # Core PostgreSQL schema, RLS policies, Ownership Transfer RPC
+│   ├── create_employee_salaries_table.sql # Salary & payroll schema + division master seeds
+│   ├── add_custom_monthly_ot_amount_column.sql # Fixed monthly OT override migration
+│   ├── add_bypass_geofence_columns.sql # Per-employee geofence bypass migration
 │   └── supabase_cron_job.sql       # Automated 8:00 AM GST card expiry compliance robot (pg_cron & pg_net)
 ├── web_admin/                      # Standalone Enterprise Web Admin Portal
 │   ├── index.html                  # HTML5 SPA Container, Leaflet Map, & Cards Manager
 │   ├── styles.css                  # Enterprise Design System & CSS Variables
 │   ├── app.js                      # JavaScript Controller, Supabase JS SDK, Gemini OCR, Leaflet Map
 │   └── package.json                # Local web server script
-├── docs/                           # Comprehensive System Documentation (Modules 00–12)
+├── docs/                           # Comprehensive System Documentation (Modules 00–13)
 │   ├── 00_system_architecture.md
 │   ├── 01_auth_and_password_management.md
 │   ├── 02_organization_setup.md
@@ -138,19 +157,25 @@ attendance_app/
 │   ├── 10_security_device_binding_and_ownership_transfer.md
 │   ├── 11_cards_management_and_ai_compliance.md
 │   ├── 12_leave_management_and_payroll_cycles.md
+│   ├── 13_salary_payroll_and_wps_module.md
+│   ├── architecture_runtime_diagram.html
+│   ├── CARD_AND_EXPIRY_NOTIFICATION_MODULE.md
 │   ├── TECHNICAL_DEVELOPER_DOCUMENTATION.md
 │   ├── CODING_IMPLEMENTATION_GUIDE.md
 │   ├── ENTERPRISE_CASE_STUDY.md
 │   └── README.md                   # Documentation Index
 ├── assets/
 │   └── images/employees/           # Official portrait employee badge photos
+├── web/
+│   └── index.html                  # Flutter Web entry with stale service worker cache-busting
 ├── lib/
 │   ├── main.dart                   # Role-Based Router Entry Point (Web & Mobile)
 │   ├── app_config.dart             # Global environment configurations & Supabase keys
 │   ├── core/                       # Shared utilities, constants, & themes
-│   │   ├── constants/              # Colors, Themes, Enums, EmployeePhotoData
+│   │   ├── constants/              # Colors, Themes, Enums, EmployeePhotoData, WpsMasterRegistry
 │   │   ├── services/               # LocationService, CameraService, SupabaseService, CardOcrService,
 │   │   │                           # CardExpiryNotificationService, PdfExportService, ExcelCsvExportService
+│   │   ├── theme/                  # AppThemePreset, ThemeCubit, ThemeSelectorModal (5 themes)
 │   │   ├── utils/                  # GeofenceCalculator, TimesheetCalculator, SalaryCycleHelper,
 │   │   │                           # LeaveCalculator, EmployeeDirectoryHelper, PhotoAttachmentHelper
 │   │   └── widgets/                # AppButton, CustomTextField, StatusBadge, OfflineBanner, EmployeeAvatar
@@ -158,13 +183,15 @@ attendance_app/
 │   └── features/                   # Clean Architecture Features
 │       ├── setup/                  # First-Time Wizard Screen & Cubit
 │       ├── auth/                   # Login Screen, Firebase/Supabase Auth & Cubit
-│       ├── attendance/             # Attendance Workflow Stepper, Camera Modal, SiteNameDialog, Cubit
+│       ├── attendance/             # Attendance Workflow Stepper, Camera Modal, BreakTypeDialog, SiteNameDialog, Cubit
 │       ├── employee/               # Employee Duty Portal & Timeline
-│       ├── admin/                  # Dashboard, Employee & Office Management, Cards Management Screen,
-│       │                           # Work Sites, Ownership Transfer & Responsive Desktop Web View
-│       ├── timesheet/              # Employee Timesheet Portal, 25th-24th Salary Cycle, Daily Calculation, PDF Export
+│       ├── admin/                  # Dashboard (8 tabs), Employee & Office Management, Cards Management Screen,
+│       │                           # Work Sites, Reports, AdminEditAttendanceDialog, Ownership Transfer
+│       ├── salary/                 # Salary & Payroll Module, WPS Exports, Interim OT Dialog, Calendar Attendance
+│       ├── timesheet/              # Employee Timesheet Portal, Salary Cycle Filter, Daily Calculation, PDF Export
 │       ├── security/               # Hardware Device Binding Service
-│       └── sync/                   # Offline Sync Engine
+│       └── sync/                   # Offline Sync Engine (15-min periodic flush & connectivity listener)
+├── test/                           # Unit tests (salary, cycle, geofence toggle, break/OT, isolation, leave)
 ├── pubspec.yaml
 └── README.md
 ```
@@ -185,7 +212,10 @@ attendance_app/
    ```bash
    flutter run -d chrome
    ```
-4. **Deploy Database & Scheduled Compliance Robot**:
-   - Copy `backend/supabase_schema.sql` into your Supabase SQL Editor and execute.
-   - Copy `backend/supabase_cron_job.sql` into the SQL Editor to schedule the automated daily 8:00 AM GST compliance robot.
+4. **Deploy Database, Migrations & Scheduled Compliance Robot**:
+   - Execute `backend/supabase_schema.sql` in the Supabase SQL Editor for core tables and RLS policies.
+   - Execute `backend/add_bypass_geofence_columns.sql`, `backend/create_employee_salaries_table.sql`, and `backend/add_custom_monthly_ot_amount_column.sql` to enable per-employee geofence bypass and the Salary & Payroll module.
+   - Execute `backend/supabase_cron_job.sql` to schedule the automated daily 8:00 AM GST compliance robot.
+5. **Automated Web Deployment (GitHub Pages)**:
+   - Pushes to `main`, `master`, or `admin_web` trigger `.github/workflows/deploy.yml`, building the Flutter Web bundle (`--base-href "/"`) and deploying to `fusionmaint.org`.
 

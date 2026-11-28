@@ -1,44 +1,46 @@
 # 12. Enterprise Leave Records, Weekly Off Rules & Configurable Salary Cycles
 
 ## Overview
-The **Leave Records & Salary Cycle Engine** aligns the workforce attendance tracking system with real-world enterprise operations in the Gulf / UAE region. Standard enterprise payroll and field service contracts operate on distinct calendar cycles (running from the **25th of the prior month to the 24th of the current month**) rather than standard calendar months (1st to 30th/31st). Furthermore, operational regulations designate **Sunday as the mandatory weekly off day**, with special compensation and overtime rules governing Sunday shifts.
+The **Leave Records & Salary Cycle Engine** aligns the workforce attendance tracking system with real-world enterprise operations in the Gulf / UAE region. Historically, payroll cycles operated from the **25th of the prior month to the 24th of the current month**; starting **November 2026**, the organization transitioned to **full Calendar-Month Cycles (1st to last day of month)** with a dedicated **6-day October Transition Interim Overtime Period (`26 Oct – 31 Oct 2026`)**. Operational regulations also designate **Sunday as the mandatory weekly off day**, with special compensation and overtime rules governing Sunday shifts.
 
 ---
 
 ## 1. Company Salary Cycle Engine (`SalaryCycle` & `SalaryCycleHelper`)
 
-### Calendar Boundary Definition
-Each organizational salary cycle runs continuously from:
-- **Start Timestamp**: `25th` of the start month at `00:00:00.000`
-- **End Timestamp**: `24th` of the subsequent month at `23:59:59.999`
-- **Target Salary Month**: The month in which the `24th` (cutoff date) occurs.
-
-*Example*: For the **November 2026 Salary Cycle**, the active period begins on **October 25, 2026 at 00:00** and concludes on **November 24, 2026 at 23:59:59**.
+### Cycle History & Calendar Boundary Definition
+`SalaryCycleHelper` (`SalaryCycle.fromDate` and `SalaryCycle.forMonth`) resolves cycles across three eras:
+1. **November 2026 Onwards (Calendar Month Cycle)**:
+   - Runs from **1st of month `00:00:00.000`** to **last day of month `23:59:59.999`** (e.g., `01 Nov 2026 – 30 Nov 2026`).
+2. **26 Oct – 31 Oct 2026 (October Transition Interim OT Cycle)**:
+   - 6-day bridge period (`SalaryCycle.octoberTransition()`, ID `'2026-10-transition'`) specifically tracking **Interim Overtime**, which is automatically rolled into November 2026's variable salary component (`SalaryCalculator`).
+3. **Prior to 26 Oct 2026 (Legacy 25th-to-24th Cycle)**:
+   - Historical cycles: `25 Aug – 24 Sep 2026` (Sep 2026) and `25 Sep – 25 Oct 2026` (Oct 2026).
 
 ### Dynamic Cycle Resolution Algorithm
 When an operator or employee selects any reference date, `SalaryCycle.fromDate(DateTime date)` resolves the target cycle:
 ```dart
-if (date.day >= 25) {
-  // Cycle runs from 25th of current month to 24th of next month
-  startDate = DateTime(date.year, date.month, 25, 0, 0, 0);
-  endDate = DateTime(date.year, date.month + 1, 24, 23, 59, 59, 999);
-  salaryMonth = date.month + 1;
-} else {
-  // Cycle runs from 25th of previous month to 24th of current month
-  startDate = DateTime(date.year, date.month - 1, 25, 0, 0, 0);
-  endDate = DateTime(date.year, date.month, 24, 23, 59, 59, 999);
-  salaryMonth = date.month;
+if (year > 2026 || (year == 2026 && month >= 11)) {
+  // From 1 Nov 2026 onwards: calendar month cycle (1st to last day of month)
+  return SalaryCycle.forMonth(year, month);
+} else if (year == 2026 && month == 10 && day >= 26) {
+  // October transition window: 26 Oct 2026 to 31 Oct 2026
+  return SalaryCycle.octoberTransition();
+} else if (day >= 25) {
+  // Legacy 25th-to-24th cycle
+  ...
 }
 ```
 
 ### Salary Cycle Metrics (`SalaryCycleMetrics`)
 Across any resolved salary cycle, the engine calculates:
-- **`totalCalendarDays`**: Total elapsed calendar days within the period (typically 30 or 31 days).
-- **`scheduledWorkingDays`**: Total scheduled working days (Monday through Saturday, excluding Sundays).
-- **`sundayCount`**: Total number of Sundays (weekly off days) occurring in the cycle.
-- **`totalWorkedHours`**: Aggregate duty hours logged by an employee or workforce.
-- **`regularHours`**: Standard hours (capped at 8.0h per standard working day).
-- **`overtimeHours`**: Total overtime accrued (>8.0h on regular days + 100% of Sunday duty).
+- **`totalDays`**: Total calendar days within the period (e.g., 30/31 days, or 6 days for the Oct transition).
+- **`daysWorked`**: Count of daily timesheet entries within the cycle.
+- **`regularHours`**: Standard hours (capped at 8.0h per standard Mon–Sat working day).
+- **`overtimeHours`**: Total overtime accrued (after break + travel tolerance on regular days, + emergency duty + 100% of Sunday duty).
+- **`emergencyDutyHours`**: Total emergency callout hours logged.
+- **`combinedHours`**: `regularHours + overtimeHours`.
+
+> For full payroll computation, Paid Sunday Off rules, and UAE WPS exports, see [13. Salary, Payroll & WPS Export Module](13_salary_payroll_and_wps_module.md).
 
 ---
 
@@ -112,13 +114,13 @@ To prevent timesheet distortion when field personnel forget to perform step `4. 
 
 ---
 
-## 5. Employee Identity Reconciliation (`EmployeeDirectoryHelper`)
+## 5. Strict Employee Identity Reconciliation & Relieved Staff Exclusion (`EmployeeDirectoryHelper`)
 
 In enterprise environments with legacy personnel data and diverse identification formats, records may reference employee codes with or without branch prefixes (e.g., `1004` vs `N-1004`), leading zeroes, or slight name spelling differences.
 
-The [`EmployeeDirectoryHelper`](../lib/core/utils/employee_directory_helper.dart) provides unified identity matching:
-1. **Code Normalization**: Strips department prefixes (`N-`, `D-`, `EMP-`) to resolve the underlying numeric badge number.
-2. **Name Normalization**: Sanitizes extraneous punctuation, titles, and whitespace to match attendance records against official personnel profiles.
+The [`EmployeeDirectoryHelper`](../lib/core/utils/employee_directory_helper.dart) provides unified, contamination-free identity matching:
+1. **Strict Identity Matching (`matchesEmployeeIdentity`)**: Resolves official records for both target and attendance log entries first. Conflicting human names or distinct resolved official IDs never merge, preventing cross-employee log contamination.
+2. **Relieved Staff Exclusion (`isRelievedEmployee`)**: Excludes former/relieved personnel (e.g., Asik Saheel) across directories, leave summaries, cards, and payroll calculations.
 3. **Avatar Mapping**: Automatically links employee codes to official portrait assets (`assets/images/employees/1004.png` or `N-1003.png`) across both Flutter and Web Admin.
 
 ---
@@ -127,11 +129,12 @@ The [`EmployeeDirectoryHelper`](../lib/core/utils/employee_directory_helper.dart
 
 | File Path | Description |
 | :--- | :--- |
-| [`lib/core/utils/salary_cycle_helper.dart`](../lib/core/utils/salary_cycle_helper.dart) | Core utility managing 25th–24th salary cycle resolution, calendar date boundaries, and cycle metrics. |
+| [`lib/core/utils/salary_cycle_helper.dart`](../lib/core/utils/salary_cycle_helper.dart) | Core utility managing calendar-month, Oct Interim OT transition, and legacy 25th–24th salary cycle resolution and metrics. |
 | [`lib/core/utils/leave_calculator.dart`](../lib/core/utils/leave_calculator.dart) | Calculation engine for daily leave records, Sunday weekly offs, Sunday duties, and attendance percentages. |
-| [`lib/core/utils/timesheet_calculator.dart`](../lib/core/utils/timesheet_calculator.dart) | Timesheet aggregation incorporating salary cycles, Sunday 100% OT rules, and 24-hour auto check-outs. |
-| [`lib/core/utils/employee_directory_helper.dart`](../lib/core/utils/employee_directory_helper.dart) | Helper for normalizing employee identity, badge numbers, and avatar bindings. |
+| [`lib/core/utils/timesheet_calculator.dart`](../lib/core/utils/timesheet_calculator.dart) | Timesheet aggregation incorporating salary cycles, break/travel tolerance, Sunday 100% OT rules, and 24-hour auto check-outs. |
+| [`lib/core/utils/employee_directory_helper.dart`](../lib/core/utils/employee_directory_helper.dart) | Helper for strict identity matching, relieved staff exclusion, badge normalization, and avatar bindings. |
 | [`lib/core/widgets/employee_avatar.dart`](../lib/core/widgets/employee_avatar.dart) | Reusable UI component rendering official portrait photos with fallback initials. |
-| [`test/salary_cycle_test.dart`](../test/salary_cycle_test.dart) | Unit test suite verifying 25th–24th boundary transitions and edge cases. |
+| [`test/salary_cycle_test.dart`](../test/salary_cycle_test.dart) | Unit test suite verifying calendar-month, Oct transition, and legacy 25th–24th boundary transitions. |
 | [`test/leave_calculator_test.dart`](../test/leave_calculator_test.dart) | Unit test suite validating leave categorization, Sunday off days, and duty detection. |
 | [`test/auto_checkout_24h_test.dart`](../test/auto_checkout_24h_test.dart) | Unit tests verifying the 24-hour unclosed shift auto-completion rule. |
+| [`test/employee_records_reassignment_test.dart`](../test/employee_records_reassignment_test.dart) | Unit tests verifying strict employee log isolation and relieved employee exclusion. |

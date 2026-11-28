@@ -37,6 +37,12 @@ $$d = R \cdot \Delta \sigma$$
    - **Automatic Employee Fallback**: Deleting a branch office automatically reverts all assigned employees to the default Main Office (`useDefaultOffice: true`, `assignedOfficeId: null`), preventing orphaned profiles or broken geofence checks.
    - **Soft-Delete Cloud Synchronization**: Performs atomic soft deletion in Supabase (`is_deleted: true`) and clears references in `employees` table, preserving historical attendance audit logs.
 
+6. **Per-Employee Geofence Enable / Disable Toggle (`bypassGeofence`)**:
+   - **Selective Bypass**: Admins can disable geofence validation for specific travelling or remote personnel (`bypassGeofence: true`), allowing them to execute `1. Office Check-In` from anywhere while keeping geofence validation strictly enforced for office/site-bound staff.
+   - **Resolution Precedence**: `AttendanceCubit` evaluates `localOverride ?? (emp.bypassGeofence || user.bypassGeofence)` before running Haversine distance checks.
+   - **Multi-Surface Management**: Accessible via quick toggle pills and `Geofence Enabled` / `Disabled` filter tabs in `EmployeeManagementScreen`, the switch inside `UserFormDialog`, and the `web_admin/app.js` employee table.
+   - **Database Migration & Tests**: Backed by `backend/add_bypass_geofence_columns.sql` (`users.bypass_geofence`, `employees.bypass_geofence`) and verified by `test/geofence_toggle_test.dart`.
+
 ---
 
 ## 2. Technical Implementation & Data Structures
@@ -79,4 +85,6 @@ class OfficeEntity {
 | [`lib/features/admin/presentation/office_management_screen.dart`](../lib/features/admin/presentation/office_management_screen.dart) | Admin UI for creating, editing, and deleting office stations with GPS location picker and geofence radius adjustment. |
 | [`lib/features/admin/presentation/work_site_management_screen.dart`](../lib/features/admin/presentation/work_site_management_screen.dart) | Admin UI for creating/editing client work sites and project locations. |
 | [`lib/core/services/location_service.dart`](../lib/core/services/location_service.dart) | Service handling GPS permission checks, position retrieval, and Haversine distance calculations. |
+| [`backend/add_bypass_geofence_columns.sql`](../backend/add_bypass_geofence_columns.sql) | SQL migration adding `bypass_geofence` columns to `users` and `employees` tables. |
+| [`test/geofence_toggle_test.dart`](../test/geofence_toggle_test.dart) | Unit tests verifying Haversine geofence boundary checks and per-employee bypass overrides. |
 

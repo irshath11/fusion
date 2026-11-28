@@ -19,8 +19,10 @@
 10. [Atomic Ownership Transfer Engine (`lib/features/admin/presentation/ownership_transfer_cubit.dart`)](#10-atomic-ownership-transfer-engine-libfeaturesadminpresentationownership_transfer_cubitdart)
 11. [Document Intelligence & Gemini AI OCR Engine (`lib/core/services/card_ocr_service.dart`)](#11-document-intelligence--gemini-ai-ocr-engine-libcoreservicescard_ocr_servicedart)
 12. [Automated Compliance Notification Robot (`lib/core/services/card_expiry_notification_service.dart`)](#12-automated-compliance-notification-robot-libcoreservicescard_expiry_notification_servicedart)
-13. [25th–24th Salary Cycle & Daily Leave Ledger Engine (`lib/core/utils/salary_cycle_helper.dart`)](#13-25th24th-salary-cycle--daily-leave-ledger-engine-libcoreutilssalary_cycle_helperdart)
-14. [24-Hour Auto-Checkout & Sunday 100% OT Rule (`lib/core/utils/timesheet_calculator.dart`)](#14-24-hour-auto-checkout--sunday-100-ot-rule-libcoreutilstimesheet_calculatordart)
+13. [Configurable Salary Cycle & Daily Leave Ledger Engine (`lib/core/utils/salary_cycle_helper.dart`)](#13-configurable-salary-cycle--daily-leave-ledger-engine-libcoreutilssalary_cycle_helperdart)
+14. [24-Hour Auto-Checkout, Break/Travel Tolerance & Sunday 100% OT Rule (`lib/core/utils/timesheet_calculator.dart`)](#14-24-hour-auto-checkout-breaktravel-tolerance--sunday-100-ot-rule-libcoreutilstimesheet_calculatordart)
+15. [Salary, Payroll & UAE WPS Calculation Engine (`lib/features/salary/utils/salary_calculator.dart`)](#15-salary-payroll--uae-wps-calculation-engine-libfeaturessalaryutilssalary_calculatordart)
+16. [Per-Employee Geofence Bypass & Strict Identity Isolation](#16-per-employee-geofence-bypass--strict-identity-isolation)
 
 
 ---
@@ -91,7 +93,7 @@ class MyApp extends StatelessWidget {
 ## 2. Local Database & Hive Storage Engine (`lib/database/local_database_service.dart`)
 
 ### Code Implementation Highlights
-The local database service provides offline CRUD access to 8 isolated Hive key-value boxes:
+The local database service initializes the Hive `app_settings` box and persists JSON-serialized collections alongside fast in-memory caches:
 
 ```dart
 class LocalDatabaseService {
@@ -99,51 +101,21 @@ class LocalDatabaseService {
   factory LocalDatabaseService() => _instance;
   LocalDatabaseService._internal();
 
-  late Box<Map> _orgBox;
-  late Box<Map> _userBox;
-  late Box<Map> _employeeBox;
-  late Box<Map> _officeBox;
-  late Box<Map> _workSiteBox;
-  late Box<Map> _attendanceBox;
-  late Box<Map> _pendingSyncBox;
+  Box? _settingsBox;
+  final Map<String, bool> _geofenceBypassOverrides = {};
+  final List<EmployeeSalaryConfig> _employeeSalaries = [];
+  final List<AttendanceRecord> _attendanceRecords = [];
 
   Future<void> init() async {
     await Hive.initFlutter();
-    _orgBox = await Hive.openBox<Map>('organizationBox');
-    _userBox = await Hive.openBox<Map>('currentUserBox');
-    _employeeBox = await Hive.openBox<Map>('employeesBox');
-    _officeBox = await Hive.openBox<Map>('officesBox');
-    _workSiteBox = await Hive.openBox<Map>('workSitesBox');
-    _attendanceBox = await Hive.openBox<Map>('attendanceRecordsBox');
-    _pendingSyncBox = await Hive.openBox<Map>('pendingSyncBox');
+    _settingsBox = await Hive.openBox('app_settings');
+    // Loads organization_json, current_user_json, users_json, employees_json,
+    // offices_json, worksites_json, attendance_records_json, salaries_json,
+    // and geofence_bypass_overrides; purges relieved personnel and auto-resolves >24h check-ins.
   }
 
-  // Save Attendance Record Locally
-  Future<void> saveAttendanceRecord(AttendanceRecord record) async {
-    final data = record.toJson();
-    await _attendanceBox.put(record.id, data);
-    
-    // If pending sync, add to pending queue box
-    if (record.syncStatus == SyncStatus.pending) {
-      await _pendingSyncBox.put(record.id, data);
-    }
-  }
-
-  // Update Record Sync Status
-  Future<void> markRecordAsSynced(String recordId) async {
-    final existingData = _attendanceBox.get(recordId);
-    if (existingData != null) {
-      existingData['syncStatus'] = 'synced';
-      await _attendanceBox.put(recordId, existingData);
-    }
-    // Remove from pending queue box
-    await _pendingSyncBox.delete(recordId);
-  }
-
-  List<AttendanceRecord> getPendingSyncRecords() {
-    return _pendingSyncBox.values
-        .map((map) => AttendanceRecord.fromJson(Map<String, dynamic>.from(map)))
-        .toList();
+  Future<void> saveAttendanceRecord(AttendanceRecord record, {bool persist = true}) async {
+    // Upserts record in memory and persists attendance_records_json to _settingsBox
   }
 }
 ```
@@ -742,10 +714,10 @@ class CardExpiryNotificationService {
 
 ---
 
-## 13. 25th–24th Salary Cycle & Daily Leave Ledger Engine (`lib/core/utils/salary_cycle_helper.dart`)
+## 13. Configurable Salary Cycle & Daily Leave Ledger Engine (`lib/core/utils/salary_cycle_helper.dart`)
 
 ### Code Implementation Highlights
-Dynamically resolves custom payroll cycles running 25th of month to 24th of next month:
+Resolves calendar-month cycles (Nov 2026+), the 6-day October Transition Interim OT window (`26–31 Oct 2026`), and legacy 25th–24th cycles:
 
 ```dart
 class SalaryCycle {
@@ -753,21 +725,38 @@ class SalaryCycle {
   final DateTime endDate;
   final int salaryMonth;
   final int salaryYear;
+  final bool isTransition;
 
   factory SalaryCycle.fromDate(DateTime date) {
-    final int year = date.year;
-    final int month = date.month;
-    final int day = date.day;
+    final localDate = date.toLocal();
+    final int year = localDate.year;
+    final int month = localDate.month;
+    final int day = localDate.day;
 
+    // From 1 Nov 2026 onwards: calendar month cycle (1st to last day of month)
+    if (year > 2026 || (year == 2026 && month >= 11)) {
+      return SalaryCycle.forMonth(year, month);
+    }
+
+    // October transition window: 26 Oct 2026 to 31 Oct 2026
+    if (year == 2026 && month == 10 && day >= 26) {
+      return SalaryCycle.octoberTransition();
+    }
+
+    // Legacy 25th-to-24th cycle
     if (day >= 25) {
-      final start = DateTime(year, month, 25, 0, 0, 0);
+      final start = DateTime(year, month, 25, 0, 0, 0, 0);
       final nextMonthDt = DateTime(year, month + 1, 1);
-      final end = DateTime(nextMonthDt.year, nextMonthDt.month, 24, 23, 59, 59, 999);
+      final end = (year == 2026 && month == 9)
+          ? DateTime(2026, 10, 25, 23, 59, 59, 999)
+          : DateTime(nextMonthDt.year, nextMonthDt.month, 24, 23, 59, 59, 999);
       return SalaryCycle(startDate: start, endDate: end, salaryMonth: nextMonthDt.month, salaryYear: nextMonthDt.year);
     } else {
       final prevMonthDt = DateTime(year, month - 1, 1);
-      final start = DateTime(prevMonthDt.year, prevMonthDt.month, 25, 0, 0, 0);
-      final end = DateTime(year, month, 24, 23, 59, 59, 999);
+      final start = DateTime(prevMonthDt.year, prevMonthDt.month, 25, 0, 0, 0, 0);
+      final end = (year == 2026 && month == 10)
+          ? DateTime(2026, 10, 25, 23, 59, 59, 999)
+          : DateTime(year, month, 24, 23, 59, 59, 999);
       return SalaryCycle(startDate: start, endDate: end, salaryMonth: month, salaryYear: year);
     }
   }
@@ -776,34 +765,84 @@ class SalaryCycle {
 
 ---
 
-## 14. 24-Hour Auto-Checkout & Sunday 100% OT Rule (`lib/core/utils/timesheet_calculator.dart`)
+## 14. 24-Hour Auto-Checkout, Break/Travel Tolerance & Sunday 100% OT Rule (`lib/core/utils/timesheet_calculator.dart`)
 
 ### Code Implementation Highlights
-Enforces Sunday holiday overtime conversion and protects timesheet metrics from stale unclosed shifts:
+Enforces break & travel tolerance deductions, Sunday holiday overtime conversion, and protects timesheet metrics from stale unclosed shifts:
 
 ```dart
-// 1. Sunday 100% Overtime Rule
-final bool isSunday = date.weekday == DateTime.sunday;
-double regHours;
-double otHours;
-
-if (isSunday) {
-  // Sunday is mandatory weekly off -> All worked duration converts to 100% OT
-  regHours = 0.0;
-  otHours = totalHours;
-} else {
-  // Monday-Saturday -> Capped at 8.0h regular
-  regHours = totalHours <= 8.0 ? totalHours : 8.0;
-  otHours = totalHours <= 8.0 ? 0.0 : totalHours - 8.0;
+// 1. Beyond 8.0 hours gross (> 480 mins): 1h Food Break + 1h Travel Tolerance
+if (grossMins > 480) {
+  const int defaultFoodBreakMins = 60;
+  final int effectiveFoodBreakMins =
+      loggedBreakMins > defaultFoodBreakMins ? loggedBreakMins : defaultFoodBreakMins;
+  regularHours = standardRegularHoursPerDay; // 8.0h (480 mins)
+  final int remainingMins = (grossMins > (480 + effectiveFoodBreakMins))
+      ? (grossMins - 480 - effectiveFoodBreakMins)
+      : 0;
+  final int travelMins = remainingMins > 60 ? 60 : remainingMins;
+  final int otMins = (remainingMins > travelMins) ? (remainingMins - travelMins) : 0;
+  overtimeHours = otMins / 60.0;
 }
 
-// 2. 24-Hour Auto-Checkout Rule
-final elapsed = DateTime.now().difference(checkInTime);
-if (!hasCheckOut && elapsed.inHours >= 24) {
-  // Shift ran over 24h without checkout -> Auto cap at 8h regular and 0 OT
-  regHours = 8.0;
-  otHours = 0.0;
+// 2. Sunday 100% Overtime Rule
+if (date.weekday == DateTime.sunday) {
+  overtimeHours = netWorkedDuration.inMinutes / 60.0;
+  regularHours = 0.0;
+}
+
+// 3. 24-Hour Auto-Checkout Rule
+if (!hasExplicitCheckOut && elapsedSinceCheckIn >= const Duration(hours: 24)) {
+  regularHours = standardRegularHoursPerDay; // 8.0h
+  overtimeHours = 0.0;
   isAutoCompleted = true;
 }
 ```
+
+---
+
+## 15. Salary, Payroll & UAE WPS Calculation Engine (`lib/features/salary/utils/salary_calculator.dart`)
+
+### Code Implementation Highlights
+Computes day-wise fixed, variable, and Basic-only OT earnings, Paid Sunday Off rules, and November 2026 Interim OT rollover:
+
+```dart
+final double dailyFixedRate = config.basicSalary / totalDaysOfCurrentMonth;
+final double dailyVariableRate = config.variableSalary / totalDaysOfCurrentMonth;
+final double otHourlyRate = config.otIncludedInVariable
+    ? 0.0
+    : (config.customOtHourlyRate ??
+        ((config.basicSalary / totalDaysOfCurrentMonth) / config.standardDailyHours));
+
+// Paid Sunday Off: credited if worked on following Monday OR worked before & after in cycle
+final bool isPaidSunday = workedOnMonday || (hasWorkedBefore && hasWorkedAfter);
+
+// November 2026: credit 26–31 Oct 2026 Interim OT into Variable Salary
+final earnedVariable = baseVariable + interimOtSalary;
+```
+
+---
+
+## 16. Per-Employee Geofence Bypass & Strict Identity Isolation
+
+### Geofence Bypass Check (`lib/features/attendance/presentation/attendance_cubit.dart`)
+During `WorkflowStep.officeCheckIn`, `AttendanceCubit` checks per-employee geofence bypass overrides before enforcing Haversine validation:
+```dart
+final override = _db.getGeofenceOverride(
+      userId: user.id,
+      email: user.email,
+      employeeCode: user.employeeCode,
+      name: user.fullName,
+    ) ??
+    _db.getGeofenceOverride(
+      userId: emp.id,
+      email: emp.email,
+      employeeCode: emp.employeeCode,
+      name: emp.name,
+    );
+final bool isGeofenceBypassed = override ?? (emp.bypassGeofence || user.bypassGeofence);
+```
+
+### Strict Employee Log Isolation (`lib/core/utils/employee_directory_helper.dart`)
+`EmployeeDirectoryHelper.matchesEmployeeIdentity()` excludes relieved personnel (`isRelievedEmployee`) and resolves official directory entries for both the log record and target employee first — preventing cross-employee contamination when legacy database rows share IDs or partial names.
 

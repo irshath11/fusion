@@ -572,11 +572,11 @@
           <text class="node-evidence" x="20" y="72">SRC: lib/core/services/supabase_service.dart#L15-L60</text>
         </g>
 
-        <!-- Component 8: PostgreSQL 15 Relational DB & RLS -->
+        <!-- Component 8: PostgreSQL Relational DB & RLS -->
         <g class="node-group" id="node-8" onclick="selectComponent(8)" transform="translate(730, 400)">
           <rect class="node-box" width="330" height="110" />
           <text class="node-title" x="20" y="32">8. PostgreSQL Relational Schema & RLS</text>
-          <text class="node-subtitle" x="20" y="52">15 Tables (attendance_records, employee_cards)</text>
+          <text class="node-subtitle" x="20" y="52">16 Tables (attendance_records, employee_salaries, cards)</text>
           <text class="node-subtitle" x="20" y="68">Tenant isolation by organization_id; RPC ownership transfer</text>
           <text class="node-evidence" x="20" y="90">SRC: backend/supabase_schema.sql#L1-L120</text>
         </g>
@@ -751,14 +751,14 @@
         <!-- Card 3 -->
         <div class="card">
           <div class="card-title">
-            <span>25th–24th Salary Cycle & Auto-Checkout</span>
-            <span class="card-badge badge-amber">Timesheets</span>
+            <span>Salary Cycles, Break/OT & WPS Payroll</span>
+            <span class="card-badge badge-amber">Payroll</span>
           </div>
           <div class="card-body">
-            Gulf payroll billing period (25th to 24th). Any shift unclosed after 24 hours is automatically capped at 8.0 regular hours and 0.0 OT. Mandatory Sunday rule converts 100% of Sunday duty to Overtime.
+            Calendar-month cycles (Nov 2026+) with 26–31 Oct Interim OT rollover, 1h food break + 1h travel tolerance, Sunday 100% OT, 24h auto-checkout cap, and division WPS Excel exports.
           </div>
-          <a class="source-pill" href="file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/core/utils/timesheet_calculator.dart">
-            📄 timesheet_calculator.dart
+          <a class="source-pill" href="file:///c:/Users/srirs/.gemini/antigravity-ide/scratch/attendance_app/lib/features/salary/utils/salary_calculator.dart">
+            📄 salary_calculator.dart
           </a>
         </div>
 
@@ -842,7 +842,7 @@
             <strong>Zone:</strong> Managed PostgreSQL 15, Auth, Storage, & pg_cron.<br>
             <strong>Trust Level:</strong> High Trust (Authoritative Data Tier).<br>
             <strong>Threats:</strong> Cross-tenant data leakage, unauthorized privilege escalation.<br>
-            <strong>Mitigations:</strong> Row-Level Security (RLS) on all 15 tables enforcing organization_id isolation, service role restrictions, stored procedures for atomic role transfers.
+            <strong>Mitigations:</strong> Row-Level Security (RLS) on all 16 tables enforcing organization_id isolation, service role restrictions, stored procedures for atomic role transfers.
           </div>
         </div>
 
@@ -885,18 +885,18 @@
         type: "Geospatial Verification",
         boundary: "Trust Boundary 1: Client Edge Sandbox",
         source: "lib/core/utils/geofence_calculator.dart#L3-L37",
-        description: "Computes spherical distance in meters between worker GPS position and target office/site coordinates. Blocks check-in if distance exceeds allowed radius (default 200m).",
-        contract: "Input: (userLat, userLng, targetLat, targetLng, radiusMeters)\nOutput: Boolean isWithinGeofence + Distance",
-        security: "Rejects attendance if GPS accuracy is too low or coordinates fall outside perimeter."
+        description: "Computes spherical distance in meters between worker GPS position and target office/site coordinates. Blocks check-in if distance exceeds allowed radius (default 200m), unless per-employee bypassGeofence is enabled.",
+        contract: "Input: (userLat, userLng, targetLat, targetLng, radiusMeters, bypassGeofence)\nOutput: Boolean isWithinGeofence + Distance",
+        security: "Rejects attendance if GPS accuracy is too low or coordinates fall outside perimeter unless authorized via admin bypass toggle."
       },
       4: {
         name: "4. Offline Storage Engine (Local Hive DB)",
         type: "Local Key-Value Persistence",
         boundary: "Trust Boundary 1: Client Edge Sandbox",
         source: "lib/database/local_database_service.dart#L16-L65",
-        description: "High-performance offline storage engine. Caches current organization, employee profiles, office stations, and pending attendance entries in local Hive boxes (app_settings, attendanceRecords).",
-        contract: "Input: AttendanceRecord entity\nOutput: Persistent disk record with SyncStatus.pending",
-        security: "Sandboxed within mobile OS private storage."
+        description: "High-performance offline storage engine. Caches current organization, employee profiles, office stations, salary configs, geofence overrides, and pending attendance entries in local Hive app_settings box.",
+        contract: "Input: AttendanceRecord / SalaryConfig entity\nOutput: Persistent disk record with SyncStatus.pending",
+        security: "Sandboxed within mobile OS private storage; purges relieved personnel on startup."
       },
       5: {
         name: "5. Background Sync Engine",
@@ -904,7 +904,7 @@
         boundary: "Boundary 1 & Boundary 2 Bridge",
         source: "lib/features/sync/data/sync_engine.dart#L24-L140",
         description: "Monitors network connectivity. Once online, executes deferred reverse geocoding, uploads compressed photos to cloud storage, inserts attendance entries, and marks local records as synced.",
-        contract: "Input: Connectivity change or 2-min recurring timer\nOutput: SyncEngineResult (syncedCount, failedCount)",
+        contract: "Input: Connectivity change or 15-min recurring timer\nOutput: SyncEngineResult (syncedCount, failedCount)",
         security: "Preserves original tamper-free event_timestamp created at check-in time."
       },
       6: {
@@ -912,9 +912,9 @@
         type: "Administrative Web Client",
         boundary: "Trust Boundary 1: Client Edge Sandbox",
         source: "web_admin/app.js & lib/features/admin/presentation/",
-        description: "Dedicated lightweight Web Admin Portal built with HTML5, CSS3, JS and Supabase SDK. Features real-time Leaflet GPS map tracking, statutory cards manager, and timesheet compliance auditing.",
-        contract: "Input: Admin user credentials / Supabase Realtime event\nOutput: Operations dashboard, live employee locations, PDF/Excel reports",
-        security: "Role-Based Access Control (SUPER_ADMIN, ADMIN)."
+        description: "Dedicated Web Admin Portal (HTML5/CSS3/JS) & 8-tab Flutter Admin Suite. Features real-time Leaflet GPS map tracking, per-employee geofence bypass, statutory cards manager, Salary & UAE WPS Payroll, and compliance auditing.",
+        contract: "Input: Admin user credentials / Supabase Realtime event\nOutput: Operations dashboard, live employee locations, WPS Excel & Payslip PDF reports",
+        security: "Role-Based Access Control (SUPER_ADMIN, ADMIN) and strict employee log isolation."
       },
       7: {
         name: "7. Cloud Data Gateway (SupabaseService)",
@@ -926,11 +926,11 @@
         security: "Enforces TLS 1.3 transport encryption; Bearer anon/auth JWT."
       },
       8: {
-        name: "8. PostgreSQL 15 Relational DB & RLS",
+        name: "8. PostgreSQL Relational DB & RLS",
         type: "Central Persistence Tier",
         boundary: "Trust Boundary 3: Cloud Platform",
         source: "backend/supabase_schema.sql#L1-L120",
-        description: "15 relational tables housing organizations, users, offices, work_sites, attendance_records, employee_cards, and compliance_notification_settings. Enforces strict multi-tenant Row-Level Security.",
+        description: "16 relational tables housing organizations, users, offices, work_sites, attendance_records, employee_cards, employee_salaries, and compliance_notification_settings. Enforces multi-tenant Row-Level Security.",
         contract: "Input: SQL queries, inserts, and stored procedure calls\nOutput: Relational records, ACID transaction locks",
         security: "Row-Level Security (RLS) restricts access based on organization_id."
       },

@@ -8,15 +8,17 @@ The **Offline Storage & Background Sync Engine** provides local persistence, off
 ## 1. Key Functionalities
 
 1. **Hive Local Storage Engine (`LocalDatabaseService`)**:
-   - Manages isolated Hive boxes:
-     - `organizationBox`: Organization setup profile.
-     - `currentUserBox`: Active logged-in user profile.
-     - `employeesBox`: Employee directory.
-     - `usersBox`: User accounts and role definitions.
-     - `officesBox`: Geofence office stations.
-     - `workSitesBox`: Client project locations.
-     - `attendanceRecordsBox`: Historical and daily attendance records.
-     - `pendingSyncBox`: Queue of un-synced attendance records.
+   - Opens the Hive `app_settings` box (`Hive.openBox('app_settings')`) and maintains in-memory caches backed by JSON-serialized persistence keys:
+     - `is_setup_completed` & `organization_json`: Organization setup profile.
+     - `current_user_json`: Active logged-in user profile.
+     - `employees_json`: Employee directory (with relieved personnel automatically purged on init).
+     - `users_json`: User accounts and role definitions.
+     - `offices_json`: Geofence office stations.
+     - `worksites_json`: Client project locations.
+     - `attendance_records_json`: Historical, daily, and pending (`SyncStatus.pending`) attendance records.
+     - `salaries_json`: Employee salary configurations (`DefaultSalaryData` seeded if empty).
+     - `geofence_bypass_overrides`: Per-employee geofence bypass overrides map.
+   - **Auto-Resolution on Init**: Automatically resolves expired unclosed check-ins older than 24 hours (`autoResolveExpiredCheckIns()`) and deduplicates canonical employee identities (`sanitizeDuplicateEmployees()`).
 
 2. **Offline Banner & Indicator Widget**:
    - Displays real-time pending sync status banner (`OfflineBanner`) when un-synced records exist.
@@ -25,11 +27,14 @@ The **Offline Storage & Background Sync Engine** provides local persistence, off
 
 3. **Background Sync Engine (`SyncEngine`)**:
    - Listens to device network connectivity changes via `connectivity_plus`.
-   - On network restoration (Cellular / Wi-Fi), automatically triggers `syncPendingRecords()`.
-   - Flushes pending records from `pendingSyncBox` to Supabase `attendance_records` table.
-   - Preserves original hardware event timestamps (`event_timestamp`).
-   - Updates local record `syncStatus` from `SyncStatus.pending` to `SyncStatus.synced`.
-   - Clears uploaded items from the pending sync queue upon verified cloud confirmation.
+   - Sets a **15-minute periodic background flush timer** (`Duration(minutes: 15)`) when pending records exist (preserving Supabase free-tier log ingestion).
+   - On network restoration (Cellular / Wi-Fi) or manual trigger, executes `performSync()`:
+     - Performs deferred reverse geocoding when coordinates lack a street address.
+     - Uploads compressed photo payloads to `attendance_photos` storage bucket.
+     - Inserts attendance entries to Supabase `attendance_records` while preserving original hardware `event_timestamp`.
+     - Updates local record `syncStatus` from `SyncStatus.pending` to `SyncStatus.synced`.
+   - **Non-Blocking Bulk Cloud Sync**: Manual calendar attendance entries (`PutOfficeAttendanceDialog`) save instantly to local Hive storage and sync in non-blocking batches to Supabase (`SupabaseService`).
+   - **Admin Local Cache Reset**: Administrators can clear locally cached attendance records via `Clear Cache` in `AdminDashboardScreen` (`clearAttendanceCache()`).
 
 ---
 
